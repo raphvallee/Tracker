@@ -2,6 +2,7 @@ import 'dart:collection';
 
 import 'package:hydrated_bloc/hydrated_bloc.dart';
 import 'package:tracker/data/repositories/tracker_repository.dart';
+import 'package:tracker/data/services/app_log.dart';
 import 'package:tracker/domain/models/gym.dart';
 import 'package:tracker/domain/models/workout_session.dart';
 import 'package:tracker/domain/models/workout_set.dart';
@@ -129,12 +130,26 @@ class WorkoutState {
     this.gymId,
     this.gymName,
     this.planTitle,
+    this.saveError,
     List<PlanExercise> plan = const [],
     List<ActiveSet> sets = const [],
   }) : _plan = List.unmodifiable(plan),
        _sets = List.unmodifiable(sets);
 
   factory WorkoutState.fromJson(Map<String, dynamic> json) {
+    // Hydrated-state schema versioning (PRODUCTION_READINESS.md Phase 1).
+    // v1 = the original shape; payloads written before versioning have no
+    // 'v' key and read as v1. Unknown future versions fall back to a clean
+    // idle state instead of crashing.
+    switch (json['v'] as int? ?? 1) {
+      case 1:
+        return _fromV1(json);
+      default:
+        return WorkoutState.initial();
+    }
+  }
+
+  static WorkoutState _fromV1(Map<String, dynamic> json) {
     final rawPlan = json['plan'];
     final rawSets = json['sets'];
     return WorkoutState(
@@ -204,6 +219,11 @@ class WorkoutState {
   /// Title + ordered exercise plan if this session follows a split day.
   final String? planTitle;
 
+  /// Set when the final Isar write in [WorkoutCubit.endWorkout] failed. Purely
+  /// transient UI feedback - deliberately excluded from hydration JSON, so a
+  /// restarted app never boots into a stale error banner.
+  final String? saveError;
+
   /// Sets logged so far this session, in [ActiveSet.order] sequence.
 
   /// Lazily groups the active sets for the presentation layer.
@@ -225,6 +245,7 @@ class WorkoutState {
       gymId == other.gymId &&
       gymName == other.gymName &&
       planTitle == other.planTitle &&
+      saveError == other.saveError &&
       _listEquals(plan, other.plan) &&
       _listEquals(sets, other.sets);
 
@@ -235,6 +256,7 @@ class WorkoutState {
     gymId,
     gymName,
     planTitle,
+    saveError,
     Object.hashAll(plan),
     Object.hashAll(sets),
   );
@@ -256,6 +278,8 @@ class WorkoutState {
   static WorkoutState initial() => WorkoutState(isInProgress: false);
 
   Map<String, dynamic> toJson() => {
+    // Hydrated-state schema version; see the comment on fromJson.
+    'v': 1,
     'isInProgress': isInProgress,
     'startTime': startTime?.toIso8601String(),
     'gymId': gymId,
@@ -271,6 +295,7 @@ class WorkoutState {
     Object? gymId = _unset,
     Object? gymName = _unset,
     Object? planTitle = _unset,
+    Object? saveError = _unset,
     List<PlanExercise>? plan,
     List<ActiveSet>? sets,
   }) {
@@ -284,6 +309,9 @@ class WorkoutState {
       planTitle: identical(planTitle, _unset)
           ? this.planTitle
           : planTitle as String?,
+      saveError: identical(saveError, _unset)
+          ? this.saveError
+          : saveError as String?,
       plan: plan ?? this.plan,
       sets: sets ?? this.sets,
     );
@@ -383,6 +411,10 @@ class WorkoutCubit extends HydratedCubit<WorkoutState> {
 
     final repo = repository;
     if (repo != null) {
+      // Clear any previous save failure up-front so a repeated failure still
+      // reaches listeners as a fresh state change (and re-shows the toast).
+      if (s.saveError != null) emit(s.copyWith(saveError: null));
+
       final completed = WorkoutSession(
         title:
             s.planTitle ??
@@ -402,37 +434,59 @@ class WorkoutCubit extends HydratedCubit<WorkoutState> {
             )
             .toList(),
       );
-      await repo.sessions.put(completed);
+
+      // Error-surfacing contract for writes (PRODUCTION_READINESS.md Phase 1):
+      // if the Isar write fails, the in-progress workout must NOT be discarded
+      // from HydratedStorage. Surface the failure and keep the session alive
+      // so the user can retry.
+      try {
+        await repo.sessions.put(completed);
+      } catch (error, stackTrace) {
+        AppLog.error('workout', error, stackTrace);
+        emit(
+          s.copyWith(
+            saveError:
+                'Could not save the workout. Your session is still active.',
+          ),
+        );
+        return;
+      }
 
       // Keep per-exercise estimates fresh without changing the persisted
       // session shape. Existing manually entered multipliers remain fallback.
-      if (completed.gymId != null) {
-        final primary = await repo.gyms.getPrimary();
-        if (primary != null && primary.id != completed.gymId) {
-          final gyms = await repo.gyms.getAll();
-          final sessions = await repo.sessions.getAll();
-          final estimates = estimateGymExerciseMultipliers(
-            sessions,
-            primary.id,
-            completed.gymId!,
-          );
-          final gym = gyms.firstWhere(
-            (candidate) => candidate.id == completed.gymId,
-          );
-          if (estimates.isNotEmpty) {
-            gym.perExerciseMultipliers = [
-              for (final entry in estimates.entries)
-                GymExerciseMultiplier(
-                  exerciseId: entry.key,
-                  multiplier: entry.value,
-                ),
-            ];
-            gym.multiplier =
-                estimateGymMultiplier(sessions, primary.id, gym.id) ??
-                gym.multiplier;
-            await repo.gyms.put(gym);
+      // Best-effort only: the session is already persisted, so an estimation
+      // failure must neither lose it nor block the end-workout flow.
+      try {
+        if (completed.gymId != null) {
+          final primary = await repo.gyms.getPrimary();
+          if (primary != null && primary.id != completed.gymId) {
+            final gyms = await repo.gyms.getAll();
+            final sessions = await repo.sessions.getAll();
+            final estimates = estimateGymExerciseMultipliers(
+              sessions,
+              primary.id,
+              completed.gymId!,
+            );
+            final gym = gyms.firstWhere(
+              (candidate) => candidate.id == completed.gymId,
+            );
+            if (estimates.isNotEmpty) {
+              gym.perExerciseMultipliers = [
+                for (final entry in estimates.entries)
+                  GymExerciseMultiplier(
+                    exerciseId: entry.key,
+                    multiplier: entry.value,
+                  ),
+              ];
+              gym.multiplier =
+                  estimateGymMultiplier(sessions, primary.id, gym.id) ??
+                  gym.multiplier;
+              await repo.gyms.put(gym);
+            }
           }
         }
+      } catch (error, stackTrace) {
+        AppLog.error('workout-multiplier', error, stackTrace);
       }
     }
 

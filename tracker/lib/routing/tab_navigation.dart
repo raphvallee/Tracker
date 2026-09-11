@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:quiver/collection.dart';
 
 /// Visibility contract for pages hosted by the persistent tab navigators.
 /// Inactive pages stay mounted to preserve their nested route stack, but should
@@ -29,26 +28,27 @@ class TabVisibilityScope extends InheritedWidget {
 class HomePageSingleton {
   factory HomePageSingleton() => _singleton;
 
-  HomePageSingleton._internal() {
-    tabMap.addAll({
-      TabName.feed: 0,
-      TabName.history: 1,
-      TabName.currentWorkout: 2,
-      TabName.editor: 3,
-      TabName.exercises: 4,
-    });
-  }
+  HomePageSingleton._internal();
 
   static final HomePageSingleton _singleton = HomePageSingleton._internal();
 
   Function? indexSetState;
 
+  /// Tab name -> nested-navigator index. Only the forward direction is used
+  /// (previously quiver's BiMap, which was overkill and the sole reason for
+  /// the dependency).
+  static const Map<TabName, int> _tabIndexes = {
+    TabName.feed: 0,
+    TabName.history: 1,
+    TabName.currentWorkout: 2,
+    TabName.editor: 3,
+    TabName.exercises: 4,
+  };
+
   void changeTab(TabName tabName) {
-    final index = tabMap[tabName];
+    final index = _tabIndexes[tabName];
     if (index != null) indexSetState?.call(index);
   }
-
-  BiMap<TabName, int> tabMap = BiMap<TabName, int>();
 }
 
 enum TabName { feed, history, currentWorkout, editor, exercises }

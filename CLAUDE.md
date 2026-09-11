@@ -62,6 +62,9 @@ Tests live under `tracker/test/`, mirroring `lib/`: `test/domain/` (analytics, s
 - `WorkoutCubit` is provided app-wide in `main.dart` via `MultiBlocProvider` with `lazy: false`.
 - The **`.g.dart` files are generated** - do not edit them by hand. After changing a `@collection`/`@embedded`/`@enumerated` annotation, run `dart run build_runner build` in `tracker/`. The analyzer excludes `*.g.dart`. (Isar 3.1 requires `@enumerated` enum fields to be non-nullable and models must not carry computed getters - the generator rejects both.)
 - Host-side `flutter test` needs the Isar native lib: `libisar.dylib` is copied into `tracker/` (gitignored) so tests load it.
+- **Isar schema is frozen pre-1.0**: additive changes only (no renames/deletes); the current schema and freeze rules live in `docs/ISAR_SCHEMA.md`, the isar_community stay/escape-hatch decision in `docs/adr/0001-isar-community.md`.
+- **Hydrated payloads are versioned**: `WorkoutState`/`SettingsState` JSON carries a `'v'` field; `fromJson` dispatches to `_fromV1`-style parsers and unknown versions fall back to safe defaults. Extend per-version parsers on shape changes, never loosen casts.
+- **AppLog** (`lib/data/services/app_log.dart`) is the local ring-buffer logger (mirrors to `tracker.log` in the documents dir); all app-level error channels in `main.dart` (run-zone, Flutter, platform dispatcher, build-error widget) route through it. `APP_ENV=prod` (dart-define, `lib/data/services/app_env.dart`) gates dev affordances and verbose logging.
 
 ## UI features (lib/ui/<feature>/)
 

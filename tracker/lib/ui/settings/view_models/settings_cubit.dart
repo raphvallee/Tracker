@@ -6,6 +6,27 @@ import 'package:tracker/domain/models/weight_unit.dart';
 
 class SettingsState {
   factory SettingsState.fromJson(Map<String, dynamic> json) {
+    // Hydrated-state schema versioning (PRODUCTION_READINESS.md Phase 1).
+    // v1 = the original shape; payloads written before versioning have no
+    // 'v' key and read as v1. Unknown future versions fall back to defaults
+    // instead of crashing.
+    switch (json['v'] as int? ?? 1) {
+      case 1:
+        return _fromV1(json);
+      default:
+        return SettingsState();
+    }
+  }
+
+  SettingsState({
+    this.unit = WeightUnit.kilograms,
+    this.notificationsEnabled = true,
+    this.analyticsEnabled = true,
+    this.freeStartPlacement = FreeStartPlacement.before,
+    List<GraphConfig> graphs = const [],
+  }) : graphs = List.unmodifiable(graphs);
+
+  static SettingsState _fromV1(Map<String, dynamic> json) {
     final rawGraphs = json['graphs'];
     return SettingsState(
       unit: WeightUnit.values.asNameMap()[json['unit']] ?? WeightUnit.kilograms,
@@ -35,14 +56,6 @@ class SettingsState {
           : const [],
     );
   }
-
-  SettingsState({
-    this.unit = WeightUnit.kilograms,
-    this.notificationsEnabled = true,
-    this.analyticsEnabled = true,
-    this.freeStartPlacement = FreeStartPlacement.before,
-    List<GraphConfig> graphs = const [],
-  }) : graphs = List.unmodifiable(graphs);
 
   final WeightUnit unit;
   final bool notificationsEnabled;
@@ -93,6 +106,8 @@ class SettingsState {
   }
 
   Map<String, dynamic> toJson() => {
+    // Hydrated-state schema version; see the comment on fromJson.
+    'v': 1,
     'unit': unit.name,
     'notificationsEnabled': notificationsEnabled,
     'analyticsEnabled': analyticsEnabled,

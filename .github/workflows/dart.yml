@@ -40,3 +40,5 @@ jobs:
       run: git diff --exit-code -- tracker/**/*.g.dart
     - name: Run Tests
       run: flutter test
+    - name: Validate dependencies
+      run: dart run dependency_validator

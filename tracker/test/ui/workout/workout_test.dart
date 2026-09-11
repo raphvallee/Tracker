@@ -99,6 +99,40 @@ void main() {
       expect(started.difference(session.startTime).inSeconds, lessThan(60));
     });
 
+    test(
+      'failed save keeps the in-progress workout and surfaces an error',
+      () async {
+        final gymId = await repo.gyms.put(Gym(name: 'Home', isPrimary: true));
+        final gym = (await repo.gyms.getById(gymId))!;
+
+        cubit.startWorkout(gym: gym);
+        cubit.logSet(
+          exerciseId: 1,
+          exerciseName: 'Squat',
+          weight: 100,
+          reps: 5,
+        );
+        expect(cubit.state.sets, hasLength(1));
+
+        // Force the Isar write to fail by closing the instance out from under
+        // the repository.
+        await isar.close();
+        await cubit.endWorkout();
+
+        // Error-surfacing contract (PRODUCTION_READINESS.md Phase 1): the
+        // in-progress workout must NOT be discarded from HydratedStorage.
+        expect(cubit.state.isInProgress, isTrue);
+        expect(cubit.state.sets, hasLength(1));
+        expect(cubit.state.saveError, isNotNull);
+
+        // Give the shared tearDown a live instance to close again.
+        isar = await openTestIsar([
+          WorkoutSessionSchema,
+          GymSchema,
+        ], name: 'workout_test_flow');
+      },
+    );
+
     test('startPlanWorkout sets the plan and planTitle on persist', () async {
       cubit.startPlanWorkout(
         title: 'PPL · Push',

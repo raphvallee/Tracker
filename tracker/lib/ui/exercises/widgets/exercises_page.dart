@@ -2,16 +2,16 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
-import 'package:tracker/ui/core/ui/repository_scope.dart';
+import 'package:tracker/data/services/app_log.dart';
 import 'package:tracker/domain/models/exercise.dart';
 import 'package:tracker/domain/models/muscle.dart';
+import 'package:tracker/routing/tab_navigation.dart';
 import 'package:tracker/ui/core/ui/custom_app_bar.dart';
 import 'package:tracker/ui/core/ui/custom_route.dart';
 import 'package:tracker/ui/core/ui/max_width.dart';
+import 'package:tracker/ui/core/ui/repository_scope.dart';
 import 'package:tracker/ui/exercises/widgets/exercise_detail_page.dart';
 import 'package:tracker/ui/exercises/widgets/new_exercise_page.dart';
-
-import 'package:tracker/routing/tab_navigation.dart';
 
 Map<MuscleGroup, List<Exercise>> groupExercisesByMuscle(
   List<Exercise> exercises,
@@ -85,7 +85,7 @@ class _ExercisesPageState extends State<ExercisesPage> {
         if (mounted && _isActive) setState(() => _exercises = list);
       },
       onError: (Object error, StackTrace stack) {
-        debugPrint('exercises watch error: $error');
+        AppLog.error('exercises', error, stack);
       },
     );
   }

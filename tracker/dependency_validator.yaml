@@ -1,0 +1,10 @@
+# dependency_validator allow-list (CI runs `dart run dependency_validator`).
+# Each entry is a deliberate non-import use, not a dead dependency:
+ignore:
+  # Lucide icons are used via forui.dart's re-export (FLucideIcons).
+  - forui_lucide
+  # Platform plugin that ships the Isar native libs on mobile/desktop.
+  - isar_community_flutter_libs
+  # Reserved for the Phase 3 integration-test money paths
+  # (PRODUCTION_READINESS.md); kept out of the "unused" count until then.
+  - integration_test

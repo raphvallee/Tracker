@@ -1,6 +1,6 @@
 # Production Readiness Roadmap - Tracker
 
-**Prepared:** 2026-09-02 - **Target release:** v1.0.0+1 - **Status: PLAN ONLY - NOT EXECUTED**
+**Prepared:** 2026-09-02 - **Target release:** v1.0.0+1 - **Status: Phase 1 executed 2026-09-03; Phases 2-6 pending**
 
 Platforms: iOS, Android, macOS, Windows, Linux. Product promise: **offline first, no account, no data collection** - this promise reshapes the standard Flutter launch checklist (see Phase 0). Items marked **N/A (offline)** are documented as intentionally skipped so nobody re-adds them later.
 
@@ -38,7 +38,7 @@ zero TODO/FIXME in `lib/`; `libisar.dylib` gitignored and out of release tooling
 
 ### Critical / Blocker
 
-- [ ] **Centralized error handling.** Add app-level handlers in `main.dart`: `runZonedGuarded`,
+- [x] **Centralized error handling.** Add app-level handlers in `main.dart`: `runZonedGuarded`,
   `FlutterError.onError`, `PlatformDispatcher.instance.onError`, and a custom `ErrorWidget.builder`.
   Route everything into a tiny file-based ring-buffer logger (local-only; feeds the offline
   bug-report flow, see Phase 6).
@@ -54,7 +54,7 @@ zero TODO/FIXME in `lib/`; `libisar.dylib` gitignored and out of release tooling
   }
   ```
 
-- [ ] **Hydrated state versioning.** `WorkoutState`/`SettingsState` `fromJson` must tolerate shape changes across releases. Add a `schemaVersion` int to each JSON payload; write migration functions instead of relying on null-forgiving casts. Keep/extend the malformed-hydration tests as the contract.
+- [x] **Hydrated state versioning.** `WorkoutState`/`SettingsState` `fromJson` must tolerate shape changes across releases. Add a `schemaVersion` int to each JSON payload; write migration functions instead of relying on null-forgiving casts. Keep/extend the malformed-hydration tests as the contract. *(Done 2026-09-03: `'v'` field + `_fromV1` parsers + unknown-version fallback + tests.)*
 
   ```dart
   factory WorkoutState.fromJson(Map<String, dynamic> json) {
@@ -66,47 +66,30 @@ zero TODO/FIXME in `lib/`; `libisar.dylib` gitignored and out of release tooling
   }
   ```
 
-- [ ] **Isar schema discipline (pre-1.0 freeze rules).** No field renames or deletions until after 1.0 - additive changes only (Isar auto-migrates added fields; renames lose data). Document the current schema once in `CLAUDE.md`.
-- [ ] **isar_community dependency risk plan.** Pin exact versions in CI, watch the fork for releases/security fixes, and write a one-paragraph escape-hatch note (migration path to `drift`/SQLite if the fork dies). This is a decision record, not code.
-- [ ] **Debug artifact sweep.**
+- [x] **Isar schema discipline (pre-1.0 freeze rules).** No field renames or deletions until after 1.0 - additive changes only (Isar auto-migrates added fields; renames lose data). Document the current schema once in `CLAUDE.md`. *(Done 2026-09-03: `docs/ISAR_SCHEMA.md` + CLAUDE.md pointer.)*
+- [x] **isar_community dependency risk plan.** Pin exact versions in CI, watch the fork for releases/security fixes, and write a one-paragraph escape-hatch note (migration path to `drift`/SQLite if the fork dies). This is a decision record, not code. *(Done 2026-09-03: `docs/adr/0001-isar-community.md`; committed `pubspec.lock` pins CI versions; automated watch deferred.)*
+- [x] **Debug artifact sweep.**
 
   ```powershell
   # from tracker/
   rg -n "print\(|debugPrint|TODO|FIXME|XXX" lib/ --glob '!*.g.dart'
   ```
 
-  Wrap any intentional verbose logging in `if (kDebugMode)`. Resolve or ticket every TODO before submission.
-- [ ] **Unused dependency / asset audit.** Dependency list is already lean (isar_community, path_provider, quiver, hydrated_bloc, flutter_bloc, window_size, forui, forui_lucide). Verify `quiver` usage specifically (likely replaceable with core Dart). Add `dependency_validator` to CI to keep it that way. Audit `pubspec.yaml` asset/font entries against actual files.
+  Wrap any intentional verbose logging in `if (kDebugMode)`. Resolve or ticket every TODO before submission. *(Done 2026-09-03: zero TODO/FIXME; one `debugPrint` moved to AppLog.)*
+- [x] **Unused dependency / asset audit.** Dependency list is already lean (isar_community, path_provider, quiver, hydrated_bloc, flutter_bloc, window_size, forui, forui_lucide). Verify `quiver` usage specifically (likely replaceable with core Dart). Add `dependency_validator` to CI to keep it that way. Audit `pubspec.yaml` asset/font entries against actual files. *(Done 2026-09-03: quiver dropped (BiMap hand-rolled), `dependency_validator` in CI with allow-list in `tracker/dependency_validator.yaml`; pubspec declares no assets/fonts.)*
 
 ### High Priority
 
-- [ ] **Error-surfacing contract for writes.** Feed already models loading/empty/error. Extend the pattern to mutations, especially `WorkoutCubit.endWorkout`: if the Isar write fails, the in-progress workout must NOT be discarded from HydratedStorage. Add a test for that exact failure path.
-- [ ] **Environment configuration via `--dart-define`** (full flavors are overkill for an offline v1):
+- [x] **Error-surfacing contract for writes.** Feed already models loading/empty/error. Extend the pattern to mutations, especially `WorkoutCubit.endWorkout`: if the Isar write fails, the in-progress workout must NOT be discarded from HydratedStorage. Add a test for that exact failure path. *(Done 2026-09-03: transient `saveError` state + FToaster toast + failing-write test.)*
+- [x] **Environment configuration via `--dart-define`** (full flavors are overkill for an offline v1):
 
   ```bash
   flutter build appbundle --release --dart-define=APP_ENV=prod
   ```
 
-  Read via `const String.fromEnvironment('APP_ENV', defaultValue: 'dev')`. Use it to force dev seed data, verbose logging, and debug-only affordances off in prod.
-- [ ] **Feature gates for incomplete features.** Every not-yet-complete feature visible in UI gets a gate (settings toggle or `APP_ENV` check) so prod never shows a dead end.
-- [ ] **Toolchain pinning.** `pubspec.yaml` already pins Flutter 3.47.2; ensure CI and local docs match, and record intended Dart SDK upper bound.
-- [ ] **Re-verify `path_provider_android` override** each minor bump (`jni` issue #3235 may get a fixed release; the comment in `pubspec.yaml` documents it).
-
-### Nice-to-Have
-
-- [ ] Full Android `productFlavors` / iOS Xcode schemes (`dev`/`staging`/`prod`) with distinct bundle IDs - only if TestFlight/internal-track builds need to coexist on one device.
-
-  ```groovy
-  // android/app/build.gradle
-  flavorDimensions "env"
-  productFlavors {
-      dev  { dimension "env"; applicationIdSuffix ".dev" }
-      prod { dimension "env" }
-  }
-  ```
-
-- [ ] Stricter lint set (`very_good_analysis` or a custom `analysis_options.yaml`), enforced by the existing CI `flutter analyze` step.
-- [ ] `dependabot`/`renovate` config for the `tracker/` package.
+  Read via `const String.fromEnvironment('APP_ENV', defaultValue: 'dev')`. Use it to force dev seed data, verbose logging, and debug-only affordances off in prod. *(Done 2026-09-03: `lib/data/services/app_env.dart`; wired to AppLog verbosity + prod ErrorWidget fallback.)*
+- [x] **Toolchain pinning.** `pubspec.yaml` already pins Flutter 3.47.2; ensure CI and local docs match, and record intended Dart SDK upper bound. *(Verified 2026-09-03: CI reads `flutter-version-file: tracker/pubspec.yaml`; SDK bound `>=3.13.2 <4.0.0`.)*
+- [x] **Re-verify `path_provider_android` override** each minor bump (`jni` issue #3235 may get a fixed release; the comment in `pubspec.yaml` documents it). *(Verified 2026-09-03: `path_provider_android` 2.3.1 still pulls `jni ^1.0.0`, latest `jni 1.0.3` still broken - override `<2.3.0` stays, lockfile holds 2.2.23.)*
 
 ---
 

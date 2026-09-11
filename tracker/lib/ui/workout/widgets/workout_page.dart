@@ -92,39 +92,50 @@ class _InProgressView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BlocSelector<WorkoutCubit, WorkoutState, _WorkoutPresentation>(
-      selector: _WorkoutPresentation.fromState,
-      builder: (context, presentation) => Padding(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: <Widget>[
-            _WorkoutHeader(presentation: presentation.header),
-            const SizedBox(height: 16),
-            if (presentation.plan.isEmpty)
-              const _FreeFormPanel()
-            else
-              for (final entry in presentation.plan)
-                _ExerciseLogCard(
-                  key: ValueKey('plan-${entry.exercise.order}'),
-                  orderNumber: entry.exercise.order,
-                  title: entry.exercise.name,
-                  sets: entry.sets,
-                  exerciseId: entry.exercise.exerciseId,
-                  exerciseName: entry.exercise.name,
+    return BlocListener<WorkoutCubit, WorkoutState>(
+      // Error-surfacing contract for writes: a failed end-workout save keeps
+      // the session in progress; toast it once per fresh failure.
+      listenWhen: (previous, current) =>
+          current.saveError != null && current.saveError != previous.saveError,
+      listener: (context, state) => showFToast(
+        context: context,
+        title: Text(state.saveError!),
+        duration: const Duration(seconds: 4),
+      ),
+      child: BlocSelector<WorkoutCubit, WorkoutState, _WorkoutPresentation>(
+        selector: _WorkoutPresentation.fromState,
+        builder: (context, presentation) => Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              _WorkoutHeader(presentation: presentation.header),
+              const SizedBox(height: 16),
+              if (presentation.plan.isEmpty)
+                const _FreeFormPanel()
+              else
+                for (final entry in presentation.plan)
+                  _ExerciseLogCard(
+                    key: ValueKey('plan-${entry.exercise.order}'),
+                    orderNumber: entry.exercise.order,
+                    title: entry.exercise.name,
+                    sets: entry.sets,
+                    exerciseId: entry.exercise.exerciseId,
+                    exerciseName: entry.exercise.name,
+                  ),
+              const SizedBox(height: 24),
+              FilledButton.icon(
+                onPressed: () => _confirmEnd(context, presentation.setCount),
+                style: FilledButton.styleFrom(
+                  backgroundColor: context.theme.colors.error,
+                  foregroundColor: context.theme.colors.errorForeground,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
                 ),
-            const SizedBox(height: 24),
-            FilledButton.icon(
-              onPressed: () => _confirmEnd(context, presentation.setCount),
-              style: FilledButton.styleFrom(
-                backgroundColor: context.theme.colors.error,
-                foregroundColor: context.theme.colors.errorForeground,
-                padding: const EdgeInsets.symmetric(vertical: 16),
+                icon: const Icon(FLucideIcons.squareStop),
+                label: const Text('End Workout'),
               ),
-              icon: const Icon(FLucideIcons.squareStop),
-              label: const Text('End Workout'),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

@@ -15,7 +15,6 @@ dependencies:
   isar_community: ^3.3.2
   isar_community_flutter_libs: ^3.3.2
   path_provider: ^2.1.6
-  quiver: ^3.2.2
   hydrated_bloc: ^11.0.0
   flutter_bloc: ^9.1.1
   window_size: ^0.2.0
@@ -30,6 +29,7 @@ dev_dependencies:
   flutter_lints: ^6.0.0
   isar_community_generator: ^3.3.2
   build_runner: any
+  dependency_validator: any
   husky: ^0.1.7
   forui_cli: ^0.26.0
 

@@ -9,6 +9,8 @@ import 'package:forui/forui.dart';
 import 'package:hydrated_bloc/hydrated_bloc.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:tracker/data/repositories/tracker_repository.dart';
+import 'package:tracker/data/services/app_env.dart';
+import 'package:tracker/data/services/app_log.dart';
 import 'package:tracker/data/services/db.dart';
 import 'package:tracker/data/services/seed.dart';
 import 'package:tracker/routing/home_page.dart';
@@ -19,12 +21,38 @@ import 'package:tracker/ui/workout/view_models/workout_cubit.dart';
 import 'package:window_size/window_size.dart';
 
 Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+  return runZonedGuarded(() async {
+    WidgetsFlutterBinding.ensureInitialized();
+
+    // Centralized error handling (PRODUCTION_READINESS.md Phase 1): every
+    // error channel routes into the local ring-buffer logger. Nothing is
+    // ever uploaded off-device.
+    FlutterError.onError = (details) {
+      AppLog.error('flutter', details.exception, details.stack);
+      FlutterError.presentError(details);
+    };
+    PlatformDispatcher.instance.onError = (error, stack) {
+      AppLog.error('platform', error, stack);
+      return true;
+    };
+    ErrorWidget.builder = (details) {
+      AppLog.error('widget', details.exception, details.stack);
+      return _ErrorFallback(details: details);
+    };
+
+    await _bootstrap();
+  }, (error, stack) => AppLog.error('zone', error, stack));
+}
+
+Future<void> _bootstrap() async {
+  // Documents dir hosts both the HydratedBloc storage and the AppLog mirror
+  // file, so fetch it once and share it.
+  final documentsPath = (await getApplicationDocumentsDirectory()).path;
+
   HydratedBloc.storage = await HydratedStorage.build(
-    storageDirectory: HydratedStorageDirectory(
-      (await getApplicationDocumentsDirectory()).path,
-    ),
+    storageDirectory: HydratedStorageDirectory(documentsPath),
   );
+  AppLog.init(documentsPath);
 
   // Open the single Isar instance and make the shell available immediately.
   // First-run seeding runs after the first frame, so a slow write cannot delay
@@ -72,7 +100,8 @@ Future<void> _seedExercises(
     await seedExercisesIfNeeded(repository);
   } catch (error, stackTrace) {
     // Keep startup alive and make the failure observable. If the collection is
-    // still empty, retry once after transient startup/IO failures.
+    // still empty, retry once after transient startup/IO failures. The report
+    // flows through FlutterError.onError into the AppLog ring buffer.
     FlutterError.reportError(
       FlutterErrorDetails(
         exception: error,
@@ -133,6 +162,27 @@ class MyApp extends StatelessWidget {
       ),
       themeMode: ThemeMode.system,
       debugShowCheckedModeBanner: false,
+    );
+  }
+}
+
+/// Rendered in place of widgets that threw during build.
+///
+/// Dev builds keep Flutter's classic red error screen; store builds
+/// (`APP_ENV=prod`) show a quiet recovery screen instead of leaking stack
+/// traces into the UI. The failure itself is already logged via
+/// [ErrorWidget.builder].
+class _ErrorFallback extends StatelessWidget {
+  const _ErrorFallback({required this.details});
+
+  final FlutterErrorDetails details;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!isProd) return ErrorWidget(details.exception);
+    return const ColoredBox(
+      color: Color(0xFF1B1B1F),
+      child: Center(child: Text('Something went wrong.')),
     );
   }
 }

@@ -84,4 +84,37 @@ void main() {
       );
     });
   });
+
+  group('SettingsState schema versioning', () {
+    test('legacy payloads without a version read as v1', () {
+      final state = SettingsState.fromJson({
+        'unit': 'pounds',
+        'notificationsEnabled': false,
+      });
+      expect(state.unit, WeightUnit.pounds);
+      expect(state.notificationsEnabled, isFalse);
+    });
+
+    test('versioned payload round-trips with the v field', () {
+      final state = SettingsState(
+        unit: WeightUnit.pounds,
+        notificationsEnabled: false,
+      );
+      final json = state.toJson();
+      expect(json['v'], 1);
+      final restored = SettingsState.fromJson(json);
+      expect(restored, state);
+    });
+
+    test('unknown schema version falls back to defaults', () {
+      final state = SettingsState.fromJson({
+        'v': 99,
+        'unit': 'pounds',
+        'notificationsEnabled': false,
+      });
+      expect(state, SettingsState());
+      expect(state.unit, WeightUnit.kilograms);
+      expect(state.notificationsEnabled, isTrue);
+    });
+  });
 }

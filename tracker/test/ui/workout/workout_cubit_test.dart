@@ -83,4 +83,52 @@ void main() {
       expect(state.sets, hasLength(1));
     });
   });
+
+  group('WorkoutState schema versioning', () {
+    test('legacy payloads without a version read as v1', () {
+      final state = WorkoutState.fromJson({'isInProgress': true, 'gymId': 3});
+      expect(state.isInProgress, isTrue);
+      expect(state.gymId, 3);
+    });
+
+    test('versioned payload round-trips with the v field', () {
+      final state = WorkoutState(
+        isInProgress: true,
+        startTime: DateTime(2026, 9, 3, 10),
+        gymId: 3,
+        gymName: 'Gym',
+        planTitle: 'Plan',
+        sets: const [
+          ActiveSet(exerciseId: 1, exerciseName: 'Bench', weight: 60, reps: 8),
+        ],
+      );
+      final json = state.toJson();
+      expect(json['v'], 1);
+      final restored = WorkoutState.fromJson(json);
+      expect(restored, state);
+      expect(restored.startTime, state.startTime);
+      expect(restored.sets.single.exerciseName, 'Bench');
+    });
+
+    test('unknown schema version falls back to a clean idle state', () {
+      final state = WorkoutState.fromJson({
+        'v': 99,
+        'isInProgress': true,
+        'sets': [const ActiveSet(exerciseId: 1, exerciseName: 'Bench')],
+      });
+      expect(state, WorkoutState.initial());
+      expect(state.isInProgress, isFalse);
+      expect(state.sets, isEmpty);
+    });
+
+    test('saveError is transient: state-visible, never serialized', () {
+      final state = WorkoutState(isInProgress: true);
+      final failed = state.copyWith(saveError: 'nope');
+      expect(failed.saveError, 'nope');
+      expect(failed, isNot(equals(state)));
+      expect(failed.toJson().containsKey('saveError'), isFalse);
+      expect(WorkoutState.fromJson(failed.toJson()).saveError, isNull);
+      expect(failed.copyWith(saveError: null).saveError, isNull);
+    });
+  });
 }
