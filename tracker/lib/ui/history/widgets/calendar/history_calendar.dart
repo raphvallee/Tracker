@@ -3,20 +3,27 @@ import 'package:forui/forui.dart';
 import 'package:tracker/domain/models/workout_session.dart';
 import 'package:tracker/ui/core/ui/custom_route.dart';
 import 'package:tracker/ui/core/ui/weight_format.dart';
+import 'package:tracker/ui/history/view_models/calendar_view_model.dart';
 
 import '../session_detail_page.dart';
 import 'calendar_grid.dart';
 
 /// Interactive month calendar of workout days (Plan.md §2.5).
+///
+/// [model] lets an owner (e.g. [HistoryPage]) retain navigation and date-index
+/// state across this widget's remounts; when omitted, the widget owns a
+/// private model with its own lifetime.
 class HistoryCalendar extends StatefulWidget {
   const HistoryCalendar({
     super.key,
     required this.sessions,
     required this.gymNames,
+    this.model,
   });
 
   final List<WorkoutSession> sessions;
   final Map<int, String> gymNames;
+  final CalendarViewModel? model;
 
   @override
   State<HistoryCalendar> createState() => _HistoryCalendarState();
@@ -27,76 +34,31 @@ class _HistoryCalendarState extends State<HistoryCalendar> {
   static const double _reservedHeight = 340;
   static const double _navAllowance = 64;
 
-  late int _year;
-  late int _month;
-  late WorkoutDateIndex _dateIndex;
-  late final ValueNotifier<DateTime?> _selectedDayNotifier;
+  CalendarViewModel? _ownedModel;
 
-  late CalendarGrid _grid;
-  late int _monthWorkoutDays;
-  late Set<int> _daysWithWorkouts;
-  late int _streak;
+  CalendarViewModel get _model => widget.model ?? _ownedModel!;
 
   @override
   void initState() {
     super.initState();
-    final now = DateTime.now();
-    _year = now.year;
-    _month = now.month;
-    _dateIndex = WorkoutDateIndex.fromSessions(widget.sessions);
-    _selectedDayNotifier = ValueNotifier(_day(now));
-
-    // Calculate streak ONLY ONCE on init
-    _streak = _dateIndex.currentStreak();
-    _updateMonthData();
+    if (widget.model == null) _ownedModel = CalendarViewModel();
+    _model.updateSessions(widget.sessions);
   }
 
   @override
   void didUpdateWidget(covariant HistoryCalendar oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!identical(oldWidget.sessions, widget.sessions)) {
-      _dateIndex = WorkoutDateIndex.fromSessions(widget.sessions);
-      _streak = _dateIndex
-          .currentStreak(); // Recalculate streak only when sessions change
-      _updateMonthData();
+    if (!identical(widget.model, oldWidget.model)) {
+      _ownedModel?.dispose();
+      _ownedModel = widget.model == null ? CalendarViewModel() : null;
     }
+    _model.updateSessions(widget.sessions);
   }
 
   @override
   void dispose() {
-    _selectedDayNotifier.dispose();
+    _ownedModel?.dispose();
     super.dispose();
-  }
-
-  static DateTime _day(DateTime t) => DateTime(t.year, t.month, t.day);
-
-  List<WorkoutSession> _sessionsOn(DateTime day) => _dateIndex.sessionsOn(day);
-
-  void _updateMonthData() {
-    _grid = CalendarGrid(_year, _month);
-    _monthWorkoutDays = _dateIndex.monthWorkoutDays(_year, _month);
-
-    // Pre-calculate days with workouts in an O(1) Set for the grid cells
-    final days = <int>{};
-    for (final dayVal in _grid.days) {
-      if (dayVal != null) {
-        final date = DateTime(_year, _month, dayVal);
-        if (_dateIndex.sessionsOn(date).isNotEmpty) {
-          days.add(dayVal);
-        }
-      }
-    }
-    _daysWithWorkouts = days;
-  }
-
-  void _goMonth(int delta) {
-    setState(() {
-      final d = DateTime(_year, _month + delta);
-      _year = d.year;
-      _month = d.month;
-      _selectedDayNotifier.value = null;
-      _updateMonthData();
-    });
   }
 
   @override
@@ -113,20 +75,18 @@ class _HistoryCalendarState extends State<HistoryCalendar> {
                   _navAllowance;
 
         final cellHeight =
-            ((available - _reservedHeight) / (_grid.days.length ~/ 7)).clamp(
-              36.0,
-              56.0,
-            );
+            ((available - _reservedHeight) / (_model.grid.days.length ~/ 7))
+                .clamp(36.0, 56.0);
 
         return SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
               _BuildMonthHeader(
-                year: _year,
-                monthName: _monthName(_month),
-                onPrev: () => _goMonth(-1),
-                onNext: () => _goMonth(1),
+                year: _model.year,
+                monthName: _monthName(_model.month),
+                onPrev: () => setState(() => _model.goMonth(-1)),
+                onNext: () => setState(() => _model.goMonth(1)),
               ),
               const SizedBox(height: 4),
               Row(
@@ -146,23 +106,23 @@ class _HistoryCalendarState extends State<HistoryCalendar> {
               ),
               const SizedBox(height: 2),
               ValueListenableBuilder<DateTime?>(
-                valueListenable: _selectedDayNotifier,
+                valueListenable: _model.selectedDayListenable,
                 builder: (context, selectedDay, _) {
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       _DayGrid(
-                        grid: _grid,
+                        grid: _model.grid,
                         theme: theme,
                         cellHeight: cellHeight,
                         selectedDay: selectedDay,
-                        daysWithWorkouts: _daysWithWorkouts,
-                        onSelectDay: (day) => _selectedDayNotifier.value = day,
+                        daysWithWorkouts: _model.daysWithWorkouts,
+                        onSelectDay: _model.selectDay,
                       ),
                       const SizedBox(height: 6),
                       _MetricsStrip(
-                        monthWorkoutDays: _monthWorkoutDays,
-                        streak: _streak,
+                        monthWorkoutDays: _model.monthWorkoutDays,
+                        streak: _model.streak,
                       ),
                       const SizedBox(height: 6),
                       Text(
@@ -187,7 +147,9 @@ class _HistoryCalendarState extends State<HistoryCalendar> {
   }
 
   Widget _dayList(DateTime? day) {
-    final sessions = day == null ? const <WorkoutSession>[] : _sessionsOn(day);
+    final sessions = day == null
+        ? const <WorkoutSession>[]
+        : _model.sessionsOn(day);
     if (day == null) {
       return const Text('Pick a workout day above.');
     }

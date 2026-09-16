@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
+import 'package:tracker/data/repositories/tracker_repository.dart';
 import 'package:tracker/domain/models/workout_session.dart';
 import 'package:tracker/ui/core/ui/custom_app_bar.dart';
 import 'package:tracker/ui/core/ui/custom_route.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
 import 'package:tracker/ui/core/ui/weight_format.dart';
+import 'package:tracker/ui/history/view_models/calendar_view_model.dart';
 import 'package:tracker/ui/history/widgets/calendar/history_calendar.dart';
 import 'package:tracker/ui/history/widgets/session_detail_page.dart';
 
@@ -23,34 +25,47 @@ class HistoryPage extends StatefulWidget {
 class _HistoryPageState extends State<HistoryPage> {
   Map<int, String> _gymNames = const {};
   Stream<List<WorkoutSession>>? _stream;
-  bool _didLoad = false;
+  final _calendar = CalendarViewModel();
+  int _selectedTab = 0;
+  TrackerRepository? _repository;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // RepositoryScope is an inherited widget, so read it here (after initState).
-    // Cache the watch stream once so rebuilds don't resubscribe the query.
-    if (!_didLoad) {
-      _didLoad = true;
-      _stream = RepositoryScope.maybeOf(context)?.sessions.watchAll();
-      _loadGyms();
+    // Keep the stream and presentation model stable across subtab rebuilds.
+    final repository = RepositoryScope.maybeOf(context);
+    if (!identical(repository, _repository)) {
+      _repository = repository;
+      _stream = repository?.sessions.watchAll();
+      _calendar.updateSessions(const []);
+      _gymNames = const {};
+      _loadGyms(repository);
     }
   }
 
-  Future<void> _loadGyms() async {
-    final repo = RepositoryScope.maybeOf(context);
-    final gyms = await repo?.gyms.getAll() ?? const [];
-    if (!mounted) return;
+  Future<void> _loadGyms(TrackerRepository? repository) async {
+    final gyms = await repository?.gyms.getAll() ?? const [];
+    if (!mounted || !identical(repository, _repository)) return;
     setState(() {
       _gymNames = {for (final g in gyms) g.id: g.name};
     });
   }
 
   @override
+  void dispose() {
+    _calendar.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return StreamBuilder<List<WorkoutSession>>(
+      key: ObjectKey(_repository),
       stream: _stream,
       builder: (context, snapshot) {
+        if (snapshot.hasData && !snapshot.hasError) {
+          _calendar.updateSessions(snapshot.data!);
+        }
         return CustomScrollView(slivers: _buildSlivers(context, snapshot));
       },
     );
@@ -88,6 +103,10 @@ class _HistoryPageState extends State<HistoryPage> {
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
           sliver: SliverToBoxAdapter(
             child: FTabs(
+              control: FTabControl.lifted(
+                index: _selectedTab,
+                onChange: (index) => setState(() => _selectedTab = index),
+              ),
               children: [
                 .entry(
                   label: const Text('List'),
@@ -96,6 +115,7 @@ class _HistoryPageState extends State<HistoryPage> {
                 .entry(
                   label: const Text('Calendar'),
                   child: HistoryCalendar(
+                    model: _calendar,
                     sessions: sessions,
                     gymNames: _gymNames,
                   ),
