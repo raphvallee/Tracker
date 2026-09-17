@@ -22,7 +22,7 @@ class CalendarViewModel extends ChangeNotifier {
     final day = (initialDate ?? clock).toLocal();
     _year = day.year;
     _month = day.month;
-    _selectedDay = ValueNotifier(DateTime(day.year, day.month, day.day));
+    _selectedDay = _Selection(DateTime(day.year, day.month, day.day));
   }
 
   /// HistoryPage owns app lifecycle for both modes; standalone calendars may
@@ -52,7 +52,7 @@ class CalendarViewModel extends ChangeNotifier {
   late int _year;
   late int _month;
   late DateTime _today;
-  late final ValueNotifier<DateTime?> _selectedDay;
+  late final _Selection _selectedDay;
   Timer? _midnightTimer;
   AppLifecycleListener? _lifecycleListener;
   bool _active = false;
@@ -63,6 +63,11 @@ class CalendarViewModel extends ChangeNotifier {
   DateTime get today => _today;
   DateTime? get selectedDay => _selectedDay.value;
   ValueListenable<DateTime?> get selectedDayListenable => _selectedDay;
+
+  final ChangeNotifier _dayContent = ChangeNotifier();
+
+  /// Loading, rows and errors do not invalidate month/date/clock derivations.
+  Listenable get dayContentListenable => _dayContent;
 
   WorkoutDateIndex get dateIndex =>
       _dateIndex ??= WorkoutDateIndex.fromProjection(
@@ -144,7 +149,7 @@ class CalendarViewModel extends ChangeNotifier {
 
   void _startCalendar() {
     retryDates();
-    retryDay();
+    _retryDay(notify: false);
   }
 
   void _cancelDates() {
@@ -192,11 +197,18 @@ class CalendarViewModel extends ChangeNotifier {
     );
   }
 
-  void retryDay() {
+  void retryDay() => _retryDay(notify: true);
+
+  // Owners already rebuild during activation/rebinding. Do not synchronously
+  // notify mounted descendants from those parent lifecycle transitions.
+  void _retryDay({required bool notify}) {
     _cancelDay();
     final repository = _repository;
     final day = selectedDay;
-    if (!_queriesActive || repository == null || day == null) return;
+    if (!_queriesActive || repository == null || day == null) {
+      if (notify) _dayContent.notifyListeners();
+      return;
+    }
     final generation = _dayGeneration;
     bool current() =>
         generation == _dayGeneration &&
@@ -213,15 +225,16 @@ class CalendarViewModel extends ChangeNotifier {
             if (changed) dayRows = List.unmodifiable(rows);
             dayLoading = false;
             dayError = null;
-            if (changed || statusChanged) notifyListeners();
+            if (changed || statusChanged) _dayContent.notifyListeners();
           },
           onError: (Object error) {
             if (!current()) return;
             dayLoading = false;
             dayError = error;
-            notifyListeners();
+            _dayContent.notifyListeners();
           },
         );
+    if (notify) _dayContent.notifyListeners();
   }
 
   /// Called by the mounted calendar with its top-level tab visibility.
@@ -285,8 +298,8 @@ class CalendarViewModel extends ChangeNotifier {
       final selected = _selectedDay.value;
       if (selected != null) {
         // Preserve the selected calendar date, not its old-zone instant.
-        _selectedDay.value = DateTime(_year, _month, selected.day);
-        if (refreshDay) retryDay();
+        _selectedDay.set(DateTime(_year, _month, selected.day), notify: notify);
+        if (refreshDay) _retryDay(notify: notify);
       }
     }
     _midnightTimer?.cancel();
@@ -313,20 +326,21 @@ class CalendarViewModel extends ChangeNotifier {
 
   void selectDay(DateTime day) {
     if (day == selectedDay) return;
-    _selectedDay.value = day;
+    _selectedDay.set(day);
     retryDay();
-    notifyListeners();
   }
 
-  /// The caller rebuilds the month header/grid; selection has its own listener.
+  /// Month navigation updates metrics/grid without any repository read.
   void goMonth(int delta) {
     final date = DateTime(_year, _month + delta);
     _year = date.year;
     _month = date.month;
     _grid = null;
     _daysWithWorkouts = null;
-    _selectedDay.value = null;
     _cancelDay();
+    _selectedDay.set(null);
+    _dayContent.notifyListeners();
+    notifyListeners();
   }
 
   @override
@@ -335,6 +349,24 @@ class CalendarViewModel extends ChangeNotifier {
     _cancelDay();
     setActive(false);
     _selectedDay.dispose();
+    _dayContent.dispose();
     super.dispose();
+  }
+}
+
+/// Activation may remap an old-zone date while its owner is already building.
+/// Unlike ValueNotifier, this permits that silent refresh without notifying a
+/// mounted selection builder during a parent lifecycle transition.
+class _Selection extends ChangeNotifier implements ValueListenable<DateTime?> {
+  _Selection(this._value);
+
+  DateTime? _value;
+  @override
+  DateTime? get value => _value;
+
+  void set(DateTime? value, {bool notify = true}) {
+    if (_value == value) return;
+    _value = value;
+    if (notify) notifyListeners();
   }
 }

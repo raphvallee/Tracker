@@ -55,6 +55,7 @@ class _HistoryPageState extends State<HistoryPage> {
         state != AppLifecycleState.detached;
     _calendar.setHistoryActive(false);
     _calendar.addListener(_scheduleScrollRestore);
+    _calendar.dayContentListenable.addListener(_scheduleScrollRestore);
     _lifecycleListener = AppLifecycleListener(
       onStateChange: (state) {
         // Losing focus alone is not suspension. After suspension, wait for resume.
@@ -211,6 +212,7 @@ class _HistoryPageState extends State<HistoryPage> {
     _lifecycleListener.dispose();
     _suspend();
     _calendar.removeListener(_scheduleScrollRestore);
+    _calendar.dayContentListenable.removeListener(_scheduleScrollRestore);
     _calendar.dispose();
     _scrollController.dispose();
     super.dispose();

@@ -130,57 +130,57 @@ class _HistoryCalendarState extends State<HistoryCalendar> {
           36.0,
           56.0,
         );
-    return ValueListenableBuilder<DateTime?>(
-      valueListenable: _model.selectedDayListenable,
-      builder: (context, selectedDay, _) => SliverMainAxisGroup(
-        slivers: [
-          SliverToBoxAdapter(
-            // FTabs no longer supplies the Material/text-style ancestor.
-            child: Material(
-              type: MaterialType.transparency,
-              textStyle: theme.typography.body.md.copyWith(
-                color: theme.colors.foreground,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (_model.datesLoading) const LinearProgressIndicator(),
-                  if (_model.datesError != null)
-                    Column(
-                      children: [
-                        const Text(
-                          'Could not refresh calendar. Displayed dates may be outdated.',
-                        ),
-                        TextButton(
-                          onPressed: () => setState(_model.retryDates),
-                          child: const Text('Retry calendar'),
-                        ),
-                      ],
-                    ),
-                  _BuildMonthHeader(
-                    year: _model.year,
-                    monthName: _monthName(_model.month),
-                    onPrev: () => setState(() => _model.goMonth(-1)),
-                    onNext: () => setState(() => _model.goMonth(1)),
+    return SliverMainAxisGroup(
+      slivers: [
+        SliverToBoxAdapter(
+          // FTabs no longer supplies the Material/text-style ancestor.
+          child: Material(
+            type: MaterialType.transparency,
+            textStyle: theme.typography.body.md.copyWith(
+              color: theme.colors.foreground,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (_model.datesLoading) const LinearProgressIndicator(),
+                if (_model.datesError != null)
+                  Column(
+                    children: [
+                      const Text(
+                        'Could not refresh calendar. Displayed dates may be outdated.',
+                      ),
+                      TextButton(
+                        onPressed: () => setState(_model.retryDates),
+                        child: const Text('Retry calendar'),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: <Widget>[
-                      for (final label in _weekdayLabels)
-                        Expanded(
-                          child: Center(
-                            child: Text(
-                              label,
-                              style: theme.typography.body.xs.copyWith(
-                                color: theme.colors.mutedForeground,
-                              ),
+                _BuildMonthHeader(
+                  year: _model.year,
+                  monthName: _monthName(_model.month),
+                  onPrev: () => _model.goMonth(-1),
+                  onNext: () => _model.goMonth(1),
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  children: <Widget>[
+                    for (final label in _weekdayLabels)
+                      Expanded(
+                        child: Center(
+                          child: Text(
+                            label,
+                            style: theme.typography.body.xs.copyWith(
+                              color: theme.colors.mutedForeground,
                             ),
                           ),
                         ),
-                    ],
-                  ),
-                  const SizedBox(height: 2),
-                  _DayGrid(
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                ValueListenableBuilder<DateTime?>(
+                  valueListenable: _model.selectedDayListenable,
+                  builder: (context, selectedDay, _) => _DayGrid(
                     grid: _model.grid,
                     theme: theme,
                     cellHeight: cellHeight,
@@ -188,13 +188,16 @@ class _HistoryCalendarState extends State<HistoryCalendar> {
                     daysWithWorkouts: _model.daysWithWorkouts,
                     onSelectDay: _model.selectDay,
                   ),
-                  const SizedBox(height: 6),
-                  _MetricsStrip(
-                    monthWorkoutDays: _model.monthWorkoutDays,
-                    streak: _model.streak,
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
+                ),
+                const SizedBox(height: 6),
+                _MetricsStrip(
+                  monthWorkoutDays: _model.monthWorkoutDays,
+                  streak: _model.streak,
+                ),
+                const SizedBox(height: 6),
+                ValueListenableBuilder<DateTime?>(
+                  valueListenable: _model.selectedDayListenable,
+                  builder: (context, selectedDay, _) => Text(
                     selectedDay == null
                         ? 'Workouts'
                         : 'Workouts · ${_dateLabel(selectedDay)}',
@@ -202,14 +205,17 @@ class _HistoryCalendarState extends State<HistoryCalendar> {
                       fontWeight: FontWeight.w600,
                     ),
                   ),
-                  const SizedBox(height: 4),
-                ],
-              ),
+                ),
+                const SizedBox(height: 4),
+              ],
             ),
           ),
-          _dayList(selectedDay),
-        ],
-      ),
+        ),
+        ListenableBuilder(
+          listenable: _model.dayContentListenable,
+          builder: (context, _) => _dayList(_model.selectedDay),
+        ),
+      ],
     );
   }
 
@@ -227,10 +233,7 @@ class _HistoryCalendarState extends State<HistoryCalendar> {
         child: Column(
           children: [
             const Text('Could not load this day.'),
-            TextButton(
-              onPressed: () => setState(_model.retryDay),
-              child: const Text('Retry'),
-            ),
+            TextButton(onPressed: _model.retryDay, child: const Text('Retry')),
           ],
         ),
       );

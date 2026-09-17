@@ -27,6 +27,212 @@ import '../../../testing/test_helpers.dart';
 import 'counting_sessions.dart';
 
 void main() {
+  testWidgets('selection leaves metrics untouched and same day is a no-op', (
+    tester,
+  ) async {
+    final repository = _HistoryRepository();
+    addTearDown(repository.sessions.close);
+    await tester.pumpWidget(_historyApp(repository));
+    await tester.tap(find.text('Calendar'));
+    await tester.pump();
+    final model = tester
+        .widget<HistoryCalendar>(find.byType(HistoryCalendar))
+        .model!;
+    repository.sessions.dates.add([model.selectedDay!]);
+    repository.sessions.days.last.add(const []);
+    await tester.pumpAndSettle();
+    final index = model.dateIndex;
+    final metrics = find.byWidgetPredicate(
+      (widget) => widget.runtimeType.toString() == '_MetricsStrip',
+    );
+    final originalMetrics = tester.widget(metrics);
+    final originalMetricBody = tester.widget(
+      find.descendant(of: metrics, matching: find.byType(Wrap)),
+    );
+    var notifications = 0;
+    var selections = 0;
+    model.addListener(() => notifications++);
+    model.selectedDayListenable.addListener(() => selections++);
+    var dayNotifications = 0;
+    model.dayContentListenable.addListener(() => dayNotifications++);
+    final day = model.selectedDay!.day == 12 ? 13 : 12;
+    await tester.tap(find.text('$day'));
+    await tester.pump();
+    expect(model.dateIndex, same(index));
+    expect(tester.widget(metrics), same(originalMetrics));
+    expect(
+      tester.widget(find.descendant(of: metrics, matching: find.byType(Wrap))),
+      same(originalMetricBody),
+    );
+    expect(notifications, 0);
+    expect(selections, 1);
+    final requests = repository.sessions.days.length;
+    await tester.tap(find.text('$day'));
+    await tester.pump();
+    expect(repository.sessions.days.length, requests);
+    expect(notifications, 0);
+    expect(selections, 1);
+    expect(
+      dayNotifications,
+      1,
+    ); // Different-day loading only; same day is silent.
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    repository.sessions.days.last.addError(StateError('day failed'));
+    await tester.pumpAndSettle();
+    expect(find.text('Could not load this day.'), findsOneWidget);
+    expect(dayNotifications, 2);
+    expect(tester.widget(metrics), same(originalMetrics));
+    await tester.tap(find.text('Retry'));
+    await tester.pump();
+    expect(dayNotifications, 3);
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    repository.sessions.days.last.add([
+      WorkoutSessionSummary(
+        id: 1,
+        title: 'Day recovered',
+        startTime: model.selectedDay!,
+        setCount: 2,
+        gymId: null,
+      ),
+    ]);
+    await tester.pumpAndSettle();
+    expect(find.text('Day recovered'), findsOneWidget);
+    expect(dayNotifications, 4);
+    expect(notifications, 0);
+    expect(model.dateIndex, same(index));
+    expect(tester.widget(metrics), same(originalMetrics));
+    expect(
+      tester.widget(find.descendant(of: metrics, matching: find.byType(Wrap))),
+      same(originalMetricBody),
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('month, projected dates and midnight refresh dependent metrics', (
+    tester,
+  ) async {
+    var now = DateTime(2026, 3, 4, 23, 59, 59);
+    final repo = _SessionsRepository();
+    addTearDown(repo.close);
+    final model = CalendarViewModel(now: () => now);
+    addTearDown(model.dispose);
+    model.bindRepository(repo);
+    model.setCalendarMode(true);
+    await tester.pumpWidget(
+      _themed(
+        Scaffold(
+          body: HistoryCalendar(model: model, gymNames: const {}),
+        ),
+      ),
+    );
+    repo.dates.add([DateTime(2026, 3, 3), DateTime(2026, 4, 1)]);
+    repo.days.last.add(const []);
+    await tester.pumpAndSettle();
+    void metric(String label, String value) {
+      final row = find
+          .ancestor(of: find.text(label), matching: find.byType(Row))
+          .first;
+      expect(
+        find.descendant(of: row, matching: find.text(value)),
+        findsOneWidget,
+      );
+    }
+
+    metric('workout days', '1');
+    metric('day streak', '1');
+    final index = model.dateIndex;
+    final requests = repo.days.length;
+    model.goMonth(1);
+    await tester.pumpAndSettle();
+    expect(find.text('April 2026'), findsOneWidget);
+    expect(find.text('Pick a workout day above.'), findsOneWidget);
+    metric('workout days', '1');
+    expect(repo.days.length, requests);
+    expect(model.dateIndex, same(index));
+    repo.dates.add([
+      DateTime(2026, 3, 3),
+      DateTime(2026, 4, 1),
+      DateTime(2026, 4, 2),
+    ]);
+    await tester.pumpAndSettle();
+    metric('workout days', '2');
+    metric('day streak', '1');
+    final updated = model.dateIndex;
+    expect(updated, isNot(same(index)));
+    now = DateTime(2026, 3, 5);
+    await tester.pump(const Duration(seconds: 1));
+    metric('workout days', '2');
+    metric('day streak', '0');
+    expect(model.dateIndex, same(updated));
+    expect(repo.days.length, requests);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  for (final datesFirst in [true, false]) {
+    testWidgets(
+      'calendar bookmark waits for both sources: datesFirst=$datesFirst',
+      (tester) async {
+        final repo = _HistoryRepository();
+        addTearDown(repo.sessions.close);
+        await tester.pumpWidget(_historyApp(repo));
+        await tester.tap(find.text('Calendar'));
+        await tester.pump();
+        final model = tester
+            .widget<HistoryCalendar>(find.byType(HistoryCalendar))
+            .model!;
+        final day = model.selectedDay!;
+        final rows = List.generate(
+          200,
+          (i) => WorkoutSessionSummary(
+            id: i + 1,
+            title: 'Bookmark row $i',
+            startTime: day,
+            setCount: 2,
+            gymId: null,
+          ),
+        );
+        repo.sessions.dates.add([day]);
+        repo.sessions.days.last.add(rows);
+        await tester.pumpAndSettle();
+        final controller = tester
+            .widget<CustomScrollView>(find.byType(CustomScrollView))
+            .controller!;
+        controller.jumpTo(1600);
+        await tester.pumpAndSettle();
+        final bookmark = controller.offset;
+        expect(bookmark, greaterThan(1000));
+        final index = model.dateIndex;
+        for (var attempt = 0; attempt < 2; attempt++) {
+          await tester.pumpWidget(_historyApp(repo, active: false));
+          await tester.pump();
+          await tester.pumpWidget(_historyApp(repo));
+          await tester.pump();
+          if (datesFirst) {
+            repo.sessions.dates.add([day]);
+          } else {
+            repo.sessions.days.last.add(rows);
+          }
+          // Separate frames are essential: simultaneous deliveries conceal a
+          // missing day-content scroll-restoration listener.
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 20));
+          expect(controller.offset, lessThan(bookmark));
+          if (datesFirst) {
+            repo.sessions.days.last.add(rows);
+          } else {
+            repo.sessions.dates.add([day]);
+          }
+          await tester.pumpAndSettle();
+          expect(controller.offset, closeTo(bookmark, 1));
+          expect(model.dateIndex, same(index));
+          expect(model.selectedDay, day);
+          expect(tester.takeException(), isNull);
+        }
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+  }
+
   testWidgets('calendar clock rebuilds metrics only while visible', (
     tester,
   ) async {

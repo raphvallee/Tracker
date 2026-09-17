@@ -229,9 +229,17 @@ Suggested subject: `perf(history): isolate calendar selection rebuilds`
 - Retain the simple bounded grid. Do not add 42 per-cell notifiers without profiling evidence.
 
 Acceptance:
-- [ ] Selecting a different day does not rebuild metrics or reconstruct the index.
-- [ ] Selecting the same day starts no duplicate request or state notification.
-- [ ] Month changes, date updates, and midnight still refresh the correct metrics.
+- [x] Selecting a different day does not rebuild metrics or reconstruct the index.
+- [x] Selecting the same day starts no duplicate request or state notification.
+- [x] Month changes, date updates, and midnight still refresh the correct metrics.
+
+Commit 7 evidence (2026-09-17, based on `26d4080`):
+
+- Calendar-wide notifications now cover date/clock/month changes; selection builders cover the grid and heading; a separate day-content listener covers loading, rows and errors. Metrics remain outside those builders. History scroll restoration observes both date and day-content readiness. Activation/rebinding preserves silent synchronous updates during parent lifecycle transitions; cancellation and generation guards remain intact.
+- Four widget regressions prove metric widget/body identity and index identity survive selection, same-day selection issues no duplicate query or notification, day errors/retries/results leave metrics untouched, month/date/midnight changes refresh metrics, and deep Calendar bookmarks restore when either source delivers first in separate frames. Existing row-equality and real-Isar tests now distinguish day-content notifications from date notifications.
+- Coordinator: `TZ=America/New_York flutter test test/ui/history test/data --concurrency=1 --reporter expanded` passed 70 tests (one opt-in benchmark skipped). `pwsh run-visual-tests.ps1` passed all three sizes. Manual inspection of Calendar PNGs at 320×568, 800×600 and 1280×720 found no clipping, overlap or missing glyphs. Two independent read-only reviews found no confirmed defects and independently passed focused tests.
+- The initial full working-tree baseline passed 134 tests. The exact staged application/test snapshot passed formatting (six files, zero changes), full `flutter analyze` (No issues found), and full `flutter test --reporter expanded` (137 tests passed, including visual and overflow suites). Logs: `/tmp/calendar-opt7-staged-{format,analyze,tests}.log`. The unrelated temporary test and the separate opt-in benchmark were not included in this staged snapshot. No schema annotations changed. The user's weekday-label extraction and unrelated files remain outside the commit. Command-local hook bypass is retained because the hook would stage unrelated files.
+- Logs: `/tmp/calendar-opt7-focused.log`, `/tmp/calendar-opt7-visual.log`, `/tmp/tracker-baseline-tests.log`. No pre-fix failing-test result is claimed.
 
 ## Measurement-gated follow-ups: separate commits only when justified
 

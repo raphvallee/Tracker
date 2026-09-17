@@ -77,7 +77,7 @@ void main() {
     repository.dates.single.emit([DateTime(2026, 3, 1)]);
     final index = model.dateIndex;
     var notifications = 0;
-    model.addListener(() => notifications++);
+    model.dayContentListenable.addListener(() => notifications++);
     WorkoutSessionSummary row({
       int id = 1,
       String title = 'Workout',

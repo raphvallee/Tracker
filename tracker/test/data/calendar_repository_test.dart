@@ -87,6 +87,8 @@ void main() {
       final rows = model.dayRows;
       var notifications = 0;
       model.addListener(() => notifications++);
+      var dayNotifications = 0;
+      model.dayContentListenable.addListener(() => dayNotifications++);
       final datesBefore = probe.dateDeliveries;
       final rowsBefore = probe.rowDeliveries;
       session.sets.single.weight = 55;
@@ -98,13 +100,16 @@ void main() {
             probe.rowDeliveries > rowsBefore,
       );
       expect(notifications, 0);
+      expect(dayNotifications, 0);
       expect(model.dateIndex, same(index));
       expect(model.daysWithWorkouts, same(days));
       expect(model.dayRows, same(rows));
       session.title = 'Renamed';
       await repository.put(session);
       await waitFor(() => model.dayRows.single.title == 'Renamed');
-      expect(notifications, 1);
+      // Row edits notify only the day-content listener; metrics stay silent.
+      expect(dayNotifications, 1);
+      expect(notifications, 0);
       expect(model.dateIndex, same(index));
       expect(rows.single.title, 'Workout');
     },
