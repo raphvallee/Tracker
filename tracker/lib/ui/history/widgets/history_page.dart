@@ -34,6 +34,10 @@ class _HistoryPageState extends State<HistoryPage> {
   int _listGeneration = 0;
   int _gymGeneration = 0;
   final _calendar = CalendarViewModel(observeAppLifecycle: false);
+  final _scrollController = ScrollController(keepScrollOffset: false);
+  final _scrollOffsets = [0.0, 0.0];
+  double? _pendingScrollOffset;
+  bool _restoreScheduled = false;
   late final AppLifecycleListener _lifecycleListener;
   bool _tabActive = true;
   bool _appVisible = true;
@@ -50,6 +54,7 @@ class _HistoryPageState extends State<HistoryPage> {
         state != AppLifecycleState.paused &&
         state != AppLifecycleState.detached;
     _calendar.setHistoryActive(false);
+    _calendar.addListener(_scheduleScrollRestore);
     _lifecycleListener = AppLifecycleListener(
       onStateChange: (state) {
         // Losing focus alone is not suspension. After suspension, wait for resume.
@@ -81,6 +86,8 @@ class _HistoryPageState extends State<HistoryPage> {
   }
 
   void _suspend() {
+    _rememberScroll();
+    _pendingScrollOffset = _scrollOffsets[_selectedTab];
     _active = false;
     _gymGeneration++;
     _cancelList();
@@ -158,10 +165,41 @@ class _HistoryPageState extends State<HistoryPage> {
     );
   }
 
+  void _rememberScroll() {
+    if (_pendingScrollOffset == null && _scrollController.hasClients) {
+      _scrollOffsets[_selectedTab] = _scrollController.offset;
+    }
+  }
+
+  // Loading/hidden placeholders are short. Restore only after the selected
+  // source has delivered, rather than letting their extent erase the bookmark.
+  void _scheduleScrollRestore() {
+    if (_pendingScrollOffset == null || _restoreScheduled || !_active) return;
+    _restoreScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _restoreScheduled = false;
+      if (!mounted || !_active || !_scrollController.hasClients) return;
+      final ready = _selectedTab == 0
+          ? !_listLoading && _listError == null
+          : !_calendar.datesLoading &&
+                !_calendar.dayLoading &&
+                _calendar.datesError == null &&
+                _calendar.dayError == null;
+      final offset = _pendingScrollOffset;
+      if (!ready || offset == null) return;
+      _pendingScrollOffset = null;
+      _scrollController.jumpTo(offset);
+    });
+  }
+
   void _selectTab(int index) {
     if (index == _selectedTab) return;
+    _rememberScroll();
+    // Start the replacement slivers at the top while their data refreshes.
+    if (_scrollController.hasClients) _scrollController.jumpTo(0);
     setState(() {
       _selectedTab = index;
+      _pendingScrollOffset = _scrollOffsets[index];
       if (index == 1) _cancelList();
       _calendar.setCalendarMode(index == 1);
       if (index == 0) _startList();
@@ -172,32 +210,43 @@ class _HistoryPageState extends State<HistoryPage> {
   void dispose() {
     _lifecycleListener.dispose();
     _suspend();
+    _calendar.removeListener(_scheduleScrollRestore);
     _calendar.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    _scheduleScrollRestore();
     return CustomScrollView(
+      controller: _scrollController,
       slivers: [
         CustomAppBar(context, title: 'History'),
         SliverPadding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
           sliver: SliverToBoxAdapter(
             child: FTabs(
               control: FTabControl.lifted(
                 index: _selectedTab,
                 onChange: _selectTab,
               ),
-              children: [
-                .entry(label: const Text('List'), child: _listBody(context)),
-                .entry(
-                  label: const Text('Calendar'),
-                  child: HistoryCalendar(model: _calendar, gymNames: _gymNames),
-                ),
+              children: const [
+                .entry(label: Text('List'), child: SizedBox.shrink()),
+                .entry(label: Text('Calendar'), child: SizedBox.shrink()),
               ],
             ),
           ),
+        ),
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
+          sliver: _selectedTab == 0
+              ? _listBody(context)
+              : HistoryCalendar(
+                  model: _calendar,
+                  gymNames: _gymNames,
+                  sliver: true,
+                ),
         ),
       ],
     );
@@ -205,26 +254,31 @@ class _HistoryPageState extends State<HistoryPage> {
 
   Widget _listBody(BuildContext context) {
     if (_listError != null) {
-      return Column(
-        children: [
-          const _HistoryMessage(message: 'Could not load workout history.'),
-          TextButton(
-            onPressed: () => setState(_startList),
-            child: const Text('Retry history'),
-          ),
-        ],
+      return SliverToBoxAdapter(
+        child: Column(
+          children: [
+            const _HistoryMessage(message: 'Could not load workout history.'),
+            TextButton(
+              onPressed: () => setState(_startList),
+              child: const Text('Retry history'),
+            ),
+          ],
+        ),
       );
     }
-    if (_listLoading) return const Center(child: CircularProgressIndicator());
-    if (_sessions.isEmpty) return const _EmptyHistory();
+    if (_listLoading) {
+      return const SliverToBoxAdapter(
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (_sessions.isEmpty) {
+      return const SliverToBoxAdapter(child: _EmptyHistory());
+    }
     return _sessionList(context, _sessions);
   }
 
   Widget _sessionList(BuildContext context, List<WorkoutSession> sessions) {
-    return ListView.builder(
-      padding: EdgeInsets.zero,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
+    return SliverList.builder(
       itemCount: sessions.length,
       itemBuilder: (context, index) {
         final session = sessions[index];

@@ -35,6 +35,7 @@ import 'package:tracker/ui/exercises/widgets/exercise_detail_page.dart';
 import 'package:tracker/ui/exercises/widgets/new_exercise_page.dart';
 import 'package:tracker/ui/feed/widgets/feed_page.dart';
 import 'package:tracker/ui/history/widgets/session_detail_page.dart';
+import 'package:tracker/ui/history/widgets/calendar/history_calendar.dart';
 import 'package:tracker/ui/settings/view_models/settings_cubit.dart';
 import 'package:tracker/ui/settings/widgets/gyms_page.dart';
 import 'package:tracker/ui/settings/widgets/settings_page.dart';
@@ -262,11 +263,33 @@ void main() {
       await guarded('History tab (list)', () async {
         switchTab(1);
         await settleForData(() => tester.any(find.text('Calendar')));
+        await settleForData(dataLoaded);
+        expect(dataLoaded(), isTrue, reason: 'Capture loaded history rows');
         await recorder.capture('History tab (list)');
       });
       await guarded('History calendar', () async {
         await tester.tap(find.text('Calendar'));
         await settle();
+        bool calendarLoaded() =>
+            dataLoaded() && !tester.any(find.byType(LinearProgressIndicator));
+        await settleForData(calendarLoaded);
+        expect(
+          calendarLoaded(),
+          isTrue,
+          reason: 'Capture loaded calendar rows',
+        );
+        // Today need not contain a fixture session. Select a seeded date so
+        // this capture exercises selected-day rows, even near month boundaries.
+        final model = tester
+            .widget<HistoryCalendar>(find.byType(HistoryCalendar))
+            .model!;
+        final day = fixtures.session.startTime.toLocal();
+        model.goMonth((day.year - model.year) * 12 + day.month - model.month);
+        model.selectDay(DateTime(day.year, day.month, day.day));
+        await settle();
+        await settleForData(calendarLoaded);
+        expect(calendarLoaded(), isTrue);
+        expect(find.text(fixtures.session.title), findsOneWidget);
         await recorder.capture('History calendar');
       });
       await guarded('Workout tab (in progress)', () async {

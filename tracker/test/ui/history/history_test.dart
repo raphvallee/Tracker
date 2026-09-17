@@ -4,9 +4,12 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forui/forui.dart';
 import 'package:tracker/data/repositories/gym_repository.dart';
+import 'package:tracker/data/repositories/exercise_repository.dart';
+import 'package:tracker/domain/models/exercise.dart';
 import 'package:tracker/data/repositories/tracker_repository.dart';
 import 'package:tracker/data/repositories/workout_session_repository.dart';
 import 'package:tracker/domain/models/gym.dart';
@@ -222,7 +225,7 @@ void main() {
     },
   );
 
-  testWidgets('calendar keeps a bounded internal day list', (tester) async {
+  testWidgets('standalone calendar uses one lazy viewport', (tester) async {
     final sessions = List.generate(
       8,
       (index) =>
@@ -236,8 +239,199 @@ void main() {
       ),
     );
 
-    expect(find.byType(ListView), findsOneWidget);
+    expect(find.byType(ListView), findsNothing);
+    expect(find.byType(CustomScrollView), findsOneWidget);
+    expect(find.byType(Scrollable), findsOneWidget);
+    expect(find.byType(SliverList), findsOneWidget);
     expect(find.text('Workout 0'), findsOneWidget);
+  });
+
+  for (final size in [
+    const Size(320, 568),
+    const Size(800, 600),
+    const Size(1280, 720),
+  ]) {
+    testWidgets('History lazy rows and last-row navigation at $size', (
+      tester,
+    ) async {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final repo = _HistoryRepository();
+      addTearDown(repo.sessions.close);
+      await tester.pumpWidget(_historyApp(repo));
+      final date = DateTime(2026, 3, 12);
+      final sessions = List.generate(
+        600,
+        (i) => WorkoutSession(title: 'Session $i', startTime: date)..id = i + 1,
+      );
+      repo.sessions.controller.add(sessions);
+      await tester.pumpAndSettle();
+      final scrollable = find.descendant(
+        of: find.byType(CustomScrollView),
+        matching: find.byType(Scrollable),
+      );
+      void expectLazy() {
+        expect(find.byType(CustomScrollView), findsOneWidget);
+        expect(scrollable, findsOneWidget);
+        expect(find.byType(ListView), findsNothing);
+        // At least 48px per row, plus the default 250px cache on each side.
+        // Bounds scale with the viewport, not with the source length.
+        expect(
+          find.byType(FItem).evaluate().length,
+          inInclusiveRange(1, ((size.height + 500) / 48).ceil() + 2),
+        );
+        expect(tester.takeException(), isNull);
+      }
+
+      expectLazy();
+      expect(find.textContaining('Session 599'), findsNothing);
+      await tester.scrollUntilVisible(
+        find.textContaining('Session 599'),
+        400,
+        scrollable: scrollable,
+        maxScrolls: 250,
+      );
+      await tester.pumpAndSettle();
+      expectLazy();
+      await tester.tap(find.textContaining('Session 599'));
+      await tester.pumpAndSettle();
+      expect(find.byType(SessionDetailPage), findsOneWidget);
+      Navigator.of(tester.element(find.byType(SessionDetailPage))).pop();
+      await tester.pumpAndSettle();
+      final controller = tester
+          .widget<CustomScrollView>(find.byType(CustomScrollView))
+          .controller!;
+      final listEnd = controller.offset;
+      expect(listEnd, greaterThan(size.height));
+      // Suspending drops full rows, but must not overwrite the scroll bookmark
+      // with the extent of the short loading/empty placeholder.
+      await tester.pumpWidget(_historyApp(repo, active: false));
+      await tester.pump();
+      await tester.pumpWidget(_historyApp(repo));
+      await tester.pump();
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      repo.sessions.controller.add(sessions);
+      await tester.pumpAndSettle();
+      expect(controller.offset, closeTo(listEnd, 1));
+      expectLazy();
+      controller.jumpTo(24);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Calendar'));
+      await tester.pump();
+      final model = tester
+          .widget<HistoryCalendar>(find.byType(HistoryCalendar))
+          .model!;
+      model.selectDay(date);
+      final daySessions = sessions.take(200).toList();
+      repo.sessions.dates.add(daySessions.map((s) => s.startTime).toList());
+      repo.sessions.days.last.add(
+        daySessions.map(WorkoutSessionSummary.fromSession).toList(),
+      );
+      repo.sessions.lookup = daySessions.last;
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<HistoryCalendar>(find.byType(HistoryCalendar)).sliver,
+        isTrue,
+      );
+      expectLazy();
+      expect(find.text('Session 199'), findsNothing);
+      await tester.scrollUntilVisible(
+        find.text('Session 199'),
+        400,
+        scrollable: scrollable,
+        maxScrolls: 100,
+      );
+      await tester.pumpAndSettle();
+      expectLazy();
+      await tester.tap(find.text('Session 199'));
+      await tester.pumpAndSettle();
+      expect(find.byType(SessionDetailPage), findsOneWidget);
+      expect(repo.sessions.lookups, 1);
+      Navigator.of(tester.element(find.byType(SessionDetailPage))).pop();
+      await tester.pumpAndSettle();
+      controller.jumpTo(18);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('List'));
+      await tester.pump();
+      repo.sessions.controller.add(sessions);
+      await tester.pumpAndSettle();
+      expect(controller.offset, closeTo(24, 1));
+      await tester.tap(find.text('Calendar'));
+      await tester.pump();
+      repo.sessions.dates.add([date]);
+      repo.sessions.days.last.add(
+        daySessions.map(WorkoutSessionSummary.fromSession).toList(),
+      );
+      await tester.pumpAndSettle();
+      expect(controller.offset, closeTo(18, 1));
+      expect(model.selectedDay, date);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
+
+  testWidgets('sliver loading, errors, retries, empty and tab accessibility', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    final repo = _HistoryRepository();
+    addTearDown(repo.sessions.close);
+    await tester.pumpWidget(_historyApp(repo));
+    await tester.pump();
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    repo.sessions.controller.addError(StateError('offline'));
+    await tester.pumpAndSettle();
+    expect(find.text('Could not load workout history.'), findsOneWidget);
+    await tester.tap(find.text('Retry history'));
+    await tester.pump();
+    expect(repo.sessions.watches, 2);
+    repo.sessions.controller.add(const []);
+    await tester.pumpAndSettle();
+    expect(find.text('No workouts logged yet'), findsOneWidget);
+    final tabs = tester.widget<FTabs>(find.byType(FTabs));
+    expect(tabs.expands, isFalse);
+    expect(tabs.children.every((entry) => entry.child is SizedBox), isTrue);
+    expect(
+      tester.getSemantics(find.text('List')),
+      matchesSemantics(
+        label: 'List\nTab 1 of 2',
+        isSelected: true,
+        hasSelectedState: true,
+        isFocusable: true,
+        hasTapAction: true,
+        hasFocusAction: true,
+      ),
+    );
+    // Focus the actual Forui tab and activate it using the keyboard.
+    Focus.of(tester.element(find.text('Calendar'))).requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+    expect(find.byType(HistoryCalendar), findsOneWidget);
+    expect(find.byType(LinearProgressIndicator), findsOneWidget);
+    repo.sessions.dates.addError(StateError('dates'));
+    repo.sessions.days.last.addError(StateError('rows'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Could not refresh calendar'), findsOneWidget);
+    expect(find.text('Could not load this day.'), findsOneWidget);
+    await tester.tap(find.text('Retry calendar'));
+    await tester.tap(find.text('Retry'));
+    await tester.pump();
+    repo.sessions.dates.add(const []);
+    repo.sessions.days.last.add(const []);
+    await tester.pumpAndSettle();
+    expect(find.text('No workouts on this day.'), findsOneWidget);
+    await tester.tap(find.byTooltip('Previous month'));
+    await tester.pumpAndSettle();
+    expect(find.text('Pick a workout day above.'), findsOneWidget);
+    await tester.tap(find.text('12'));
+    await tester.pump();
+    repo.sessions.days.last.add(const []);
+    await tester.pumpAndSettle();
+    expect(find.text('No workouts on this day.'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+    semantics.dispose();
   });
 
   group('SessionDetailPage UI', () {
@@ -326,18 +520,30 @@ Widget _themed(Widget child) => MaterialApp(
   home: child,
 );
 
-Widget _historyApp(_HistoryRepository repository) => _themed(
-  RepositoryScope(
-    repository: repository,
-    child: const Scaffold(body: HistoryPage()),
-  ),
-);
+Widget _historyApp(_HistoryRepository repository, {bool active = true}) =>
+    _themed(
+      RepositoryScope(
+        repository: repository,
+        child: TabVisibilityScope(
+          index: 1,
+          isActive: active,
+          child: const Scaffold(body: HistoryPage()),
+        ),
+      ),
+    );
 
 class _HistoryRepository extends Fake implements TrackerRepository {
   @override
   final _SessionsRepository sessions = _SessionsRepository();
   @override
   final gyms = _GymsRepository();
+  @override
+  final exercises = _ExercisesRepository();
+}
+
+class _ExercisesRepository extends Fake implements ExerciseRepository {
+  @override
+  Future<List<Exercise>> getAll() async => const [];
 }
 
 class _SessionsRepository extends Fake implements WorkoutSessionRepository {
@@ -345,6 +551,14 @@ class _SessionsRepository extends Fake implements WorkoutSessionRepository {
   final dates = StreamController<List<DateTime>>.broadcast();
   final days = <StreamController<List<WorkoutSessionSummary>>>[];
   int dateWatches = 0;
+  WorkoutSession? lookup;
+  int lookups = 0;
+
+  @override
+  Future<WorkoutSession?> getById(int id) async {
+    lookups++;
+    return lookup;
+  }
 
   Future<void> close() async {
     await controller.close();

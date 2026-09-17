@@ -25,12 +25,16 @@ class HistoryCalendar extends StatefulWidget {
     this.sessions,
     required this.gymNames,
     this.model,
+    this.sliver = false,
   });
 
   /// Compatibility input for standalone previews/tests, never supplied by History.
   final List<WorkoutSession>? sessions;
   final Map<int, String> gymNames;
   final CalendarViewModel? model;
+
+  /// Join History's viewport. Standalone previews instead own a scroll view.
+  final bool sliver;
 
   @override
   State<HistoryCalendar> createState() => _HistoryCalendarState();
@@ -99,128 +103,143 @@ class _HistoryCalendarState extends State<HistoryCalendar> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = context.theme;
-
+    if (widget.sliver) {
+      return SliverLayoutBuilder(
+        builder: (context, constraints) => _slivers(
+          constraints.viewportMainAxisExtent - kToolbarHeight - _navAllowance,
+        ),
+      );
+    }
     return LayoutBuilder(
-      builder: (context, constraints) {
-        final available = constraints.maxHeight.isFinite
-            ? constraints.maxHeight
-            : MediaQuery.sizeOf(context).height -
-                  MediaQuery.paddingOf(context).top -
-                  kToolbarHeight -
-                  _navAllowance;
+      builder: (context, constraints) => CustomScrollView(
+        slivers: [
+          _slivers(
+            constraints.maxHeight.isFinite
+                ? constraints.maxHeight
+                : MediaQuery.sizeOf(context).height,
+          ),
+        ],
+      ),
+    );
+  }
 
-        final cellHeight =
-            ((available - _reservedHeight) / (_model.grid.days.length ~/ 7))
-                .clamp(36.0, 56.0);
-
-        return SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: <Widget>[
-              if (_model.datesLoading) const LinearProgressIndicator(),
-              if (_model.datesError != null)
-                Column(
-                  children: [
-                    const Text(
-                      'Could not refresh calendar. Displayed dates may be outdated.',
-                    ),
-                    TextButton(
-                      onPressed: () => setState(_model.retryDates),
-                      child: const Text('Retry calendar'),
-                    ),
-                  ],
-                ),
-              _BuildMonthHeader(
-                year: _model.year,
-                monthName: _monthName(_model.month),
-                onPrev: () => setState(() => _model.goMonth(-1)),
-                onNext: () => setState(() => _model.goMonth(1)),
+  Widget _slivers(double available) {
+    final theme = context.theme;
+    final cellHeight =
+        ((available - _reservedHeight) / (_model.grid.days.length ~/ 7)).clamp(
+          36.0,
+          56.0,
+        );
+    return ValueListenableBuilder<DateTime?>(
+      valueListenable: _model.selectedDayListenable,
+      builder: (context, selectedDay, _) => SliverMainAxisGroup(
+        slivers: [
+          SliverToBoxAdapter(
+            // FTabs no longer supplies the Material/text-style ancestor.
+            child: Material(
+              type: MaterialType.transparency,
+              textStyle: theme.typography.body.md.copyWith(
+                color: theme.colors.foreground,
               ),
-              const SizedBox(height: 4),
-              Row(
-                children: <Widget>[
-                  for (final label in _weekdayLabels)
-                    Expanded(
-                      child: Center(
-                        child: Text(
-                          label,
-                          style: theme.typography.body.xs.copyWith(
-                            color: theme.colors.mutedForeground,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (_model.datesLoading) const LinearProgressIndicator(),
+                  if (_model.datesError != null)
+                    Column(
+                      children: [
+                        const Text(
+                          'Could not refresh calendar. Displayed dates may be outdated.',
+                        ),
+                        TextButton(
+                          onPressed: () => setState(_model.retryDates),
+                          child: const Text('Retry calendar'),
+                        ),
+                      ],
+                    ),
+                  _BuildMonthHeader(
+                    year: _model.year,
+                    monthName: _monthName(_model.month),
+                    onPrev: () => setState(() => _model.goMonth(-1)),
+                    onNext: () => setState(() => _model.goMonth(1)),
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: <Widget>[
+                      for (final label in _weekdayLabels)
+                        Expanded(
+                          child: Center(
+                            child: Text(
+                              label,
+                              style: theme.typography.body.xs.copyWith(
+                                color: theme.colors.mutedForeground,
+                              ),
+                            ),
                           ),
                         ),
-                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  _DayGrid(
+                    grid: _model.grid,
+                    theme: theme,
+                    cellHeight: cellHeight,
+                    selectedDay: selectedDay,
+                    daysWithWorkouts: _model.daysWithWorkouts,
+                    onSelectDay: _model.selectDay,
+                  ),
+                  const SizedBox(height: 6),
+                  _MetricsStrip(
+                    monthWorkoutDays: _model.monthWorkoutDays,
+                    streak: _model.streak,
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    selectedDay == null
+                        ? 'Workouts'
+                        : 'Workouts · ${_dateLabel(selectedDay)}',
+                    style: theme.typography.body.sm.copyWith(
+                      fontWeight: FontWeight.w600,
                     ),
+                  ),
+                  const SizedBox(height: 4),
                 ],
               ),
-              const SizedBox(height: 2),
-              ValueListenableBuilder<DateTime?>(
-                valueListenable: _model.selectedDayListenable,
-                builder: (context, selectedDay, _) {
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _DayGrid(
-                        grid: _model.grid,
-                        theme: theme,
-                        cellHeight: cellHeight,
-                        selectedDay: selectedDay,
-                        daysWithWorkouts: _model.daysWithWorkouts,
-                        onSelectDay: _model.selectDay,
-                      ),
-                      const SizedBox(height: 6),
-                      _MetricsStrip(
-                        monthWorkoutDays: _model.monthWorkoutDays,
-                        streak: _model.streak,
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        selectedDay == null
-                            ? 'Workouts'
-                            : 'Workouts · ${_dateLabel(selectedDay)}',
-                        style: theme.typography.body.sm.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      _dayList(selectedDay),
-                    ],
-                  );
-                },
-              ),
-            ],
+            ),
           ),
-        );
-      },
+          _dayList(selectedDay),
+        ],
+      ),
     );
   }
 
   Widget _dayList(DateTime? day) {
     if (day == null) {
-      return const Text('Pick a workout day above.');
+      return const SliverToBoxAdapter(child: Text('Pick a workout day above.'));
     }
     if (_model.dayLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return const SliverToBoxAdapter(
+        child: Center(child: CircularProgressIndicator()),
+      );
     }
     if (_model.dayError != null) {
-      return Column(
-        children: [
-          const Text('Could not load this day.'),
-          TextButton(
-            onPressed: () => setState(_model.retryDay),
-            child: const Text('Retry'),
-          ),
-        ],
+      return SliverToBoxAdapter(
+        child: Column(
+          children: [
+            const Text('Could not load this day.'),
+            TextButton(
+              onPressed: () => setState(_model.retryDay),
+              child: const Text('Retry'),
+            ),
+          ],
+        ),
       );
     }
     final sessions = _model.sessionsOn(day);
     if (sessions.isEmpty) {
-      return const Text('No workouts on this day.');
+      return const SliverToBoxAdapter(child: Text('No workouts on this day.'));
     }
-    return ListView.builder(
-      padding: EdgeInsets.zero,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
+    return SliverList.builder(
       itemCount: sessions.length,
       itemBuilder: (context, index) {
         final session = sessions[index];
@@ -327,35 +346,42 @@ class _DayGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const double cellSpacing = 4;
-    return GridView.builder(
+    // At most six rows: ordinary boxes avoid a second, shrink-wrapped viewport.
+    return Padding(
       padding: const EdgeInsets.only(top: 4),
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 7,
-        mainAxisExtent: cellHeight,
-        mainAxisSpacing: cellSpacing,
-        crossAxisSpacing: cellSpacing,
+      child: Column(
+        children: [
+          for (var row = 0; row < grid.days.length ~/ 7; row++) ...[
+            if (row > 0) const SizedBox(height: cellSpacing),
+            SizedBox(
+              height: cellHeight,
+              child: Row(
+                children: [
+                  for (var column = 0; column < 7; column++) ...[
+                    if (column > 0) const SizedBox(width: cellSpacing),
+                    Expanded(child: _cell(grid.days[row * 7 + column])),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ],
       ),
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: grid.days.length,
-      itemBuilder: (context, index) {
-        final dayVal = grid.days[index];
-        if (dayVal == null) return const SizedBox.shrink();
+    );
+  }
 
-        final isSelected =
-            selectedDay != null &&
-            selectedDay!.year == grid.year &&
-            selectedDay!.month == grid.month &&
-            selectedDay!.day == dayVal;
-
-        return _DayCell(
-          dayVal: dayVal,
-          theme: theme,
-          isSelected: isSelected,
-          hasWorkout: daysWithWorkouts.contains(dayVal),
-          onTap: () => onSelectDay(DateTime(grid.year, grid.month, dayVal)),
-        );
-      },
+  Widget _cell(int? dayVal) {
+    if (dayVal == null) return const SizedBox.shrink();
+    return _DayCell(
+      dayVal: dayVal,
+      theme: theme,
+      isSelected:
+          selectedDay != null &&
+          selectedDay!.year == grid.year &&
+          selectedDay!.month == grid.month &&
+          selectedDay!.day == dayVal,
+      hasWorkout: daysWithWorkouts.contains(dayVal),
+      onTap: () => onSelectDay(DateTime(grid.year, grid.month, dayVal)),
     );
   }
 }
