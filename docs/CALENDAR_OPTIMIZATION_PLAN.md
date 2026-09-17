@@ -116,12 +116,22 @@ Suggested subject: `perf(history): scope calendar session loading`
 Files: `workout_session_repository.dart`, new immutable summary value type under `domain/models/`, existing date index, history view model/page/calendar widgets, `test/data/data_test.dart`, and history tests. Reuse `getById`, `RepositoryScope`, and `pushTo`; never open Isar in widgets.
 
 Acceptance:
-- [ ] Real-Isar tests cover initial date projection, insert/delete, count-preserving date edits, and committed updates.
-- [ ] Calendar mode performs no `watchAll()` load and retains no full-history model cache.
-- [ ] Date projection does not decode embedded sets; selected-day rows match existing title/count semantics.
-- [ ] Month navigation performs no repository read; day selection reads only the selected range.
-- [ ] Detail lookup shows current full data or a clear missing/error state.
-- [ ] Slow obsolete requests cannot overwrite newer selection or repository state.
+- [x] Real-Isar tests cover initial date projection, insert/delete, count-preserving date edits, and committed updates.
+- [x] Calendar mode performs no `watchAll()` load and retains no full-history model cache.
+- [x] Date projection does not decode embedded sets; selected-day rows match existing title/count semantics.
+- [x] Month navigation performs no repository read; day selection reads only the selected range.
+- [x] Detail lookup shows current full data or a clear missing/error state.
+- [x] Slow obsolete requests cannot overwrite newer selection or repository state.
+
+Commit 3 evidence (2026-09-16, working tree on `feature/optimization-1`, based on `c288cd4`; no staging or commit):
+
+- Repository `getStartTimes` uses the generated native `startTimeProperty().findAll()` single-property path, not `WorkoutSession` decoding or `setsProperty`. `watchStartTimes` and scoped `watchSummariesForDate` share a repository-private subscribe-before-read, serialized dirty-flag refresh loop with error delivery and cancellation guards. Selected-day summaries are immutable ID/title/startTime/setCount/gymId values; counting still decodes that day's full embedded sets and no native-buffer/disk-read reduction is claimed.
+- `calendar_repository_test.dart` uses one shared real Isar instance, a 1,000-set fixture, raw collection writes, insert/delete/count-preserving date moves, rollback, half-open selected-day boundaries, ordering and row edits. A held real projection plus five committed writes proves one initial + one coalesced refresh, maximum concurrency 1, final state retained; failure/write recovery, resubscription and cancellation are also covered.
+- `WorkoutDateIndex` now contains date counts and timestamp-to-local-date mappings only. `CalendarViewModel` retains compact timestamps/index/navigation, not full sessions; the optional standalone widget adapter immediately converts supplied sessions into compact summaries. The History page explicitly cancels its List watcher and clears its full-list reference on Calendar entry. Returning to List cancels date/day subscriptions and clears scoped rows; Calendar reentry refreshes compact data (identity equality suppression remains Commit 4).
+- Page tests prove scoped subscription ownership, no additional full-list source reads in Calendar, month navigation with no new scoped request, cancellation of the old day, state retention through empty/error/retry/repository replacement, and zero `watchAll` requests for a repository installed while Calendar is selected. Model tests deliberately deliver late data/errors even after cancellation to verify generation + repository guards.
+- `SessionLookupPage` fetches current full data by ID with FutureBuilder request identity, loading, missing and retry/error UI. Tests cover current full sets/gym label, missing/deleted result, retry, repository/ID replacement, disposal and double tap (one lookup/route).
+- Scoped formatting of 14 owned Dart files completed; scoped `dart analyze` reports **No issues found**. `TZ=America/New_York flutter test test/ui/history test/data --concurrency=1 --reporter expanded`: **51 tests passed**, including the original process-timezone collision regression. Full analysis before final formatting reported only the pre-existing `test/perf_tmp_test.dart` unused-import warning. Full-suite/visual/profile acceptance is reserved for coordinator gates, not claimed here.
+- User `_WeekdayLabels` extraction preserved; macOS files, audit documents, temporary perf test and `.claude` untouched. No equality optimization, top-tab subscription suspension, sliver redesign, schema change or revision bus introduced.
 
 ## Commit 4 — Suppress irrelevant date-index and row rebuilds
 

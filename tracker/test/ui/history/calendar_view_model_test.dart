@@ -109,40 +109,43 @@ void main() {
     );
   }
 
-  test('first calendar access reads N sessions; navigation never rescans', () {
-    final model = CalendarViewModel(initialDate: DateTime(2026, 3, 4));
-    addTearDown(model.dispose);
-    final sessions = CountingSessions(
-      List.generate(
-        1000,
-        (index) => WorkoutSession(startTime: DateTime(2026, 3, index % 28 + 1)),
-      ),
-    );
+  test(
+    'standalone adapter releases source sessions; navigation never rescans',
+    () {
+      final model = CalendarViewModel(initialDate: DateTime(2026, 3, 4));
+      addTearDown(model.dispose);
+      final sessions = CountingSessions(
+        List.generate(
+          1000,
+          (index) =>
+              WorkoutSession(startTime: DateTime(2026, 3, index % 28 + 1)),
+        ),
+      );
 
-    model.updateSessions(sessions);
-    final grid = model.grid;
-    expect(sessions.reads, 0);
-    final index = model.dateIndex;
-    final days = model.daysWithWorkouts;
-    expect(sessions.reads, 1000);
-    expect(model.monthWorkoutDays, 28);
-    expect(model.grid, same(grid));
-    expect(model.daysWithWorkouts, same(days));
+      model.updateSessions(sessions);
+      final grid = model.grid;
+      expect(sessions.reads, 1000);
+      final index = model.dateIndex;
+      final days = model.daysWithWorkouts;
+      expect(sessions.reads, 1000);
+      expect(model.monthWorkoutDays, 28);
+      expect(model.grid, same(grid));
+      expect(model.daysWithWorkouts, same(days));
 
-    model.selectDay(DateTime(2026, 3, 10));
-    expect(model.sessionsOn(model.selectedDay!), isNotEmpty);
-    model.goMonth(-1);
-    expect(model.selectedDay, isNull);
-    expect(model.grid, isNot(same(grid)));
-    expect(model.daysWithWorkouts, isEmpty);
-    expect(model.monthWorkoutDays, 0);
-    model.goMonth(1);
-    model.selectDay(DateTime(2026, 3, 10));
-    model.updateSessions(sessions); // Unchanged snapshot on remount.
-    expect(model.dateIndex, same(index));
-    expect(model.selectedDay, DateTime(2026, 3, 10));
-    expect(sessions.reads, 1000);
-  });
+      model.selectDay(DateTime(2026, 3, 10));
+      expect(model.sessionsOn(model.selectedDay!), isNotEmpty);
+      model.goMonth(-1);
+      expect(model.selectedDay, isNull);
+      expect(model.grid, isNot(same(grid)));
+      expect(model.daysWithWorkouts, isEmpty);
+      expect(model.monthWorkoutDays, 0);
+      model.goMonth(1);
+      model.selectDay(DateTime(2026, 3, 10));
+      expect(model.dateIndex, same(index));
+      expect(model.selectedDay, DateTime(2026, 3, 10));
+      expect(sessions.reads, 1000);
+    },
+  );
 
   test('replacement and empty snapshots invalidate lazily, not navigation', () {
     final model = CalendarViewModel(initialDate: DateTime(2026, 1, 1));
@@ -159,7 +162,7 @@ void main() {
       WorkoutSession(title: 'Replacement', startTime: DateTime(2026, 2, 12)),
     ]);
     model.updateSessions(replacement);
-    expect(replacement.reads, 0);
+    expect(replacement.reads, 1);
     expect(model.dateIndex, isNot(same(original)));
     expect(model.sessionsOn(model.selectedDay!).single.title, 'Replacement');
     expect(replacement.reads, 1);
@@ -186,10 +189,10 @@ void main() {
     ]);
     model.updateSessions(old);
     model.updateSessions(latest);
-    expect(old.reads, 0);
-    expect(latest.reads, 0);
+    expect(old.reads, 1);
+    expect(latest.reads, 1);
     expect(model.monthWorkoutDays, 1);
-    expect(old.reads, 0);
+    expect(old.reads, 1);
     expect(latest.reads, 1);
   });
 }

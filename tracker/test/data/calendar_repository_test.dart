@@ -1,0 +1,192 @@
+import 'dart:async';
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:isar_community/isar.dart';
+import 'package:tracker/data/repositories/workout_session_repository.dart';
+import 'package:tracker/domain/models/workout_session.dart';
+import 'package:tracker/domain/models/workout_session_summary.dart';
+import 'package:tracker/domain/models/workout_set.dart';
+
+import '../../testing/test_helpers.dart';
+
+void main() {
+  late Isar isar;
+  late WorkoutSessionRepository repository;
+  setUpAll(() async {
+    await initIsarCore();
+    isar = await openTestIsar([
+      WorkoutSessionSchema,
+    ], name: 'calendar_repository');
+  });
+  tearDownAll(() => isar.close());
+  setUp(() async {
+    await isar.writeTxn(() => isar.clear());
+    repository = WorkoutSessionRepository(isar);
+  });
+
+  test(
+    'date projection watches committed insert, count-preserving move, delete',
+    () async {
+      final session = WorkoutSession(
+        title: 'Large workout',
+        startTime: DateTime(2026, 3, 8, 12),
+        sets: List.generate(
+          1000,
+          (i) => WorkoutSet(exerciseId: 1, weight: 10, reps: 5, order: i),
+        ),
+      );
+      await repository.put(session);
+      final values = <List<DateTime>>[];
+      final subscription = repository.watchStartTimes().listen(values.add);
+      addTearDown(subscription.cancel);
+      await waitFor(() => values.isNotEmpty);
+      expect(values.last, [session.startTime]);
+      expect(() => values.last.clear(), throwsUnsupportedError);
+      final next = WorkoutSession(startTime: DateTime(2026, 3, 9));
+      // Raw collection writes must be observed, not only repository writes.
+      await isar.writeTxn(() => isar.workoutSessions.put(next));
+      await waitFor(() => values.last.length == 2);
+      session.startTime = DateTime(2026, 4, 1);
+      await repository.put(session);
+      await waitFor(() => values.last.contains(session.startTime));
+      expect(values.last, hasLength(2));
+      expect(values.last, isNot(contains(DateTime(2026, 3, 8, 12))));
+      await repository.delete(next.id);
+      await waitFor(() => values.last.length == 1);
+      expect(values.last.single, session.startTime);
+      await expectLater(
+        isar.writeTxn(() async {
+          await isar.workoutSessions.clear();
+          throw StateError('rollback');
+        }),
+        throwsStateError,
+      );
+      expect(await repository.getStartTimes(), [session.startTime]);
+    },
+  );
+
+  test(
+    'scoped rows have immutable metadata, descending order, half-open dates',
+    () async {
+      final day = DateTime(2026, 3, 8);
+      final end = DateTime(2026, 3, 9);
+      final first = WorkoutSession(
+        title: 'First',
+        startTime: day,
+        gymId: 7,
+        sets: [WorkoutSet(exerciseId: 1, weight: 30, reps: 5, order: 0)],
+      );
+      final last = WorkoutSession(
+        title: 'Last',
+        startTime: end.subtract(const Duration(microseconds: 1)),
+      );
+      for (final session in [first, last, WorkoutSession(startTime: end)]) {
+        await repository.put(session);
+      }
+      final values = <List<WorkoutSessionSummary>>[];
+      final subscription = repository
+          .watchSummariesForDate(day)
+          .listen(values.add);
+      addTearDown(subscription.cancel);
+      await waitFor(() => values.isNotEmpty);
+      expect(values.last.map((row) => row.id), [last.id, first.id]);
+      expect(values.last.last.title, 'First');
+      expect(values.last.last.gymId, 7);
+      expect(values.last.last.setCount, 1);
+      expect(() => values.last.clear(), throwsUnsupportedError);
+      first.title = 'Edited';
+      first.sets = [];
+      await repository.put(first);
+      await waitFor(() => values.last.last.title == 'Edited');
+      expect(values.last.last.setCount, 0);
+      await repository.delete(last.id);
+      await waitFor(() => values.last.length == 1);
+    },
+  );
+
+  test('startup subscribes before read; burst refreshes serialize and coalesce', () async {
+    final probe = _ProjectionProbe(isar)..hold = Completer<void>();
+    final values = <List<DateTime>>[];
+    final subscription = probe.watchStartTimes().listen(values.add);
+    addTearDown(subscription.cancel);
+    await waitFor(() => probe.reads == 1);
+    for (var i = 1; i <= 5; i++) {
+      await repository.put(WorkoutSession(startTime: DateTime(2026, 3, i)));
+    }
+    // Let all collection notifications arrive while the first snapshot is held.
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    expect(probe.reads, 1);
+    probe.hold!.complete();
+    await waitFor(() => values.isNotEmpty && values.last.length == 5);
+    expect(probe.reads, 2);
+    expect(probe.maximumConcurrent, 1);
+    expect(probe.fullReads, 0);
+  });
+
+  test(
+    'failed refresh recovers on write or resubscribe; cancellation drops work',
+    () async {
+      final probe = _ProjectionProbe(isar)..fail = true;
+      final errors = <Object>[];
+      final values = <List<DateTime>>[];
+      var subscription = probe.watchStartTimes().listen(
+        values.add,
+        onError: errors.add,
+      );
+      await waitFor(() => errors.isNotEmpty);
+      probe.fail = false;
+      await repository.put(WorkoutSession(startTime: DateTime(2026, 3, 1)));
+      await waitFor(() => values.isNotEmpty);
+      await subscription.cancel();
+      probe.hold = Completer<void>();
+      values.clear();
+      final initialReads = probe.reads;
+      subscription = probe.watchStartTimes().listen(
+        values.add,
+        onError: errors.add,
+      );
+      await waitFor(() => probe.reads > initialReads);
+      await repository.put(WorkoutSession(startTime: DateTime(2026, 3, 2)));
+      await subscription.cancel();
+      final readsAtCancel = probe.reads;
+      probe.hold!.complete();
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(values, isEmpty);
+      expect(probe.reads, readsAtCancel);
+      expect((await probe.watchStartTimes().first).length, 2);
+    },
+  );
+}
+
+/// Uses the real native date projection and real collection watcher, while
+/// controlling completion to reproduce races without exposing a revision bus.
+class _ProjectionProbe extends WorkoutSessionRepository {
+  _ProjectionProbe(super.isar);
+  int reads = 0;
+  int concurrent = 0;
+  int maximumConcurrent = 0;
+  int fullReads = 0;
+  bool fail = false;
+  Completer<void>? hold;
+
+  @override
+  Future<List<DateTime>> getStartTimes() async {
+    reads++;
+    concurrent++;
+    if (concurrent > maximumConcurrent) maximumConcurrent = concurrent;
+    try {
+      if (fail) throw StateError('read failed');
+      final snapshot = await super.getStartTimes();
+      await hold?.future;
+      return snapshot;
+    } finally {
+      concurrent--;
+    }
+  }
+
+  @override
+  Future<List<WorkoutSession>> getAll() async {
+    fullReads++;
+    throw StateError('No full-history reads permitted');
+  }
+}

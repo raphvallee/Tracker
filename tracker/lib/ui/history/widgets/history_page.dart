@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
 import 'package:tracker/data/repositories/tracker_repository.dart';
@@ -24,7 +26,12 @@ class HistoryPage extends StatefulWidget {
 
 class _HistoryPageState extends State<HistoryPage> {
   Map<int, String> _gymNames = const {};
-  Stream<List<WorkoutSession>>? _stream;
+  StreamSubscription<List<WorkoutSession>>? _listSubscription;
+  List<WorkoutSession> _sessions = const [];
+  bool _listLoading = false;
+  Object? _listError;
+  int _listGeneration = 0;
+  int _gymGeneration = 0;
   final _calendar = CalendarViewModel();
   int _selectedTab = 0;
   TrackerRepository? _repository;
@@ -36,97 +43,129 @@ class _HistoryPageState extends State<HistoryPage> {
     final repository = RepositoryScope.maybeOf(context);
     if (!identical(repository, _repository)) {
       _repository = repository;
-      _stream = repository?.sessions.watchAll();
-      _calendar.updateSessions(const []);
+      _cancelList();
+      _calendar.bindRepository(repository?.sessions);
+      if (_selectedTab == 0) _startList();
       _gymNames = const {};
       _loadGyms(repository);
     }
   }
 
   Future<void> _loadGyms(TrackerRepository? repository) async {
-    final gyms = await repository?.gyms.getAll() ?? const [];
-    if (!mounted || !identical(repository, _repository)) return;
+    final generation = ++_gymGeneration;
+    try {
+      final gyms = await repository?.gyms.getAll() ?? const [];
+      if (!mounted ||
+          generation != _gymGeneration ||
+          !identical(repository, _repository)) {
+        return;
+      }
+      setState(() {
+        _gymNames = {for (final g in gyms) g.id: g.name};
+      });
+    } catch (_) {
+      // Gym labels are optional; a failed lookup must not break history.
+    }
+  }
+
+  void _cancelList() {
+    _listGeneration++;
+    unawaited(_listSubscription?.cancel());
+    _listSubscription = null;
+    _sessions = const []; // Do not retain full-history payloads in Calendar.
+    _listError = null;
+    _listLoading = false;
+  }
+
+  void _startList() {
+    _cancelList();
+    final repository = _repository;
+    if (repository == null) return;
+    final generation = _listGeneration;
+    bool current() =>
+        mounted &&
+        _selectedTab == 0 &&
+        generation == _listGeneration &&
+        identical(repository, _repository);
+    _listLoading = true;
+    _listSubscription = repository.sessions.watchAll().listen(
+      (sessions) {
+        if (!current()) return;
+        setState(() {
+          _sessions = sessions;
+          _listLoading = false;
+          _listError = null;
+        });
+      },
+      onError: (Object error) {
+        if (!current()) return;
+        setState(() {
+          _listError = error;
+          _listLoading = false;
+        });
+      },
+    );
+  }
+
+  void _selectTab(int index) {
+    if (index == _selectedTab) return;
     setState(() {
-      _gymNames = {for (final g in gyms) g.id: g.name};
+      _selectedTab = index;
+      if (index == 1) _cancelList();
+      _calendar.setCalendarMode(index == 1);
+      if (index == 0) _startList();
     });
   }
 
   @override
   void dispose() {
+    _cancelList();
     _calendar.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<List<WorkoutSession>>(
-      key: ObjectKey(_repository),
-      stream: _stream,
-      builder: (context, snapshot) {
-        if (snapshot.hasData && !snapshot.hasError) {
-          _calendar.updateSessions(snapshot.data!);
-        }
-        return CustomScrollView(slivers: _buildSlivers(context, snapshot));
-      },
-    );
-  }
-
-  List<Widget> _buildSlivers(
-    BuildContext context,
-    AsyncSnapshot<List<WorkoutSession>> snapshot,
-  ) {
-    final slivers = <Widget>[CustomAppBar(context, title: 'History')];
-
-    if (snapshot.hasError) {
-      slivers.add(
-        const SliverFillRemaining(
-          hasScrollBody: false,
-          child: _HistoryMessage(message: 'Could not load workout history.'),
-        ),
-      );
-    } else if (snapshot.connectionState == ConnectionState.waiting &&
-        !snapshot.hasData) {
-      slivers.add(
-        const SliverFillRemaining(
-          hasScrollBody: false,
-          child: Center(child: CircularProgressIndicator()),
-        ),
-      );
-    } else if ((snapshot.data ?? const <WorkoutSession>[]).isEmpty) {
-      slivers.add(
-        const SliverFillRemaining(hasScrollBody: false, child: _EmptyHistory()),
-      );
-    } else {
-      final sessions = snapshot.data ?? const <WorkoutSession>[];
-      slivers.add(
+    return CustomScrollView(
+      slivers: [
+        CustomAppBar(context, title: 'History'),
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
           sliver: SliverToBoxAdapter(
             child: FTabs(
               control: FTabControl.lifted(
                 index: _selectedTab,
-                onChange: (index) => setState(() => _selectedTab = index),
+                onChange: _selectTab,
               ),
               children: [
-                .entry(
-                  label: const Text('List'),
-                  child: _sessionList(context, sessions),
-                ),
+                .entry(label: const Text('List'), child: _listBody(context)),
                 .entry(
                   label: const Text('Calendar'),
-                  child: HistoryCalendar(
-                    model: _calendar,
-                    sessions: sessions,
-                    gymNames: _gymNames,
-                  ),
+                  child: HistoryCalendar(model: _calendar, gymNames: _gymNames),
                 ),
               ],
             ),
           ),
         ),
+      ],
+    );
+  }
+
+  Widget _listBody(BuildContext context) {
+    if (_listError != null) {
+      return Column(
+        children: [
+          const _HistoryMessage(message: 'Could not load workout history.'),
+          TextButton(
+            onPressed: () => setState(_startList),
+            child: const Text('Retry history'),
+          ),
+        ],
       );
     }
-    return slivers;
+    if (_listLoading) return const Center(child: CircularProgressIndicator());
+    if (_sessions.isEmpty) return const _EmptyHistory();
+    return _sessionList(context, _sessions);
   }
 
   Widget _sessionList(BuildContext context, List<WorkoutSession> sessions) {

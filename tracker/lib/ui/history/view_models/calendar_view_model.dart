@@ -2,7 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
+import 'package:tracker/data/repositories/workout_session_repository.dart';
 import 'package:tracker/domain/models/workout_session.dart';
+import 'package:tracker/domain/models/workout_session_summary.dart';
 import 'package:tracker/ui/history/widgets/calendar/calendar_grid.dart';
 
 /// Calendar presentation state, owned by History rather than its disposable tab.
@@ -21,7 +23,20 @@ class CalendarViewModel extends ChangeNotifier {
   }
 
   final DateTime Function() _now;
-  List<WorkoutSession> _sessions = const [];
+  List<DateTime> _dates = const [];
+  // Standalone widget adapter only. Production binds the scoped repository.
+  List<WorkoutSessionSummary> _standaloneRows = const [];
+  WorkoutSessionRepository? _repository;
+  bool _calendarMode = false;
+  StreamSubscription<List<DateTime>>? _dateSubscription;
+  StreamSubscription<List<WorkoutSessionSummary>>? _daySubscription;
+  int _dateGeneration = 0;
+  int _dayGeneration = 0;
+  bool datesLoading = false;
+  Object? datesError;
+  bool dayLoading = false;
+  Object? dayError;
+  List<WorkoutSessionSummary> dayRows = const [];
   WorkoutDateIndex? _dateIndex;
   CalendarGrid? _grid;
   Set<int>? _daysWithWorkouts;
@@ -41,23 +56,132 @@ class CalendarViewModel extends ChangeNotifier {
   ValueListenable<DateTime?> get selectedDayListenable => _selectedDay;
 
   WorkoutDateIndex get dateIndex =>
-      _dateIndex ??= WorkoutDateIndex.fromSessions(_sessions);
+      _dateIndex ??= WorkoutDateIndex.fromDates(_dates);
 
   CalendarGrid get grid => _grid ??= CalendarGrid(_year, _month);
   int get monthWorkoutDays => dateIndex.monthWorkoutDays(_year, _month);
   int get streak => currentStreak(dateIndex.workoutDays, _today);
   Set<int> get daysWithWorkouts => _daysWithWorkouts ??= Set.unmodifiable({
     for (final day in grid.days)
-      if (day != null &&
-          dateIndex.sessionsOn(DateTime(_year, _month, day)).isNotEmpty)
+      if (day != null && dateIndex.countOn(DateTime(_year, _month, day)) > 0)
         day,
   });
 
-  void updateSessions(List<WorkoutSession> sessions) {
-    if (identical(sessions, _sessions)) return;
-    _sessions = sessions;
+  void updateDates(Iterable<DateTime> dates) {
+    _dates = List.unmodifiable(dates);
     _dateIndex = null;
     _daysWithWorkouts = null;
+  }
+
+  /// Adapter for standalone calendars; never retains full session objects.
+  void updateSessions(List<WorkoutSession> sessions) {
+    _standaloneRows = List.unmodifiable(
+      sessions.map(WorkoutSessionSummary.fromSession),
+    );
+    updateDates(_standaloneRows.map((row) => row.startTime));
+  }
+
+  void bindRepository(WorkoutSessionRepository? repository) {
+    if (identical(repository, _repository)) return;
+    _cancelDates();
+    _cancelDay();
+    _repository = repository;
+    updateDates(const []);
+    _standaloneRows = const [];
+    datesError = null;
+    if (_calendarMode) _startCalendar();
+  }
+
+  /// Subtab ownership is separate from the existing clock visibility surface.
+  void setCalendarMode(bool enabled) {
+    if (_calendarMode == enabled) return;
+    _calendarMode = enabled;
+    if (enabled) {
+      _startCalendar();
+    } else {
+      _cancelDates();
+      _cancelDay();
+      setActive(false);
+    }
+  }
+
+  void _startCalendar() {
+    retryDates();
+    retryDay();
+  }
+
+  void _cancelDates() {
+    _dateGeneration++;
+    unawaited(_dateSubscription?.cancel());
+    _dateSubscription = null;
+    datesLoading = false;
+  }
+
+  void _cancelDay() {
+    _dayGeneration++;
+    unawaited(_daySubscription?.cancel());
+    _daySubscription = null;
+    dayRows = const [];
+    dayLoading = false;
+    dayError = null;
+  }
+
+  void retryDates() {
+    _cancelDates();
+    final repository = _repository;
+    if (!_calendarMode || repository == null) return;
+    final generation = _dateGeneration;
+    bool current() =>
+        generation == _dateGeneration &&
+        identical(repository, _repository) &&
+        _calendarMode;
+    datesLoading = true;
+    datesError = null;
+    _dateSubscription = repository.watchStartTimes().listen(
+      (dates) {
+        if (!current()) return;
+        updateDates(dates);
+        datesLoading = false;
+        datesError = null;
+        notifyListeners();
+      },
+      onError: (Object error) {
+        if (!current()) return;
+        datesLoading = false;
+        datesError = error;
+        notifyListeners();
+      },
+    );
+  }
+
+  void retryDay() {
+    _cancelDay();
+    final repository = _repository;
+    final day = selectedDay;
+    if (!_calendarMode || repository == null || day == null) return;
+    final generation = _dayGeneration;
+    bool current() =>
+        generation == _dayGeneration &&
+        identical(repository, _repository) &&
+        _calendarMode;
+    dayLoading = true;
+    _daySubscription = repository
+        .watchSummariesForDate(day)
+        .listen(
+          (rows) {
+            if (!current()) return;
+            dayRows = List.unmodifiable(rows);
+            dayLoading = false;
+            dayError = null;
+            notifyListeners();
+          },
+          onError: (Object error) {
+            if (!current()) return;
+            dayLoading = false;
+            dayError = error;
+            notifyListeners();
+          },
+        );
   }
 
   /// Called by the mounted calendar with its top-level tab visibility.
@@ -112,6 +236,7 @@ class CalendarViewModel extends ChangeNotifier {
       if (selected != null) {
         // Preserve the selected calendar date, not its old-zone instant.
         _selectedDay.value = DateTime(_year, _month, selected.day);
+        retryDay();
       }
     }
     _midnightTimer?.cancel();
@@ -126,9 +251,22 @@ class CalendarViewModel extends ChangeNotifier {
     if (changed && notify) notifyListeners();
   }
 
-  List<WorkoutSession> sessionsOn(DateTime day) => dateIndex.sessionsOn(day);
+  List<WorkoutSessionSummary> sessionsOn(DateTime day) {
+    if (_repository != null) return day == selectedDay ? dayRows : const [];
+    return List.unmodifiable(
+      _standaloneRows.where((row) {
+        final local = row.startTime.toUtc().toLocal();
+        return DateTime(local.year, local.month, local.day) == day;
+      }),
+    );
+  }
 
-  void selectDay(DateTime day) => _selectedDay.value = day;
+  void selectDay(DateTime day) {
+    if (day == selectedDay) return;
+    _selectedDay.value = day;
+    retryDay();
+    notifyListeners();
+  }
 
   /// The caller rebuilds the month header/grid; selection has its own listener.
   void goMonth(int delta) {
@@ -138,10 +276,13 @@ class CalendarViewModel extends ChangeNotifier {
     _grid = null;
     _daysWithWorkouts = null;
     _selectedDay.value = null;
+    _cancelDay();
   }
 
   @override
   void dispose() {
+    _cancelDates();
+    _cancelDay();
     setActive(false);
     _selectedDay.dispose();
     super.dispose();

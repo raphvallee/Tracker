@@ -11,6 +11,7 @@ import 'package:tracker/data/repositories/tracker_repository.dart';
 import 'package:tracker/data/repositories/workout_session_repository.dart';
 import 'package:tracker/domain/models/gym.dart';
 import 'package:tracker/domain/models/workout_session.dart';
+import 'package:tracker/domain/models/workout_session_summary.dart';
 import 'package:tracker/domain/models/workout_set.dart';
 import 'package:tracker/routing/tab_navigation.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
@@ -72,147 +73,108 @@ void main() {
   });
 
   testWidgets(
-    'HistoryPage retains lazy calendar caches across real tab toggles',
+    'HistoryPage scopes subscriptions and retains compact navigation',
     (tester) async {
       final repository = _HistoryRepository();
-      addTearDown(repository.sessions.controller.close);
+      addTearDown(repository.sessions.close);
       await tester.pumpWidget(_historyApp(repository));
-      final sessions = CountingSessions(
-        List.generate(
-          8,
-          (i) => WorkoutSession(
-            title: 'Workout $i',
-            startTime: DateTime(2026, 3, i + 1),
-          ),
-        ),
-      );
+      final sessions = CountingSessions([
+        WorkoutSession(title: 'List only', startTime: DateTime(2026, 3, 12)),
+      ]);
       repository.sessions.controller.add(sessions);
       await tester.pumpAndSettle();
-      expect(find.byType(HistoryCalendar), findsNothing);
-      // List renders eagerly today; count calendar work independently of it.
-      final listReads = sessions.reads;
       await tester.tap(find.text('Calendar'));
+      await tester.pump();
+      expect(repository.sessions.controller.hasListener, isFalse);
+      final reads = sessions.reads;
+      repository.sessions.dates.add([DateTime(2026, 3, 12)]);
+      repository.sessions.days.last.add(const []);
       await tester.pumpAndSettle();
-      final firstState = tester.state(find.byType(HistoryCalendar));
       final model = tester
           .widget<HistoryCalendar>(find.byType(HistoryCalendar))
           .model!;
-      final index = model.dateIndex;
-      expect(sessions.reads - listReads, sessions.length);
-      final calendarReads = sessions.reads;
+      expect(
+        tester.widget<HistoryCalendar>(find.byType(HistoryCalendar)).sessions,
+        isNull,
+      );
+      final requests = repository.sessions.days.length;
       await tester.tap(find.byTooltip('Previous month'));
       await tester.pumpAndSettle();
+      expect(repository.sessions.days.length, requests);
+      expect(repository.sessions.days.last.hasListener, isFalse);
       await tester.tap(find.text('12'));
+      await tester.pump();
+      repository.sessions.days.last.add(const []);
       await tester.pumpAndSettle();
-      final day = model.selectedDay!;
+      final day = model.selectedDay;
       final grid = model.grid;
-      final days = model.daysWithWorkouts;
-      expect(sessions.reads, calendarReads);
-      expect(find.text('Workouts · ${_date(day)}'), findsOneWidget);
-
-      for (var round = 0; round < 3; round++) {
-        await tester.tap(find.text('List'));
-        await tester.pumpAndSettle();
-        expect(find.byType(HistoryCalendar), findsNothing);
-        final beforeRemount = sessions.reads;
-        await tester.tap(find.text('Calendar'));
-        await tester.pumpAndSettle();
-        final calendar = tester.widget<HistoryCalendar>(
-          find.byType(HistoryCalendar),
-        );
-        expect(
-          tester.state(find.byType(HistoryCalendar)),
-          isNot(same(firstState)),
-        );
-        expect(calendar.model, same(model));
-        expect(model.dateIndex, same(index));
-        expect(model.grid, same(grid));
-        expect(model.daysWithWorkouts, same(days));
-        expect(model.selectedDay, day);
-        expect(sessions.reads, beforeRemount);
-        expect(find.text('Workouts · ${_date(day)}'), findsOneWidget);
-      }
-      expect(repository.sessions.watches, 1);
-      expect(tester.takeException(), isNull);
+      expect(sessions.reads, reads);
+      await tester.tap(find.text('List'));
+      await tester.pump();
+      expect(repository.sessions.dates.hasListener, isFalse);
+      expect(repository.sessions.days.last.hasListener, isFalse);
+      repository.sessions.controller.add(const []);
+      await tester.pumpAndSettle();
+      expect(find.text('No workouts logged yet'), findsOneWidget);
+      await tester.tap(find.text('Calendar'));
+      await tester.pump();
+      repository.sessions.dates.add([DateTime(2026, 3, 12)]);
+      repository.sessions.days.last.add(const []);
+      await tester.pumpAndSettle();
+      expect(model.selectedDay, day);
+      expect(model.grid, same(grid));
+      expect(repository.sessions.watches, 2);
+      expect(repository.sessions.dateWatches, 2);
+      expect(sessions.reads, reads);
       await tester.pumpWidget(const SizedBox.shrink());
     },
   );
 
   testWidgets(
-    'HistoryPage preserves selection through error, empty and loading',
+    'calendar errors/retry and repository replacement preserve navigation',
     (tester) async {
       final repository = _HistoryRepository();
       final replacement = _HistoryRepository();
-      addTearDown(repository.sessions.controller.close);
-      addTearDown(replacement.sessions.controller.close);
+      addTearDown(repository.sessions.close);
+      addTearDown(replacement.sessions.close);
       await tester.pumpWidget(_historyApp(repository));
-      expect(find.byType(CircularProgressIndicator), findsOneWidget);
-      final sessions = [
-        WorkoutSession(title: 'Original', startTime: DateTime(2026, 3, 12)),
-      ];
-      repository.sessions.controller.add(sessions);
-      await tester.pumpAndSettle();
       await tester.tap(find.text('Calendar'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('Previous month'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('12'));
+      await tester.pump();
+      repository.sessions.dates.add([DateTime(2026, 3, 12)]);
+      repository.sessions.days.last.add(const []);
       await tester.pumpAndSettle();
       final model = tester
           .widget<HistoryCalendar>(find.byType(HistoryCalendar))
           .model!;
       final day = model.selectedDay!;
-      final grid = model.grid;
-      final index = model.dateIndex;
-
-      void expectRetained() {
-        expect(
-          tester.widget<HistoryCalendar>(find.byType(HistoryCalendar)).model,
-          same(model),
-        );
-        expect(model.selectedDay, day);
-        expect(model.grid, same(grid));
-        expect(find.text('Workouts · ${_date(day)}'), findsOneWidget);
-      }
-
-      repository.sessions.controller.addError(StateError('offline'));
+      repository.sessions.dates.addError(StateError('offline'));
       await tester.pumpAndSettle();
-      expect(find.text('Could not load workout history.'), findsOneWidget);
-      expect(find.byType(HistoryCalendar), findsNothing);
-      repository.sessions.controller.add(sessions);
+      expect(find.textContaining('Could not refresh calendar'), findsOneWidget);
+      expect(model.selectedDay, day);
+      await tester.tap(find.text('Retry calendar'));
+      await tester.pump();
+      repository.sessions.dates.add(const []);
       await tester.pumpAndSettle();
-      expectRetained();
-      expect(model.dateIndex, same(index));
-
-      repository.sessions.controller.add(const []);
-      await tester.pumpAndSettle();
-      expect(find.text('No workouts logged yet'), findsOneWidget);
-      expect(find.byType(HistoryCalendar), findsNothing);
-      expect(model.sessionsOn(DateTime(2026, 3, 12)), isEmpty);
-      repository.sessions.controller.add(sessions);
-      await tester.pumpAndSettle();
-      expectRetained();
-
-      // Replacing the scope creates a genuine StreamBuilder waiting transition.
+      expect(model.dateIndex.workoutDays, isEmpty);
       await tester.pumpWidget(_historyApp(replacement));
       await tester.pump();
-      expect(find.byType(CircularProgressIndicator), findsOneWidget);
-      expect(find.byType(HistoryCalendar), findsNothing);
-      expect(model.sessionsOn(DateTime(2026, 3, 12)), isEmpty);
+      expect(repository.sessions.dates.hasListener, isFalse);
+      expect(repository.sessions.days.last.hasListener, isFalse);
       expect(model.selectedDay, day);
-      expect(repository.sessions.controller.hasListener, isFalse);
-      replacement.sessions.controller.add([
-        WorkoutSession(title: 'Replacement', startTime: day),
+      replacement.sessions.dates.add([day]);
+      replacement.sessions.days.last.add([
+        WorkoutSessionSummary(
+          id: 42,
+          title: 'Replacement',
+          startTime: day,
+          setCount: 2,
+          gymId: null,
+        ),
       ]);
       await tester.pumpAndSettle();
-      expectRetained();
       expect(find.text('Replacement'), findsOneWidget);
-      expect(model.dateIndex, isNot(same(index)));
-      expect(repository.sessions.watches, 1);
-      expect(replacement.sessions.watches, 1);
-      expect(tester.takeException(), isNull);
+      expect(replacement.sessions.watches, 0);
       await tester.pumpWidget(const SizedBox.shrink());
-      expect(replacement.sessions.controller.hasListener, isFalse);
     },
   );
 
@@ -358,9 +320,6 @@ void main() {
   });
 }
 
-String _date(DateTime day) =>
-    '${day.year}-${day.month.toString().padLeft(2, '0')}-${day.day.toString().padLeft(2, '0')}';
-
 Widget _themed(Widget child) => MaterialApp(
   builder: (context, child) =>
       FTheme(data: FTheme.neutral.light.desktop, child: child!),
@@ -382,7 +341,33 @@ class _HistoryRepository extends Fake implements TrackerRepository {
 }
 
 class _SessionsRepository extends Fake implements WorkoutSessionRepository {
-  final controller = StreamController<List<WorkoutSession>>();
+  final controller = StreamController<List<WorkoutSession>>.broadcast();
+  final dates = StreamController<List<DateTime>>.broadcast();
+  final days = <StreamController<List<WorkoutSessionSummary>>>[];
+  int dateWatches = 0;
+
+  Future<void> close() async {
+    await controller.close();
+    await dates.close();
+    for (final day in days) {
+      await day.close();
+    }
+  }
+
+  @override
+  Stream<List<DateTime>> watchStartTimes() {
+    dateWatches++;
+    return dates.stream;
+  }
+
+  @override
+  Stream<List<WorkoutSessionSummary>> watchSummariesForDate(DateTime day) {
+    final controller =
+        StreamController<List<WorkoutSessionSummary>>.broadcast();
+    days.add(controller);
+    return controller.stream;
+  }
+
   int watches = 0;
 
   @override

@@ -8,25 +8,24 @@ import 'package:tracker/domain/models/workout_session.dart';
 /// sessions while painting each calendar cell and calculating metrics.
 class WorkoutDateIndex {
   factory WorkoutDateIndex.fromSessions(Iterable<WorkoutSession> sessions) {
-    final byDay = <DateTime, List<WorkoutSession>>{};
+    return WorkoutDateIndex.fromDates(sessions.map((s) => s.startTime));
+  }
+
+  factory WorkoutDateIndex.fromDates(Iterable<DateTime> dates) {
+    final byDay = <DateTime, int>{};
     final instantDays = <DateTime, DateTime>{};
-    for (final session in sessions) {
-      final instant = session.startTime.toUtc();
+    for (final date in dates) {
+      final instant = date.toUtc();
       final local = instant.toLocal();
       final day = DateTime(local.year, local.month, local.day);
       instantDays[instant] = day;
-      byDay.putIfAbsent(day, () => <WorkoutSession>[]).add(session);
+      byDay[day] = (byDay[day] ?? 0) + 1;
     }
     return WorkoutDateIndex._(byDay, instantDays);
   }
 
-  WorkoutDateIndex._(
-    Map<DateTime, List<WorkoutSession>> byDay,
-    this._instantDays,
-  ) : _byDay = UnmodifiableMapView(<DateTime, List<WorkoutSession>>{
-        for (final entry in byDay.entries)
-          entry.key: UnmodifiableListView(entry.value),
-      }),
+  WorkoutDateIndex._(Map<DateTime, int> byDay, this._instantDays)
+    : _byDay = UnmodifiableMapView(byDay),
       workoutDays = UnmodifiableSetView(byDay.keys.toSet()) {
     final counts = <int, int>{};
     for (final day in byDay.keys) {
@@ -38,7 +37,7 @@ class WorkoutDateIndex {
 
   late final Map<int, int> _monthCounts;
 
-  final Map<DateTime, List<WorkoutSession>> _byDay;
+  final Map<DateTime, int> _byDay;
   final Set<DateTime> workoutDays;
   final Map<DateTime, DateTime> _instantDays;
 
@@ -48,7 +47,7 @@ class WorkoutDateIndex {
     return DateTime(local.year, local.month, local.day) == entry.value;
   });
 
-  List<WorkoutSession> sessionsOn(DateTime day) => _byDay[day] ?? const [];
+  int countOn(DateTime day) => _byDay[day] ?? 0;
 
   int monthWorkoutDays(int year, int month) =>
       _monthCounts[year * 100 + month] ?? 0;

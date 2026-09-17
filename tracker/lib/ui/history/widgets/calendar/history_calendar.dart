@@ -7,6 +7,11 @@ import 'package:tracker/ui/core/ui/weight_format.dart';
 import 'package:tracker/ui/history/view_models/calendar_view_model.dart';
 
 import '../session_detail_page.dart';
+import '../session_lookup_page.dart';
+
+import 'package:tracker/ui/core/ui/repository_scope.dart';
+import 'package:tracker/domain/models/workout_session_summary.dart';
+
 import 'calendar_grid.dart';
 
 /// Interactive month calendar of workout days (Plan.md §2.5).
@@ -17,12 +22,13 @@ import 'calendar_grid.dart';
 class HistoryCalendar extends StatefulWidget {
   const HistoryCalendar({
     super.key,
-    required this.sessions,
+    this.sessions,
     required this.gymNames,
     this.model,
   });
 
-  final List<WorkoutSession> sessions;
+  /// Compatibility input for standalone previews/tests, never supplied by History.
+  final List<WorkoutSession>? sessions;
   final Map<int, String> gymNames;
   final CalendarViewModel? model;
 
@@ -36,6 +42,7 @@ class _HistoryCalendarState extends State<HistoryCalendar> {
   static const double _navAllowance = 64;
 
   CalendarViewModel? _ownedModel;
+  bool _openingDetail = false;
 
   CalendarViewModel get _model => widget.model ?? _ownedModel!;
 
@@ -43,7 +50,7 @@ class _HistoryCalendarState extends State<HistoryCalendar> {
   void initState() {
     super.initState();
     if (widget.model == null) _ownedModel = CalendarViewModel();
-    _model.updateSessions(widget.sessions);
+    _syncWidgetInput();
     _model.addListener(_clockChanged);
   }
 
@@ -67,7 +74,15 @@ class _HistoryCalendarState extends State<HistoryCalendar> {
       _model.addListener(_clockChanged);
       _model.setActive(TabVisibilityScope.isActiveOf(context));
     }
-    _model.updateSessions(widget.sessions);
+    if (!identical(widget.sessions, oldWidget.sessions) ||
+        !identical(widget.model, oldWidget.model)) {
+      _syncWidgetInput();
+    }
+  }
+
+  void _syncWidgetInput() {
+    final sessions = widget.sessions;
+    if (sessions != null) _model.updateSessions(sessions);
   }
 
   @override
@@ -99,6 +114,19 @@ class _HistoryCalendarState extends State<HistoryCalendar> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
+              if (_model.datesLoading) const LinearProgressIndicator(),
+              if (_model.datesError != null)
+                Column(
+                  children: [
+                    const Text(
+                      'Could not refresh calendar. Displayed dates may be outdated.',
+                    ),
+                    TextButton(
+                      onPressed: () => setState(_model.retryDates),
+                      child: const Text('Retry calendar'),
+                    ),
+                  ],
+                ),
               _BuildMonthHeader(
                 year: _model.year,
                 monthName: _monthName(_model.month),
@@ -164,12 +192,24 @@ class _HistoryCalendarState extends State<HistoryCalendar> {
   }
 
   Widget _dayList(DateTime? day) {
-    final sessions = day == null
-        ? const <WorkoutSession>[]
-        : _model.sessionsOn(day);
     if (day == null) {
       return const Text('Pick a workout day above.');
     }
+    if (_model.dayLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_model.dayError != null) {
+      return Column(
+        children: [
+          const Text('Could not load this day.'),
+          TextButton(
+            onPressed: () => setState(_model.retryDay),
+            child: const Text('Retry'),
+          ),
+        ],
+      );
+    }
+    final sessions = _model.sessionsOn(day);
     if (sessions.isEmpty) {
       return const Text('No workouts on this day.');
     }
@@ -183,15 +223,7 @@ class _HistoryCalendarState extends State<HistoryCalendar> {
         return Padding(
           padding: const EdgeInsets.only(bottom: 4),
           child: FItem.raw(
-            onPress: () => pushTo(
-              context,
-              SessionDetailPage(
-                session: session,
-                gymName: session.gymId == null
-                    ? null
-                    : widget.gymNames[session.gymId],
-              ),
-            ),
+            onPress: () => _openDetail(session),
             child: Padding(
               padding: const EdgeInsets.all(12),
               child: Row(
@@ -203,7 +235,7 @@ class _HistoryCalendarState extends State<HistoryCalendar> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(session.title),
-                        Text(plural('set', session.sets.length)),
+                        Text(plural('set', session.setCount)),
                       ],
                     ),
                   ),
@@ -215,6 +247,37 @@ class _HistoryCalendarState extends State<HistoryCalendar> {
         );
       },
     );
+  }
+
+  Future<void> _openDetail(WorkoutSessionSummary row) async {
+    if (_openingDetail) return;
+    _openingDetail = true;
+    try {
+      final repository = RepositoryScope.maybeOf(context);
+      if (repository != null) {
+        await pushTo(
+          context,
+          RepositoryScope(
+            repository: repository,
+            child: SessionLookupPage(id: row.id, gymNames: widget.gymNames),
+          ),
+        );
+      } else {
+        // Standalone fixture adapter: the production widget never has sessions.
+        final full = widget.sessions?.where((s) => s.id == row.id).firstOrNull;
+        if (full != null) {
+          await pushTo(
+            context,
+            SessionDetailPage(
+              session: full,
+              gymName: widget.gymNames[full.gymId],
+            ),
+          );
+        }
+      }
+    } finally {
+      _openingDetail = false;
+    }
   }
 
   String _monthName(int m) {

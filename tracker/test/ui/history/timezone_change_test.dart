@@ -65,12 +65,12 @@ void main() {
         startTime: DateTime.utc(2025, 7, 1, 6, 30).toLocal(),
       );
       model.updateSessions([session]);
-      expect(model.dateIndex.sessionsOn(DateTime(2025, 7, 1)), [session]);
+      expect(model.dateIndex.countOn(DateTime(2025, 7, 1)), 1);
       zone('America/Phoenix');
       expect(clock.toLocal().timeZoneName, anchor.timeZoneName);
       expect(clock.toLocal().timeZoneOffset, anchor.timeZoneOffset);
       model.setActive(true);
-      expect(model.dateIndex.sessionsOn(DateTime(2025, 6, 30)), [session]);
+      expect(model.dateIndex.countOn(DateTime(2025, 6, 30)), 1);
       expect(model.dateIndex.monthWorkoutDays(2025, 7), 0);
       model.setActive(false);
     },

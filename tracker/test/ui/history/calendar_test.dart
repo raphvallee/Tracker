@@ -37,8 +37,8 @@ void main() {
       WorkoutSession(startTime: before),
       WorkoutSession(startTime: after),
     ]);
-    expect(index.sessionsOn(DateTime(2026, 3, 8)).single.startTime, before);
-    expect(index.sessionsOn(DateTime(2026, 3, 9)).single.startTime, after);
+    expect(index.countOn(DateTime(2026, 3, 8)), 1);
+    expect(index.countOn(DateTime(2026, 3, 9)), 1);
     if (newYork) {
       expect(before, DateTime.utc(2026, 3, 9, 3, 59));
       expect(after, DateTime.utc(2026, 3, 9, 4, 1));
@@ -113,7 +113,7 @@ void main() {
         WorkoutSession(startTime: DateTime(2026, 4, 1, 9)),
       ]);
 
-      expect(index.sessionsOn(DateTime(2026, 3, 4)), hasLength(2));
+      expect(index.countOn(DateTime(2026, 3, 4)), 2);
       expect(index.monthWorkoutDays(2026, 3), 1);
       expect(index.monthWorkoutDays(2026, 4), 1);
       expect(index.workoutDays, contains(DateTime(2026, 3, 4)));
@@ -128,10 +128,7 @@ void main() {
         () => index.workoutDays.add(DateTime(2026, 3, 5)),
         throwsUnsupportedError,
       );
-      expect(
-        () => index.sessionsOn(DateTime(2026, 3, 4)).clear(),
-        throwsUnsupportedError,
-      );
+      expect(index.countOn(DateTime(2026, 3, 5)), 0);
     });
   });
 
