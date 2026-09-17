@@ -12,6 +12,7 @@ import 'package:tracker/data/repositories/workout_session_repository.dart';
 import 'package:tracker/domain/models/gym.dart';
 import 'package:tracker/domain/models/workout_session.dart';
 import 'package:tracker/domain/models/workout_set.dart';
+import 'package:tracker/routing/tab_navigation.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
 import 'package:tracker/ui/history/view_models/calendar_view_model.dart';
 import 'package:tracker/ui/history/widgets/calendar/history_calendar.dart';
@@ -22,6 +23,54 @@ import '../../../testing/test_helpers.dart';
 import 'counting_sessions.dart';
 
 void main() {
+  testWidgets('calendar clock rebuilds metrics only while visible', (
+    tester,
+  ) async {
+    var now = DateTime(2026, 3, 4, 23, 59, 59);
+    final model = CalendarViewModel(now: () => now);
+    final sessions = [WorkoutSession(startTime: DateTime(2026, 3, 3))];
+    Future<void> show(bool active) => tester.pumpWidget(
+      _themed(
+        TabVisibilityScope(
+          index: 1,
+          isActive: active,
+          child: Scaffold(
+            body: HistoryCalendar(
+              sessions: sessions,
+              gymNames: const {},
+              model: model,
+            ),
+          ),
+        ),
+      ),
+    );
+    await show(true);
+    final index = model.dateIndex;
+    now = DateTime(2026, 3, 5);
+    await tester.pump(const Duration(seconds: 1));
+    expect(model.streak, 0);
+    final metric = find
+        .ancestor(of: find.text('day streak'), matching: find.byType(Row))
+        .first;
+    expect(
+      find.descendant(of: metric, matching: find.text('0')),
+      findsOneWidget,
+    );
+    expect(model.dateIndex, same(index));
+    await show(false);
+    now = DateTime(2026, 3, 7);
+    await tester.pump(const Duration(days: 2));
+    expect(model.today, DateTime(2026, 3, 5));
+    await show(true);
+    expect(model.today, now);
+    expect(model.dateIndex, same(index));
+    await tester.pumpWidget(const SizedBox.shrink());
+    now = DateTime(2026, 3, 8);
+    await tester.pump(const Duration(days: 1));
+    expect(model.today, DateTime(2026, 3, 7));
+    model.dispose();
+  });
+
   testWidgets(
     'HistoryPage retains lazy calendar caches across real tab toggles',
     (tester) async {

@@ -42,8 +42,9 @@ class WorkoutSessionRepository {
 
   /// Returns sessions whose start date falls on [date], newest first.
   Future<List<WorkoutSession>> getForDate(DateTime date) {
-    final start = DateTime(date.year, date.month, date.day);
-    final end = start.add(const Duration(days: 1));
+    final local = date.toLocal();
+    final start = DateTime(local.year, local.month, local.day);
+    final end = DateTime(local.year, local.month, local.day + 1);
     return _isar.workoutSessions
         .filter()
         .startTimeBetween(start, end, includeUpper: false)

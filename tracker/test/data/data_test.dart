@@ -36,6 +36,53 @@ void main() {
 
   tearDown(() => isar.close());
 
+  test(
+    'local-day queries are half-open across DST; getBetween stays inclusive',
+    () async {
+      // DST acceptance run: TZ=America/New_York flutter test test/data
+      // Boundary instants are stored as UTC, just like any other absolute instant.
+      for (final day in [DateTime(2026, 3, 8), DateTime(2026, 11, 1)]) {
+        final end = DateTime(day.year, day.month, day.day + 1);
+        final beforeId = await repo.sessions.put(
+          WorkoutSession(
+            startTime: day.toUtc().subtract(const Duration(microseconds: 1)),
+          ),
+        );
+        final startId = await repo.sessions.put(
+          WorkoutSession(startTime: day.toUtc()),
+        );
+        final lastId = await repo.sessions.put(
+          WorkoutSession(
+            startTime: end.toUtc().subtract(const Duration(microseconds: 1)),
+          ),
+        );
+        final endId = await repo.sessions.put(
+          WorkoutSession(startTime: end.toUtc()),
+        );
+        final result = await repo.sessions.getForDate(day);
+        expect(result.map((session) => session.id), [lastId, startId]);
+        // A UTC argument is interpreted by the local date of its instant too.
+        expect(
+          (await repo.sessions.getForDate(
+            end.toUtc().subtract(const Duration(minutes: 1)),
+          )).map((session) => session.id),
+          [lastId, startId],
+        );
+        expect(
+          (await repo.sessions.getBetween(
+            day,
+            end,
+          )).map((session) => session.id),
+          [endId, lastId, startId],
+        );
+        expect((await repo.sessions.getBetween(end, end)).single.id, endId);
+        for (final id in [beforeId, startId, lastId, endId]) {
+          await repo.sessions.delete(id);
+        }
+      }
+    },
+  );
+
   test('seed populates the exercise library once', () async {
     expect(await repo.exercises.count(), 0);
     await repo.exercises.putAll(seedExercises());

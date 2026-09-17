@@ -86,11 +86,20 @@ Suggested subject: `fix(history): invalidate calendar state by local date`
 Files: `calendar/calendar_grid.dart`, history view model, `workout_session_repository.dart`, calendar/date repository tests.
 
 Acceptance:
-- [ ] Deterministic today/yesterday/gap, leap-day, month/year-boundary tests.
-- [ ] Spring-forward and fall-back tests run in an actual DST-observing process timezone; UTC-only tests cannot substitute.
-- [ ] UTC timestamps crossing local midnight group and query consistently.
-- [ ] Active midnight and resumed-after-midnight refresh streak without a workout write or full index rebuild.
-- [ ] Timer/lifecycle listeners dispose cleanly and do not duplicate after repeated activation.
+- [x] Deterministic today/yesterday/gap, leap-day, month/year-boundary tests.
+- [x] Spring-forward and fall-back tests run in an actual DST-observing process timezone; UTC-only tests cannot substitute.
+- [x] UTC timestamps crossing local midnight group and query consistently.
+- [x] Active midnight and resumed-after-midnight refresh streak without a workout write or full index rebuild.
+- [x] Timer/lifecycle listeners dispose cleanly and do not duplicate after repeated activation.
+
+Commit 2 evidence (2026-09-16, working tree on `feature/optimization-1`; no staging or commit):
+
+- `calendar_grid.dart` normalizes `startTime.toLocal()` before day-key grouping; `currentStreak(workoutDays, today)` steps `DateTime(year, month, day - 1)` and takes an explicit today, so index construction no longer caches a streak; `CalendarViewModel.streak` derives it from `workoutDays` + the model's `today`. `getForDate` uses `DateTime(y, m, d + 1)` as the exclusive upper bound (correct across 23h/25h days); `getBetween` untouched.
+- DST gates ran in a real DST-observing process: `TZ=America/New_York flutter test --reporter expanded test/ui/history test/data` → **41 tests passed** (29 history tests across calendar math/model/widgets, 12 data tests including the new half-open DST boundary test). `calendar_test.dart` documents the `TZ=America/New_York` invocation and asserts real DST offsets when that zone is present; pure date-math tests stay valid on non-DST hosts.
+- Midnight/lifecycle tests inject `now` and use fake-async `tester.pump` (no real timers): active midnight alarm updates today + streak with **zero additional source reads** and no index rebuild; paused model skips the alarm; resume refreshes; dispose cancels timers; a normal DST transition does not regroup (index identity retained). `history_test.dart` also proves the clock rebuilds the streak metric only while the calendar tab is visible.
+- Timezone-change-while-suspended: activation/resume validates the cached UTC instant-to-local-midnight mappings, not an ambiguous zone abbreviation/offset. This costs O(N) timestamp validation on activation/resume but no source-session reads or reindex when unchanged. Midnight skips this validation. Grouping uses `toUtc().toLocal()` to avoid cached old-zone fields on retained local DateTime objects. The actual process-timezone Denver/Phoenix collision regression in `timezone_change_test.dart` failed before the fix and passes afterward; host timezone settings are not changed. New York history/data gates also pass after the fix.
+- Timer/lifecycle wiring lives on the view model (`setActive` + `AppLifecycleListener`), driven from `HistoryCalendar.didChangeDependencies`/`didUpdateWidget`/`dispose` with `TabVisibilityScope`; model listener rebuilds the widget on clock ticks. The later top-tab suspension (Commit 5) will reuse the same `setActive` surface.
+- `dart format` on the eight owned files; `dart analyze lib/ test/` → only the pre-existing `test/perf_tmp_test.dart:2:8 unused_import` warning, unchanged.
 
 ## Commit 3 — Replace calendar full-history payloads with dates and scoped rows
 

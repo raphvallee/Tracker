@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
 import 'package:tracker/domain/models/workout_session.dart';
+import 'package:tracker/routing/tab_navigation.dart';
 import 'package:tracker/ui/core/ui/custom_route.dart';
 import 'package:tracker/ui/core/ui/weight_format.dart';
 import 'package:tracker/ui/history/view_models/calendar_view_model.dart';
@@ -43,20 +44,36 @@ class _HistoryCalendarState extends State<HistoryCalendar> {
     super.initState();
     if (widget.model == null) _ownedModel = CalendarViewModel();
     _model.updateSessions(widget.sessions);
+    _model.addListener(_clockChanged);
+  }
+
+  void _clockChanged() => setState(() {});
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _model.setActive(TabVisibilityScope.isActiveOf(context));
   }
 
   @override
   void didUpdateWidget(covariant HistoryCalendar oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (!identical(widget.model, oldWidget.model)) {
+      final previous = oldWidget.model ?? _ownedModel!;
+      previous.removeListener(_clockChanged);
+      previous.setActive(false);
       _ownedModel?.dispose();
       _ownedModel = widget.model == null ? CalendarViewModel() : null;
+      _model.addListener(_clockChanged);
+      _model.setActive(TabVisibilityScope.isActiveOf(context));
     }
     _model.updateSessions(widget.sessions);
   }
 
   @override
   void dispose() {
+    _model.removeListener(_clockChanged);
+    _model.setActive(false);
     _ownedModel?.dispose();
     super.dispose();
   }
