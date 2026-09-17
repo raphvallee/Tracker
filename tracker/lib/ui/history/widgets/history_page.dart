@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
 import 'package:tracker/data/repositories/tracker_repository.dart';
 import 'package:tracker/domain/models/workout_session.dart';
+import 'package:tracker/routing/tab_navigation.dart';
 import 'package:tracker/ui/core/ui/custom_app_bar.dart';
 import 'package:tracker/ui/core/ui/custom_route.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
@@ -32,23 +33,71 @@ class _HistoryPageState extends State<HistoryPage> {
   Object? _listError;
   int _listGeneration = 0;
   int _gymGeneration = 0;
-  final _calendar = CalendarViewModel();
+  final _calendar = CalendarViewModel(observeAppLifecycle: false);
+  late final AppLifecycleListener _lifecycleListener;
+  bool _tabActive = true;
+  bool _appVisible = true;
+  bool _active = false;
   int _selectedTab = 0;
   TrackerRepository? _repository;
 
   @override
+  void initState() {
+    super.initState();
+    final state = WidgetsBinding.instance.lifecycleState;
+    _appVisible =
+        state != AppLifecycleState.hidden &&
+        state != AppLifecycleState.paused &&
+        state != AppLifecycleState.detached;
+    _calendar.setHistoryActive(false);
+    _lifecycleListener = AppLifecycleListener(
+      onStateChange: (state) {
+        // Losing focus alone is not suspension. After suspension, wait for resume.
+        if (state == AppLifecycleState.inactive) return;
+        final visible = state == AppLifecycleState.resumed;
+        if (_appVisible == visible) return;
+        setState(() {
+          _appVisible = visible;
+          _syncActive();
+        });
+      },
+    );
+  }
+
+  @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Keep the stream and presentation model stable across subtab rebuilds.
+    _tabActive = TabVisibilityScope.isActiveOf(context);
     final repository = RepositoryScope.maybeOf(context);
     if (!identical(repository, _repository)) {
+      // Suspend first, so a replacement cannot briefly attach the old mode or
+      // start queries before the new visibility dependency has been applied.
+      _suspend();
       _repository = repository;
-      _cancelList();
       _calendar.bindRepository(repository?.sessions);
-      if (_selectedTab == 0) _startList();
       _gymNames = const {};
-      _loadGyms(repository);
     }
+    _syncActive();
+  }
+
+  void _suspend() {
+    _active = false;
+    _gymGeneration++;
+    _cancelList();
+    _calendar.setHistoryActive(false);
+  }
+
+  void _syncActive() {
+    final active = _tabActive && _appVisible;
+    if (_active == active) return;
+    if (!active) {
+      _suspend();
+      return;
+    }
+    _active = true;
+    _calendar.setHistoryActive(true);
+    if (_selectedTab == 0) _startList();
+    _loadGyms(_repository);
   }
 
   Future<void> _loadGyms(TrackerRepository? repository) async {
@@ -56,6 +105,7 @@ class _HistoryPageState extends State<HistoryPage> {
     try {
       final gyms = await repository?.gyms.getAll() ?? const [];
       if (!mounted ||
+          !_active ||
           generation != _gymGeneration ||
           !identical(repository, _repository)) {
         return;
@@ -80,10 +130,11 @@ class _HistoryPageState extends State<HistoryPage> {
   void _startList() {
     _cancelList();
     final repository = _repository;
-    if (repository == null) return;
+    if (!_active || repository == null) return;
     final generation = _listGeneration;
     bool current() =>
         mounted &&
+        _active &&
         _selectedTab == 0 &&
         generation == _listGeneration &&
         identical(repository, _repository);
@@ -119,7 +170,8 @@ class _HistoryPageState extends State<HistoryPage> {
 
   @override
   void dispose() {
-    _cancelList();
+    _lifecycleListener.dispose();
+    _suspend();
     _calendar.dispose();
     super.dispose();
   }

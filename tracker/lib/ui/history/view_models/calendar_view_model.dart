@@ -12,8 +12,11 @@ import 'package:tracker/ui/history/widgets/calendar/calendar_grid.dart';
 /// Session delivery invalidates lazy data without notifying during parent builds.
 /// Clock notifications are independent: midnight never scans unchanged sessions.
 class CalendarViewModel extends ChangeNotifier {
-  CalendarViewModel({DateTime? initialDate, DateTime Function()? now})
-    : _now = now ?? DateTime.now {
+  CalendarViewModel({
+    DateTime? initialDate,
+    DateTime Function()? now,
+    this.observeAppLifecycle = true,
+  }) : _now = now ?? DateTime.now {
     final clock = _now().toLocal();
     _today = DateTime(clock.year, clock.month, clock.day);
     final day = (initialDate ?? clock).toLocal();
@@ -22,7 +25,12 @@ class CalendarViewModel extends ChangeNotifier {
     _selectedDay = ValueNotifier(DateTime(day.year, day.month, day.day));
   }
 
+  /// HistoryPage owns app lifecycle for both modes; standalone calendars may
+  /// still own their clock listener through setActive.
+  final bool observeAppLifecycle;
   final DateTime Function() _now;
+  bool _historyActive = true;
+  bool get _queriesActive => _historyActive && _calendarMode;
   List<DateTime> _dates = const [];
   WorkoutDateProjection? _projection;
   // Standalone widget adapter only. Production binds the scoped repository.
@@ -103,14 +111,29 @@ class CalendarViewModel extends ChangeNotifier {
     updateDates(const []);
     _standaloneRows = const [];
     datesError = null;
-    if (_calendarMode) _startCalendar();
+    if (_queriesActive) _startCalendar();
   }
 
-  /// Subtab ownership is separate from the existing clock visibility surface.
+  /// Effective History visibility (top-level tab AND app), supplied by its
+  /// owner. Invalidate generations before cancelling native work already begun.
+  void setHistoryActive(bool active) {
+    if (_historyActive == active) return;
+    _historyActive = active;
+    if (!active) {
+      _cancelDates();
+      _cancelDay();
+      setActive(false);
+    } else if (_calendarMode) {
+      if (!observeAppLifecycle) setActive(true);
+      _startCalendar();
+    }
+  }
+
   void setCalendarMode(bool enabled) {
     if (_calendarMode == enabled) return;
     _calendarMode = enabled;
-    if (enabled) {
+    if (_queriesActive) {
+      if (!observeAppLifecycle) setActive(true);
       _startCalendar();
     } else {
       _cancelDates();
@@ -143,12 +166,12 @@ class CalendarViewModel extends ChangeNotifier {
   void retryDates() {
     _cancelDates();
     final repository = _repository;
-    if (!_calendarMode || repository == null) return;
+    if (!_queriesActive || repository == null) return;
     final generation = _dateGeneration;
     bool current() =>
         generation == _dateGeneration &&
         identical(repository, _repository) &&
-        _calendarMode;
+        _queriesActive;
     datesLoading = true;
     datesError = null;
     _dateSubscription = repository.watchStartTimes().listen(
@@ -173,12 +196,12 @@ class CalendarViewModel extends ChangeNotifier {
     _cancelDay();
     final repository = _repository;
     final day = selectedDay;
-    if (!_calendarMode || repository == null || day == null) return;
+    if (!_queriesActive || repository == null || day == null) return;
     final generation = _dayGeneration;
     bool current() =>
         generation == _dayGeneration &&
         identical(repository, _repository) &&
-        _calendarMode;
+        _queriesActive;
     dayLoading = true;
     _daySubscription = repository
         .watchSummariesForDate(day)
@@ -213,9 +236,16 @@ class CalendarViewModel extends ChangeNotifier {
       _lifecycleListener = null;
       return;
     }
+    if (!observeAppLifecycle) {
+      _appVisible = true;
+      _refreshClock(notify: false, checkTimezone: true, refreshDay: false);
+      return;
+    }
     final state = WidgetsBinding.instance.lifecycleState;
     _appVisible =
-        state != AppLifecycleState.hidden && state != AppLifecycleState.paused;
+        state != AppLifecycleState.hidden &&
+        state != AppLifecycleState.paused &&
+        state != AppLifecycleState.detached;
     _lifecycleListener = AppLifecycleListener(
       onStateChange: (state) {
         if (state == AppLifecycleState.resumed) {
@@ -236,7 +266,11 @@ class CalendarViewModel extends ChangeNotifier {
   /// Revalidate cached date mappings after suspension; midnight skips this scan.
   void refreshClock() => _refreshClock(notify: true, checkTimezone: true);
 
-  void _refreshClock({required bool notify, bool checkTimezone = false}) {
+  void _refreshClock({
+    required bool notify,
+    bool checkTimezone = false,
+    bool refreshDay = true,
+  }) {
     final clock = _now().toUtc().toLocal();
     final day = DateTime(clock.year, clock.month, clock.day);
     final zoneChanged =
@@ -252,7 +286,7 @@ class CalendarViewModel extends ChangeNotifier {
       if (selected != null) {
         // Preserve the selected calendar date, not its old-zone instant.
         _selectedDay.value = DateTime(_year, _month, selected.day);
-        retryDay();
+        if (refreshDay) retryDay();
       }
     }
     _midnightTimer?.cancel();

@@ -173,10 +173,19 @@ Suggested subject: `perf(history): suspend inactive history queries`
 Files: history page/view model; reuse `routing/tab_navigation.dart` without altering the shell's navigation contract.
 
 Acceptance:
-- [ ] Hidden History starts no new history queries or index rebuilds when workouts are completed elsewhere.
-- [ ] Returning to Calendar refreshes dates and the selected day exactly once per source; returning to List refreshes only its required sources.
-- [ ] Repeated hide/show and repository replacement create no duplicate listeners or stale updates.
-- [ ] Month and selection survive inactivity while data catches up correctly.
+- [x] Hidden History starts no new history queries or index rebuilds when workouts are completed elsewhere.
+- [x] Returning to Calendar refreshes dates and the selected day exactly once per source; returning to List refreshes only its required sources.
+- [x] Repeated hide/show and repository replacement create no duplicate listeners or stale updates.
+- [x] Month and selection survive inactivity while data catches up correctly.
+
+Commit 5 evidence (2026-09-16, working tree on `feature/optimization-1`, based on `0d0bbfa`; no staging or commit):
+
+- `HistoryPage` owns one app lifecycle listener for both modes and combines it with `TabVisibilityScope` (absent scope defaults active). Hidden/paused/detached or inactive top-level History invalidates generations before cancelling watchers, clears full List payloads and selected-day rows, and stops the calendar clock. Focus-only `inactive` transitions do not detach/reload; resume waits for both app and tab activation. Optional gym loads also wait for activation and reject late results.
+- Page-managed `CalendarViewModel(observeAppLifecycle: false)` shares the existing `setActive` clock machinery without a second lifecycle listener or widget remount overriding visibility. Standalone calendar ownership remains compatible. Activation validates timezone mappings before attaching exactly one date stream and one selected-day stream (if a day is selected), so timezone regrouping cannot trigger an extra day retry. Navigation and compact index/grid caches survive ordinary suspension; repository replacement clears only repository data and starts no hidden queries.
+- Seven new widget/model regressions in `history_lifecycle_test.dart` count live listeners and watcher requests for List and Calendar, exercise repeated hide/show, initial hidden state, app/top-tab combinations, detached and inactive states, hidden repository swaps in both modes, full-row release, retained navigation/index identity and update delivery behind an actual detail route. Hostile sources deliver errors synchronously during cancellation and data/errors after cancellation/resume/disposal; obsolete generations are ignored. Hidden-frame repository changes explicitly force a test frame so the replacement dependency is applied before resume.
+- Real-Isar regression uses the existing shared instance plus a separate observer as a committed-write delivery barrier: three hidden writes cause zero additional history date/day reads and preserve index identity; reactivation performs exactly one read per source and sees all three sessions, with no full-history reads. The real process-timezone Denver/Phoenix regression now also checks page-managed activation regroups correctly with one date/day watcher each.
+- Scoped format on six owned Dart files; `dart analyze lib/ui/history test/ui/history test/data/calendar_repository_test.dart`: **No issues found**. `TZ=America/New_York flutter test test/ui/history test/data --concurrency=1 --reporter expanded`: **62 tests passed**. Full `flutter test`: **130 tests passed**. Full `flutter analyze`: only the pre-existing `test/perf_tmp_test.dart:2:8 unused_import` warning. Visual sweep tests ran as part of the full suite; manual image inspection/profile gates are not claimed.
+- User `_WeekdayLabels` extraction remains intact; macOS files, audits, temporary perf test and `.claude` were not edited. No sliver/metric optimization, shell contract change, staging, commits or additional agents introduced.
 
 ## Commit 6 — Use one lazy scrolling viewport
 

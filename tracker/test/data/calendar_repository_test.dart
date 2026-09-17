@@ -26,6 +26,48 @@ void main() {
   });
 
   test(
+    'suspended calendar makes no reads on writes and resumes each source once',
+    () async {
+      final probe = _HistoryReadProbe(isar);
+      final day = DateTime(2026, 3, 8);
+      final model = CalendarViewModel(initialDate: day);
+      addTearDown(model.dispose);
+      model.bindRepository(probe);
+      model.setCalendarMode(true);
+      await waitFor(() => !model.datesLoading && !model.dayLoading);
+      expect(probe.dateReads, 1);
+      expect(probe.dayReads, 1);
+      final index = model.dateIndex;
+      model.setHistoryActive(false);
+      // A separate live watcher is a delivery barrier for each hidden write.
+      var deliveries = 0;
+      final observer = repository.watchStartTimes().listen((_) => deliveries++);
+      addTearDown(observer.cancel);
+      await waitFor(() => deliveries == 1);
+      for (var i = 0; i < 3; i++) {
+        final before = deliveries;
+        await repository.put(
+          WorkoutSession(title: 'Hidden $i', startTime: day),
+        );
+        await waitFor(() => deliveries > before);
+      }
+      expect(probe.dateReads, 1);
+      expect(probe.dayReads, 1);
+      expect(model.dateIndex, same(index));
+      expect(model.dayRows, isEmpty);
+      model.setHistoryActive(true);
+      model.setHistoryActive(true);
+      await waitFor(() => !model.datesLoading && !model.dayLoading);
+      expect(probe.dateReads, 2);
+      expect(probe.dayReads, 2);
+      expect(model.dateIndex.countOn(day), 3);
+      expect(model.dayRows.length, 3);
+      expect(model.selectedDay, day);
+      expect(probe.fullReads, 0);
+    },
+  );
+
+  test(
     'weight-only committed write delivers snapshots without rebuilding',
     () async {
       final session = WorkoutSession(
@@ -200,6 +242,30 @@ void main() {
       expect((await probe.watchStartTimes().first).length, 2);
     },
   );
+}
+
+class _HistoryReadProbe extends WorkoutSessionRepository {
+  _HistoryReadProbe(super.isar);
+  int dateReads = 0;
+  int dayReads = 0;
+  int fullReads = 0;
+  @override
+  Future<List<DateTime>> getStartTimes() {
+    dateReads++;
+    return super.getStartTimes();
+  }
+
+  @override
+  Future<List<WorkoutSessionSummary>> getSummariesForDate(DateTime date) {
+    dayReads++;
+    return super.getSummariesForDate(date);
+  }
+
+  @override
+  Future<List<WorkoutSession>> getAll() {
+    fullReads++;
+    return super.getAll();
+  }
 }
 
 class _DeliveryProbe extends WorkoutSessionRepository {

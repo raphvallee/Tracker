@@ -59,7 +59,9 @@ class _HistoryCalendarState extends State<HistoryCalendar> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _model.setActive(TabVisibilityScope.isActiveOf(context));
+    if (_model.observeAppLifecycle) {
+      _model.setActive(TabVisibilityScope.isActiveOf(context));
+    }
   }
 
   @override
@@ -68,11 +70,13 @@ class _HistoryCalendarState extends State<HistoryCalendar> {
     if (!identical(widget.model, oldWidget.model)) {
       final previous = oldWidget.model ?? _ownedModel!;
       previous.removeListener(_clockChanged);
-      previous.setActive(false);
+      if (previous.observeAppLifecycle) previous.setActive(false);
       _ownedModel?.dispose();
       _ownedModel = widget.model == null ? CalendarViewModel() : null;
       _model.addListener(_clockChanged);
-      _model.setActive(TabVisibilityScope.isActiveOf(context));
+      if (_model.observeAppLifecycle) {
+        _model.setActive(TabVisibilityScope.isActiveOf(context));
+      }
     }
     if (!identical(widget.sessions, oldWidget.sessions) ||
         !identical(widget.model, oldWidget.model)) {
@@ -88,7 +92,7 @@ class _HistoryCalendarState extends State<HistoryCalendar> {
   @override
   void dispose() {
     _model.removeListener(_clockChanged);
-    _model.setActive(false);
+    if (_model.observeAppLifecycle) _model.setActive(false);
     _ownedModel?.dispose();
     super.dispose();
   }

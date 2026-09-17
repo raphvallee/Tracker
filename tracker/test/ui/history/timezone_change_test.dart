@@ -4,7 +4,25 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tracker/domain/models/workout_session.dart';
+import 'package:tracker/domain/models/workout_session_summary.dart';
+import 'package:tracker/data/repositories/workout_session_repository.dart';
 import 'package:tracker/ui/history/view_models/calendar_view_model.dart';
+
+class _ResumeRepository extends Fake implements WorkoutSessionRepository {
+  int dateWatches = 0;
+  int dayWatches = 0;
+  @override
+  Stream<List<DateTime>> watchStartTimes() {
+    dateWatches++;
+    return const Stream.empty();
+  }
+
+  @override
+  Stream<List<WorkoutSessionSummary>> watchSummariesForDate(DateTime day) {
+    dayWatches++;
+    return const Stream.empty();
+  }
+}
 
 typedef _Malloc = Pointer<Void> Function(IntPtr);
 typedef _Free = Void Function(Pointer<Void>);
@@ -75,6 +93,16 @@ void main() {
       expect(model.dateIndex, same(index));
       expect(model.daysWithWorkouts, same(days));
       expect(model.dateIndex.countOn(DateTime(2025, 7, 1)), 1);
+      final repository = _ResumeRepository();
+      final managed = CalendarViewModel(
+        now: () => clock,
+        observeAppLifecycle: false,
+      );
+      addTearDown(managed.dispose);
+      managed.setHistoryActive(false);
+      managed.bindRepository(repository);
+      managed.updateDates([session.startTime]);
+      managed.setCalendarMode(true);
       zone('America/Phoenix');
       expect(clock.toLocal().timeZoneName, anchor.timeZoneName);
       expect(clock.toLocal().timeZoneOffset, anchor.timeZoneOffset);
@@ -82,6 +110,11 @@ void main() {
       expect(model.dateIndex.countOn(DateTime(2025, 6, 30)), 1);
       expect(model.dateIndex.monthWorkoutDays(2025, 7), 0);
       model.setActive(false);
+      managed.setHistoryActive(true);
+      expect(managed.dateIndex.countOn(DateTime(2025, 6, 30)), 1);
+      expect(repository.dateWatches, 1);
+      expect(repository.dayWatches, 1); // No extra day retry while regrouping.
+      managed.setHistoryActive(false);
     },
     skip: !Platform.isMacOS && !Platform.isLinux,
   );
