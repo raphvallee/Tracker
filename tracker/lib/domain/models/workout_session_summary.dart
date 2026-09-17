@@ -25,4 +25,17 @@ class WorkoutSessionSummary {
   final DateTime startTime;
   final int setCount;
   final int? gymId;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is WorkoutSessionSummary &&
+          id == other.id &&
+          title == other.title &&
+          startTime == other.startTime &&
+          setCount == other.setCount &&
+          gymId == other.gymId;
+
+  @override
+  int get hashCode => Object.hash(id, title, startTime, setCount, gymId);
 }

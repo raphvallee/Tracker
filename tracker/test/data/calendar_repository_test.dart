@@ -6,6 +6,7 @@ import 'package:tracker/data/repositories/workout_session_repository.dart';
 import 'package:tracker/domain/models/workout_session.dart';
 import 'package:tracker/domain/models/workout_session_summary.dart';
 import 'package:tracker/domain/models/workout_set.dart';
+import 'package:tracker/ui/history/view_models/calendar_view_model.dart';
 
 import '../../testing/test_helpers.dart';
 
@@ -23,6 +24,49 @@ void main() {
     await isar.writeTxn(() => isar.clear());
     repository = WorkoutSessionRepository(isar);
   });
+
+  test(
+    'weight-only committed write delivers snapshots without rebuilding',
+    () async {
+      final session = WorkoutSession(
+        title: 'Workout',
+        startTime: DateTime(2026, 3, 8, 10),
+        sets: [WorkoutSet(exerciseId: 1, weight: 30, reps: 5, order: 0)],
+      );
+      await repository.put(session);
+      final probe = _DeliveryProbe(isar);
+      final model = CalendarViewModel(initialDate: DateTime(2026, 3, 8));
+      addTearDown(model.dispose);
+      model.bindRepository(probe);
+      model.setCalendarMode(true);
+      await waitFor(() => !model.datesLoading && !model.dayLoading);
+      final index = model.dateIndex;
+      final days = model.daysWithWorkouts;
+      final rows = model.dayRows;
+      var notifications = 0;
+      model.addListener(() => notifications++);
+      final datesBefore = probe.dateDeliveries;
+      final rowsBefore = probe.rowDeliveries;
+      session.sets.single.weight = 55;
+      await isar.writeTxn(() => isar.workoutSessions.put(session));
+      // Await actual deliveries, not silence or a guessed watcher delay.
+      await waitFor(
+        () =>
+            probe.dateDeliveries > datesBefore &&
+            probe.rowDeliveries > rowsBefore,
+      );
+      expect(notifications, 0);
+      expect(model.dateIndex, same(index));
+      expect(model.daysWithWorkouts, same(days));
+      expect(model.dayRows, same(rows));
+      session.title = 'Renamed';
+      await repository.put(session);
+      await waitFor(() => model.dayRows.single.title == 'Renamed');
+      expect(notifications, 1);
+      expect(model.dateIndex, same(index));
+      expect(rows.single.title, 'Workout');
+    },
+  );
 
   test(
     'date projection watches committed insert, count-preserving move, delete',
@@ -156,6 +200,26 @@ void main() {
       expect((await probe.watchStartTimes().first).length, 2);
     },
   );
+}
+
+class _DeliveryProbe extends WorkoutSessionRepository {
+  _DeliveryProbe(super.isar);
+  int dateDeliveries = 0;
+  int rowDeliveries = 0;
+
+  @override
+  Stream<List<DateTime>> watchStartTimes() =>
+      super.watchStartTimes().map((dates) {
+        dateDeliveries++;
+        return dates;
+      });
+
+  @override
+  Stream<List<WorkoutSessionSummary>> watchSummariesForDate(DateTime day) =>
+      super.watchSummariesForDate(day).map((rows) {
+        rowDeliveries++;
+        return rows;
+      });
 }
 
 /// Uses the real native date projection and real collection watcher, while

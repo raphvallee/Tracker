@@ -24,6 +24,7 @@ class CalendarViewModel extends ChangeNotifier {
 
   final DateTime Function() _now;
   List<DateTime> _dates = const [];
+  WorkoutDateProjection? _projection;
   // Standalone widget adapter only. Production binds the scoped repository.
   List<WorkoutSessionSummary> _standaloneRows = const [];
   WorkoutSessionRepository? _repository;
@@ -56,7 +57,9 @@ class CalendarViewModel extends ChangeNotifier {
   ValueListenable<DateTime?> get selectedDayListenable => _selectedDay;
 
   WorkoutDateIndex get dateIndex =>
-      _dateIndex ??= WorkoutDateIndex.fromDates(_dates);
+      _dateIndex ??= WorkoutDateIndex.fromProjection(
+        _projection ??= WorkoutDateProjection(_dates),
+      );
 
   CalendarGrid get grid => _grid ??= CalendarGrid(_year, _month);
   int get monthWorkoutDays => dateIndex.monthWorkoutDays(_year, _month);
@@ -67,10 +70,20 @@ class CalendarViewModel extends ChangeNotifier {
         day,
   });
 
-  void updateDates(Iterable<DateTime> dates) {
+  /// Returns whether semantic date counts changed, without notifying during a
+  /// parent build. Occupied-day/month index construction stays lazy.
+  bool updateDates(Iterable<DateTime> dates) {
     _dates = List.unmodifiable(dates);
+    final previous = _projection;
+    final next = WorkoutDateProjection(_dates);
+    // Always retain current instant mappings, even for equal date counts.
+    _projection = next;
+    if (previous != null && mapEquals(previous.dateCounts, next.dateCounts)) {
+      return false;
+    }
     _dateIndex = null;
     _daysWithWorkouts = null;
+    return true;
   }
 
   /// Adapter for standalone calendars; never retains full session objects.
@@ -86,6 +99,7 @@ class CalendarViewModel extends ChangeNotifier {
     _cancelDates();
     _cancelDay();
     _repository = repository;
+    _projection = null;
     updateDates(const []);
     _standaloneRows = const [];
     datesError = null;
@@ -140,10 +154,11 @@ class CalendarViewModel extends ChangeNotifier {
     _dateSubscription = repository.watchStartTimes().listen(
       (dates) {
         if (!current()) return;
-        updateDates(dates);
+        final changed = updateDates(dates);
+        final statusChanged = datesLoading || datesError != null;
         datesLoading = false;
         datesError = null;
-        notifyListeners();
+        if (changed || statusChanged) notifyListeners();
       },
       onError: (Object error) {
         if (!current()) return;
@@ -170,10 +185,12 @@ class CalendarViewModel extends ChangeNotifier {
         .listen(
           (rows) {
             if (!current()) return;
-            dayRows = List.unmodifiable(rows);
+            final changed = !listEquals(dayRows, rows);
+            final statusChanged = dayLoading || dayError != null;
+            if (changed) dayRows = List.unmodifiable(rows);
             dayLoading = false;
             dayError = null;
-            notifyListeners();
+            if (changed || statusChanged) notifyListeners();
           },
           onError: (Object error) {
             if (!current()) return;
@@ -224,14 +241,13 @@ class CalendarViewModel extends ChangeNotifier {
     final day = DateTime(clock.year, clock.month, clock.day);
     final zoneChanged =
         checkTimezone &&
-        _dateIndex != null &&
-        !_dateIndex!.matchesLocalTimezone;
+        _projection != null &&
+        !_projection!.matchesLocalTimezone;
     final changed = day != _today || zoneChanged;
     _today = day;
     if (zoneChanged) {
-      // Retained source instants are regrouped lazily before the next read.
-      _dateIndex = null;
-      _daysWithWorkouts = null;
+      // Regroup the latest raw instants; date/month derivations stay lazy.
+      updateDates(_dates);
       final selected = _selectedDay.value;
       if (selected != null) {
         // Preserve the selected calendar date, not its old-zone instant.

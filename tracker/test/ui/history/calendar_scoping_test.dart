@@ -6,6 +6,122 @@ import 'package:tracker/domain/models/workout_session_summary.dart';
 import 'package:tracker/ui/history/view_models/calendar_view_model.dart';
 
 void main() {
+  test('equal projections retain derivations and suppress notifications', () {
+    final repository = _Repository();
+    final model = CalendarViewModel(initialDate: DateTime(2026, 3, 1));
+    addTearDown(model.dispose);
+    model.bindRepository(repository);
+    model.setCalendarMode(true);
+    var notifications = 0;
+    model.addListener(() => notifications++);
+    final march = DateTime(2026, 3, 31, 10);
+    final april = DateTime(2026, 4, 1, 10);
+    repository.dates.single.emit([march, march, april]);
+    final index = model.dateIndex;
+    final days = model.daysWithWorkouts;
+    final grid = model.grid;
+    expect(notifications, 1);
+    repository.dates.single.emit([march, march, april]);
+    repository.dates.single.emit([april, march, march]);
+    repository.dates.single.emit([april, march, DateTime(2026, 3, 31, 20)]);
+    expect(notifications, 1);
+    expect(model.dateIndex, same(index));
+    expect(model.daysWithWorkouts, same(days));
+    expect(model.grid, same(grid));
+
+    // Same total length, different counts, then remove the last March session.
+    repository.dates.single.emit([march, april, april]);
+    expect(notifications, 2);
+    expect(model.dateIndex, isNot(same(index)));
+    expect(model.dateIndex.countOn(DateTime(2026, 3, 31)), 1);
+    expect(model.dateIndex.countOn(DateTime(2026, 4, 1)), 2);
+    expect(model.dateIndex.monthWorkoutDays(2026, 3), 1);
+    expect(model.dateIndex.monthWorkoutDays(2026, 4), 1);
+    repository.dates.single.emit([april, april]);
+    expect(notifications, 3);
+    expect(model.dateIndex.countOn(DateTime(2026, 3, 31)), 0);
+    expect(model.dateIndex.monthWorkoutDays(2026, 3), 0);
+    expect(model.daysWithWorkouts, isEmpty);
+    expect(model.grid, same(grid));
+
+    // Recovery is observable even when the successful payload is unchanged.
+    repository.dates.single.fail();
+    repository.dates.single.emit([april, april]);
+    expect(notifications, 5);
+    expect(model.datesError, isNull);
+    final retained = model.dateIndex;
+    model.setCalendarMode(false);
+    model.setCalendarMode(true);
+    repository.dates.last.emit([april, april]);
+    expect(notifications, 6);
+    expect(model.datesLoading, isFalse);
+    expect(model.dateIndex, same(retained));
+
+    // A count-preserving move to a new month changes both month occupancies.
+    final may = DateTime(2026, 5, 1);
+    repository.dates.last.emit([may, may]);
+    expect(notifications, 7);
+    expect(model.dateIndex, isNot(same(retained)));
+    expect(model.dateIndex.monthWorkoutDays(2026, 4), 0);
+    expect(model.dateIndex.monthWorkoutDays(2026, 5), 1);
+    expect(model.dateIndex.countOn(DateTime(2026, 4, 1)), 0);
+    expect(model.dateIndex.countOn(may), 2);
+  });
+
+  test('summary equality is ordered and independent from date counts', () {
+    final repository = _Repository();
+    final model = CalendarViewModel(initialDate: DateTime(2026, 3, 1));
+    addTearDown(model.dispose);
+    model.bindRepository(repository);
+    model.setCalendarMode(true);
+    repository.dates.single.emit([DateTime(2026, 3, 1)]);
+    final index = model.dateIndex;
+    var notifications = 0;
+    model.addListener(() => notifications++);
+    WorkoutSessionSummary row({
+      int id = 1,
+      String title = 'Workout',
+      int count = 2,
+      int? gym,
+      int hour = 10,
+    }) => WorkoutSessionSummary(
+      id: id,
+      title: title,
+      startTime: DateTime(2026, 3, 1, hour),
+      setCount: count,
+      gymId: gym,
+    );
+    var previous = <WorkoutSessionSummary>[row()];
+    repository.days.single.emit(previous);
+    final original = model.dayRows;
+    repository.days.single.emit([row()]);
+    expect(model.dayRows, same(original));
+    expect(notifications, 1);
+    expect(row().hashCode, row().hashCode);
+    for (final next in [
+      [row(title: 'Renamed')],
+      [row(title: 'Renamed', count: 3)],
+      [row(title: 'Renamed', count: 3, gym: 7)],
+      [row(title: 'Renamed', count: 3, gym: 7, hour: 11)],
+      [row(id: 2, title: 'Renamed', count: 3, gym: 7, hour: 11)],
+      [row(id: 2), row(id: 3)],
+      [row(id: 3), row(id: 2)],
+      [row(id: 3), row(id: 4)],
+    ]) {
+      final before = notifications;
+      repository.days.single.emit(next);
+      expect(notifications, before + 1);
+      expect(model.dayRows, orderedEquals(next));
+      expect(model.dateIndex, same(index));
+      previous = next;
+    }
+    final before = notifications;
+    repository.days.single.fail();
+    repository.days.single.emit(previous);
+    expect(notifications, before + 2);
+    expect(model.dayError, isNull);
+  });
+
   test(
     'day, mode, repository and disposal reject late data and errors',
     () async {

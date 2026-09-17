@@ -147,7 +147,7 @@ void main() {
     },
   );
 
-  test('replacement and empty snapshots invalidate lazily, not navigation', () {
+  test('same-date replacement retains index; empty preserves navigation', () {
     final model = CalendarViewModel(initialDate: DateTime(2026, 1, 1));
     addTearDown(model.dispose);
     final old = CountingSessions([
@@ -163,7 +163,7 @@ void main() {
     ]);
     model.updateSessions(replacement);
     expect(replacement.reads, 1);
-    expect(model.dateIndex, isNot(same(original)));
+    expect(model.dateIndex, same(original));
     expect(model.sessionsOn(model.selectedDay!).single.title, 'Replacement');
     expect(replacement.reads, 1);
 

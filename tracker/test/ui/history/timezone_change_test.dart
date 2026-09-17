@@ -64,7 +64,16 @@ void main() {
       final session = WorkoutSession(
         startTime: DateTime.utc(2025, 7, 1, 6, 30).toLocal(),
       );
+      // Initially this instant remains July 1 in both zones. Moving it earlier
+      // keeps Denver's date counts equal, but must refresh timezone validation.
+      session.startTime = DateTime.utc(2025, 7, 1, 8).toLocal();
       model.updateSessions([session]);
+      final index = model.dateIndex;
+      final days = model.daysWithWorkouts;
+      session.startTime = DateTime.utc(2025, 7, 1, 6, 30).toLocal();
+      model.updateSessions([session]);
+      expect(model.dateIndex, same(index));
+      expect(model.daysWithWorkouts, same(days));
       expect(model.dateIndex.countOn(DateTime(2025, 7, 1)), 1);
       zone('America/Phoenix');
       expect(clock.toLocal().timeZoneName, anchor.timeZoneName);

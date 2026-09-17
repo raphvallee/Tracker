@@ -145,10 +145,19 @@ Suggested subject: `perf(history): skip unchanged calendar derivations`
 Files: date index, history view model, immutable summary value type, relevant tests.
 
 Acceptance:
-- [ ] Fresh equal snapshots and reordered equivalent date projections preserve the date-index identity.
-- [ ] Weight-only changes cause no date-index reconstruction; title/count/gym edits update rows appropriately.
-- [ ] Date moves and last-session deletion update both affected day/month counts.
-- [ ] Equal session counts with different contents do not bypass invalidation.
+- [x] Fresh equal snapshots and reordered equivalent date projections preserve the date-index identity.
+- [x] Weight-only changes cause no date-index reconstruction; title/count/gym edits update rows appropriately.
+- [x] Date moves and last-session deletion update both affected day/month counts.
+- [x] Equal session counts with different contents do not bypass invalidation.
+
+Commit 4 evidence (2026-09-16, working tree on `feature/optimization-1`, based on `7b84657`; no staging or commit):
+
+- `WorkoutDateProjection` normalizes incoming compact timestamps into immutable local-date counts and UTC-instant/local-midnight mappings. `CalendarViewModel.updateDates` compares count maps before invalidating the existing lazy `WorkoutDateIndex` and occupied-day cache; equal, reordered, and same-day time edits retain index/grid/month data identity. Comparison remains O(N), without a revision bus or claims of incremental updates.
+- Timezone validation is separate from the reusable semantic index: every projection replaces the raw instant mappings even when counts are equal. The Denver/Phoenix process-timezone regression now first moves a timestamp within the same Denver date (08:00 UTC → 06:30 UTC), asserts index/cache identity, then verifies resume regroups it to June 30 in Phoenix. Old mappings would miss this change.
+- Immutable `WorkoutSessionSummary` equality/hash includes ID, title, startTime, setCount and gymId. Ordered row comparison independently suppresses equal row snapshots while title/count/gym/time/ID/order and equal-length different-content changes notify. Loading completion and error recovery still notify for equal payloads.
+- Before implementation, the new focused regressions failed with four date notifications instead of one, replaced equal row identity, and replaced index identity on a same-date time edit. After implementation, scoped history/data tests pass. `calendar_scoping_test.dart` asserts exact notifications, retained index/grid/occupied-day identities, date-count redistribution, last-day removal, month-boundary moves and recovery. The shared real-Isar test awaits both actual projected and row deliveries after a raw committed weight-only edit and proves zero model notifications with index/row/cache identity retained; a subsequent title edit publishes once.
+- Scoped formatting covered seven owned Dart files. Scoped `dart analyze` reports **No issues found**. `TZ=America/New_York flutter test test/ui/history test/data --concurrency=1 --reporter expanded`: **54 tests passed**, including actual DST/process-timezone coverage. Full-suite, visual and profile gates were not run or claimed for this scoped implementation.
+- `history_calendar.dart` and the user's `_WeekdayLabels` extraction were not edited. Unrelated macOS files, audits, `.claude`, and temporary performance test remain untouched. No later optimization, schema change, external agent, staging or commit introduced.
 
 ## Commit 5 — Stop hidden history subscriptions
 

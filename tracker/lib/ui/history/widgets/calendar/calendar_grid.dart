@@ -2,33 +2,49 @@ import 'dart:collection';
 
 import 'package:tracker/domain/models/workout_session.dart';
 
-/// Immutable, normalized index of sessions by local calendar date.
-///
-/// Building this once per session-list update avoids repeatedly scanning all
-/// sessions while painting each calendar cell and calculating metrics.
-class WorkoutDateIndex {
-  factory WorkoutDateIndex.fromSessions(Iterable<WorkoutSession> sessions) {
-    return WorkoutDateIndex.fromDates(sessions.map((s) => s.startTime));
-  }
-
-  factory WorkoutDateIndex.fromDates(Iterable<DateTime> dates) {
-    final byDay = <DateTime, int>{};
+/// Compact normalization of a projected timestamp snapshot. Timezone validation
+/// belongs to this snapshot, not the reusable semantic date index: instants can
+/// move within a date without changing that index.
+class WorkoutDateProjection {
+  WorkoutDateProjection(Iterable<DateTime> dates) {
+    final counts = <DateTime, int>{};
     final instantDays = <DateTime, DateTime>{};
     for (final date in dates) {
       final instant = date.toUtc();
       final local = instant.toLocal();
       final day = DateTime(local.year, local.month, local.day);
       instantDays[instant] = day;
-      byDay[day] = (byDay[day] ?? 0) + 1;
+      counts[day] = (counts[day] ?? 0) + 1;
     }
-    return WorkoutDateIndex._(byDay, instantDays);
+    dateCounts = UnmodifiableMapView(counts);
+    _instantDays = UnmodifiableMapView(instantDays);
   }
 
-  WorkoutDateIndex._(Map<DateTime, int> byDay, this._instantDays)
-    : _byDay = UnmodifiableMapView(byDay),
-      workoutDays = UnmodifiableSetView(byDay.keys.toSet()) {
+  late final Map<DateTime, int> dateCounts;
+  late final Map<DateTime, DateTime> _instantDays;
+
+  /// Validate actual cached dates on resume, not an ambiguous zone abbreviation.
+  bool get matchesLocalTimezone => _instantDays.entries.every((entry) {
+    final local = entry.key.toLocal();
+    return DateTime(local.year, local.month, local.day) == entry.value;
+  });
+}
+
+/// Immutable date counts and derived occupied-day/month data. Reused while the
+/// counts stay equal, regardless of source timestamp identity or order.
+class WorkoutDateIndex {
+  factory WorkoutDateIndex.fromSessions(Iterable<WorkoutSession> sessions) {
+    return WorkoutDateIndex.fromDates(sessions.map((s) => s.startTime));
+  }
+
+  factory WorkoutDateIndex.fromDates(Iterable<DateTime> dates) =>
+      WorkoutDateIndex.fromProjection(WorkoutDateProjection(dates));
+
+  WorkoutDateIndex.fromProjection(WorkoutDateProjection projection)
+    : _byDay = projection.dateCounts,
+      workoutDays = UnmodifiableSetView(projection.dateCounts.keys.toSet()) {
     final counts = <int, int>{};
-    for (final day in byDay.keys) {
+    for (final day in _byDay.keys) {
       final key = day.year * 100 + day.month;
       counts[key] = (counts[key] ?? 0) + 1;
     }
@@ -39,13 +55,6 @@ class WorkoutDateIndex {
 
   final Map<DateTime, int> _byDay;
   final Set<DateTime> workoutDays;
-  final Map<DateTime, DateTime> _instantDays;
-
-  /// Validate actual cached dates on resume, not an ambiguous zone abbreviation.
-  bool get matchesLocalTimezone => _instantDays.entries.every((entry) {
-    final local = entry.key.toLocal();
-    return DateTime(local.year, local.month, local.day) == entry.value;
-  });
 
   int countOn(DateTime day) => _byDay[day] ?? 0;
 
