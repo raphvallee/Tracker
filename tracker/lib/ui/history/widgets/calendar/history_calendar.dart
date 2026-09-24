@@ -1,17 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
 import 'package:tracker/domain/models/workout_session.dart';
+import 'package:tracker/domain/models/workout_session_summary.dart';
 import 'package:tracker/routing/tab_navigation.dart';
 import 'package:tracker/ui/core/ui/custom_route.dart';
+import 'package:tracker/ui/core/ui/repository_scope.dart';
 import 'package:tracker/ui/core/ui/weight_format.dart';
 import 'package:tracker/ui/history/view_models/calendar_view_model.dart';
 
 import '../session_detail_page.dart';
 import '../session_lookup_page.dart';
-
-import 'package:tracker/ui/core/ui/repository_scope.dart';
-import 'package:tracker/domain/models/workout_session_summary.dart';
-
 import 'calendar_grid.dart';
 
 /// Interactive month calendar of workout days (Plan.md §2.5).
@@ -41,7 +39,6 @@ class HistoryCalendar extends StatefulWidget {
 }
 
 class _HistoryCalendarState extends State<HistoryCalendar> {
-  static const _weekdayLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
   static const double _reservedHeight = 340;
   static const double _navAllowance = 64;
 
@@ -162,21 +159,7 @@ class _HistoryCalendarState extends State<HistoryCalendar> {
                   onNext: () => _model.goMonth(1),
                 ),
                 const SizedBox(height: 4),
-                Row(
-                  children: <Widget>[
-                    for (final label in _weekdayLabels)
-                      Expanded(
-                        child: Center(
-                          child: Text(
-                            label,
-                            style: theme.typography.body.xs.copyWith(
-                              color: theme.colors.mutedForeground,
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
+                const _WeekdayLabels(),
                 const SizedBox(height: 2),
                 ValueListenableBuilder<DateTime?>(
                   valueListenable: _model.selectedDayListenable,
@@ -327,6 +310,32 @@ class _HistoryCalendarState extends State<HistoryCalendar> {
   String _dateLabel(DateTime d) => '${d.year}-${_p(d.month)}-${_p(d.day)}';
 
   String _p(int v) => v.toString().padLeft(2, '0');
+}
+
+class _WeekdayLabels extends StatelessWidget {
+  const _WeekdayLabels();
+
+  static const _labels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = context.theme;
+    return Row(
+      children: <Widget>[
+        for (final label in _labels)
+          Expanded(
+            child: Center(
+              child: Text(
+                label,
+                style: theme.typography.body.xs.copyWith(
+                  color: theme.colors.mutedForeground,
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
 }
 
 class _DayGrid extends StatelessWidget {
