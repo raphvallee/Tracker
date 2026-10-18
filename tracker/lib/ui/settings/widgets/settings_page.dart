@@ -7,6 +7,7 @@ import 'package:tracker/utils/form_validators.dart';
 
 import 'package:tracker/ui/core/ui/custom_app_bar.dart';
 import 'package:tracker/ui/core/ui/custom_route.dart';
+import 'package:tracker/ui/core/ui/keyboard_inset.dart';
 import 'package:tracker/ui/core/ui/max_width.dart';
 import 'package:tracker/ui/settings/widgets/gyms_page.dart';
 import 'package:tracker/ui/settings/view_models/settings_cubit.dart';
@@ -23,7 +24,15 @@ class SettingsPage extends StatelessWidget {
           child: BlocBuilder<SettingsCubit, SettingsState>(
             builder: (context, state) => MaxWidth(
               child: ListView(
-                padding: const EdgeInsets.symmetric(vertical: 12),
+                // Bottom padding tracks the keyboard so the workout-defaults
+                // fields scroll above it (shell no longer resizes for the
+                // keyboard).
+                padding: EdgeInsets.fromLTRB(
+                  0,
+                  12,
+                  0,
+                  12 + keyboardInsetOf(context),
+                ),
                 children: <Widget>[
                   _buildSettingsMenuItem(
                     context,

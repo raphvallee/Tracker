@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
 import 'package:tracker/domain/models/exercise.dart';
 import 'package:tracker/ui/core/ui/custom_app_bar.dart';
+import 'package:tracker/ui/core/ui/keyboard_inset.dart';
 import 'package:tracker/ui/core/ui/max_width.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
 
@@ -65,20 +66,26 @@ class _ExercisePickerPageState extends State<ExercisePickerPage> {
             ),
           ),
         ),
-        SliverList(
-          delegate: SliverChildBuilderDelegate((context, index) {
-            final e = _shown[index];
-            return MaxWidth(
-              child: FItem(
-                title: Text(e.title),
-                subtitle: Text(
-                  e.primaryMuscle.map((m) => m.scientificName).join(', '),
-                  overflow: TextOverflow.ellipsis,
+        SliverPadding(
+          // Keyboard-aware bottom padding: the search field stays pinned at
+          // the top while list rows can scroll above the keyboard (the shell
+          // Scaffold no longer resizes for the keyboard).
+          padding: EdgeInsets.only(bottom: 12 + keyboardInsetOf(context)),
+          sliver: SliverList(
+            delegate: SliverChildBuilderDelegate((context, index) {
+              final e = _shown[index];
+              return MaxWidth(
+                child: FItem(
+                  title: Text(e.title),
+                  subtitle: Text(
+                    e.primaryMuscle.map((m) => m.scientificName).join(', '),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  onPress: () => Navigator.of(context).pop(e),
                 ),
-                onPress: () => Navigator.of(context).pop(e),
-              ),
-            );
-          }, childCount: _shown.length),
+              );
+            }, childCount: _shown.length),
+          ),
         ),
       ],
     );

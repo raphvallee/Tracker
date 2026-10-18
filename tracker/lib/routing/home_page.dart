@@ -88,7 +88,13 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     final visited = _visited.toList()..sort();
+    // Never resize the shell for the on-screen keyboard: the default (true)
+    // compressed the whole tab shell (app bar, list, bottom nav) every time an
+    // input was focused. With `false` the keyboard simply overlays the shell
+    // while pages pad their scrollable content by MediaQuery.viewInsets so the
+    // focused field and primary actions stay reachable above the keyboard.
     return Scaffold(
+      resizeToAvoidBottomInset: false,
       body: Stack(
         children: [
           for (final index in visited)
