@@ -151,7 +151,16 @@ class MyApp extends StatelessWidget {
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      home: const FScaffold(childPad: false, child: HomePage()),
+      // resizeToAvoidBottomInset: false — do not shrink the whole app for the
+      // on-screen keyboard (Forui FScaffold defaults to true, which pushed the
+      // entire shell, bottom nav included, up onto the keyboard). Pages pad
+      // their scrollable content by the keyboard inset instead; see
+      // ui/core/ui/keyboard_inset.dart.
+      home: const FScaffold(
+        resizeToAvoidBottomInset: false,
+        childPad: false,
+        child: HomePage(),
+      ),
       theme: navLightTheme.toCustomMaterialTheme(),
       darkTheme: navDarkTheme.toCustomMaterialTheme(),
       builder: (context, child) => FTheme(

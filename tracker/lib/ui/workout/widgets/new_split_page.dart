@@ -4,6 +4,7 @@ import 'package:tracker/domain/models/workout_split.dart';
 import 'package:tracker/domain/models/workout_split_templates.dart';
 import 'package:tracker/ui/core/ui/custom_app_bar.dart';
 import 'package:tracker/ui/core/ui/custom_route.dart';
+import 'package:tracker/ui/core/ui/keyboard_inset.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
 import 'package:tracker/ui/core/ui/weight_format.dart';
 
@@ -204,7 +205,15 @@ class _SplitEditorPageState extends State<SplitEditorPage> {
         ),
         SliverToBoxAdapter(
           child: Padding(
-            padding: const EdgeInsets.all(16),
+            // Bottom padding tracks the keyboard so the fields and the
+            // trailing "Add day" action scroll above it (shell no longer
+            // resizes for the keyboard).
+            padding: EdgeInsets.fromLTRB(
+              16,
+              16,
+              16,
+              16 + keyboardInsetOf(context),
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
