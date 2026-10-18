@@ -97,6 +97,10 @@ void main() {
                 order: 0,
                 targetSets: 4,
                 targetReps: 6,
+                sets: [
+                  PlannedSet(order: 0, minReps: 8),
+                  PlannedSet(order: 1, minReps: 8, maxReps: 12),
+                ],
               ),
               ExerciseItem(exerciseId: 2, order: 1),
             ],
@@ -112,6 +116,15 @@ void main() {
       expect(fetched.splitDays.first.exercises, hasLength(2));
       expect(fetched.splitDays.first.exercises.first.exerciseId, 1);
       expect(fetched.splitDays.first.exercises.first.targetSets, 4);
+      // Nested planned sets round-trip, including fixed vs. range.
+      final sets = fetched.splitDays.first.exercises.first.sets;
+      expect(sets, hasLength(2));
+      expect(sets[0].minReps, 8);
+      expect(sets[0].maxReps, isNull);
+      expect(sets[1].minReps, 8);
+      expect(sets[1].maxReps, 12);
+      // Legacy items without sets persist with an empty list.
+      expect(fetched.splitDays.first.exercises.last.sets, isEmpty);
 
       expect(await repo.splits.delete(id), isTrue);
       expect(await repo.splits.getById(id), isNull);

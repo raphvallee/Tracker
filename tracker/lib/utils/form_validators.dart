@@ -10,3 +10,13 @@ String? requiredDouble(
   final number = double.tryParse(value?.trim() ?? '');
   return number != null && number > minimum ? null : msg;
 }
+
+/// Validates a whole-number field that must be at least [minimum].
+String? requiredInt(
+  String? value, {
+  int minimum = 1,
+  String msg = 'Must be at least 1',
+}) {
+  final number = int.tryParse(value?.trim() ?? '');
+  return number != null && number >= minimum ? null : msg;
+}
