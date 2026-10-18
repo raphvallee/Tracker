@@ -66,6 +66,7 @@ class _SplitDayPageState extends State<SplitDayPage> {
           exerciseId: item.exerciseId,
           name: _names[item.exerciseId] ?? 'Exercise ${item.exerciseId}',
           order: i,
+          sets: item.sets,
         ),
       );
     }
@@ -153,6 +154,10 @@ class _SplitDayPageState extends State<SplitDayPage> {
   List<ExerciseItem> get items => widget.day.exercises;
 
   Widget? _targetSubtitle(ExerciseItem item) {
+    // Planned sets are the source of truth; legacy items (saved before sets
+    // existed) fall back to their old target fields.
+    final summary = plannedSetsSummary(item.sets);
+    if (summary != null) return Text(summary);
     if (item.targetSets == null && item.targetReps == null) return null;
     final parts = <String>[];
     if (item.targetSets != null) parts.add('${item.targetSets} sets');

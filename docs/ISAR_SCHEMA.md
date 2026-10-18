@@ -65,7 +65,8 @@ schema changes):
 | --- | --- |
 | `WorkoutSet` | `exerciseId int`, `weight double`, `reps int`, `type SetType @enumerated`, `order int` |
 | `WorkoutSplitDay` | `title String`, `description String`, `exercises List<ExerciseItem>`, `order int` |
-| `ExerciseItem` | `exerciseId int`, `order int`, `targetSets int?`, `targetReps int?`, `restSeconds int?` |
+| `ExerciseItem` | `exerciseId int`, `order int`, `sets List<PlannedSet>`, plus legacy `targetSets int?`, `targetReps int?`, `restSeconds int?` (no longer written by the editor) |
+| `PlannedSet` | `order int`, `minReps int` (fixed reps), `maxReps int?` (null = fixed, non-null = range `minReps..maxReps`) |
 | `GymExerciseMultiplier` | `exerciseId int`, `multiplier double` |
 
 ## Enums

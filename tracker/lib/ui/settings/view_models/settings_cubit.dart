@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:hydrated_bloc/hydrated_bloc.dart';
 import 'package:tracker/domain/models/graph_config.dart';
+import 'package:tracker/domain/models/rep_mode.dart';
 import 'package:tracker/domain/models/weight_unit.dart';
 
 class SettingsState {
@@ -23,11 +24,41 @@ class SettingsState {
     this.notificationsEnabled = true,
     this.analyticsEnabled = true,
     this.freeStartPlacement = FreeStartPlacement.before,
+    this.defaultRepMode = initialDefaultRepMode,
+    this.defaultReps = initialDefaultReps,
+    this.defaultRepRangeMin = initialDefaultRepRangeMin,
+    this.defaultRepRangeMax = initialDefaultRepRangeMax,
     List<GraphConfig> graphs = const [],
   }) : graphs = List.unmodifiable(graphs);
 
+  /// Mode used for newly created planned sets. The app bundles with
+  /// [RepMode.range].
+  static const RepMode initialDefaultRepMode = RepMode.range;
+
+  /// Default rep count pre-filled when adding a fixed set in the split editor.
+  static const int initialDefaultReps = 10;
+
+  /// Default rep-range bounds pre-filled when adding a range set.
+  static const int initialDefaultRepRangeMin = 8;
+  static const int initialDefaultRepRangeMax = 12;
+
+  static int? _positiveInt(Object? value) =>
+      value is int && value > 0 ? value : null;
+
+  /// Reads a persisted rep-range pair, falling back to the defaults when
+  /// either bound is missing/malformed or the range is crossed (min > max).
+  static (int, int) _repRange(Map<String, dynamic> json) {
+    final min = _positiveInt(json['defaultRepRangeMin']);
+    final max = _positiveInt(json['defaultRepRangeMax']);
+    if (min == null || max == null || min > max) {
+      return (initialDefaultRepRangeMin, initialDefaultRepRangeMax);
+    }
+    return (min, max);
+  }
+
   static SettingsState _fromV1(Map<String, dynamic> json) {
     final rawGraphs = json['graphs'];
+    final (rangeMin, rangeMax) = _repRange(json);
     return SettingsState(
       unit: WeightUnit.values.asNameMap()[json['unit']] ?? WeightUnit.kilograms,
       notificationsEnabled: json['notificationsEnabled'] is bool
@@ -39,6 +70,11 @@ class SettingsState {
       freeStartPlacement:
           FreeStartPlacement.values.asNameMap()[json['freeStartPlacement']] ??
           FreeStartPlacement.before,
+      defaultRepMode:
+          RepMode.values.asNameMap()[json['defaultRepMode']] ?? RepMode.range,
+      defaultReps: _positiveInt(json['defaultReps']) ?? initialDefaultReps,
+      defaultRepRangeMin: rangeMin,
+      defaultRepRangeMax: rangeMax,
       graphs: rawGraphs is List
           ? rawGraphs
                 .whereType<Map>()
@@ -61,6 +97,13 @@ class SettingsState {
   final bool notificationsEnabled;
   final bool analyticsEnabled;
   final FreeStartPlacement freeStartPlacement;
+
+  /// Rep defaults pre-filled when adding sets in the split editor.
+  final RepMode defaultRepMode;
+  final int defaultReps;
+  final int defaultRepRangeMin;
+  final int defaultRepRangeMax;
+
   final List<GraphConfig> graphs;
 
   SettingsState copyWith({
@@ -68,6 +111,10 @@ class SettingsState {
     bool? notificationsEnabled,
     bool? analyticsEnabled,
     FreeStartPlacement? freeStartPlacement,
+    RepMode? defaultRepMode,
+    int? defaultReps,
+    int? defaultRepRangeMin,
+    int? defaultRepRangeMax,
     List<GraphConfig>? graphs,
   }) {
     return SettingsState(
@@ -75,6 +122,10 @@ class SettingsState {
       notificationsEnabled: notificationsEnabled ?? this.notificationsEnabled,
       analyticsEnabled: analyticsEnabled ?? this.analyticsEnabled,
       freeStartPlacement: freeStartPlacement ?? this.freeStartPlacement,
+      defaultRepMode: defaultRepMode ?? this.defaultRepMode,
+      defaultReps: defaultReps ?? this.defaultReps,
+      defaultRepRangeMin: defaultRepRangeMin ?? this.defaultRepRangeMin,
+      defaultRepRangeMax: defaultRepRangeMax ?? this.defaultRepRangeMax,
       graphs: graphs ?? this.graphs,
     );
   }
@@ -86,6 +137,10 @@ class SettingsState {
       notificationsEnabled == other.notificationsEnabled &&
       analyticsEnabled == other.analyticsEnabled &&
       freeStartPlacement == other.freeStartPlacement &&
+      defaultRepMode == other.defaultRepMode &&
+      defaultReps == other.defaultReps &&
+      defaultRepRangeMin == other.defaultRepRangeMin &&
+      defaultRepRangeMax == other.defaultRepRangeMax &&
       _listEquals(graphs, other.graphs);
 
   @override
@@ -94,6 +149,10 @@ class SettingsState {
     notificationsEnabled,
     analyticsEnabled,
     freeStartPlacement,
+    defaultRepMode,
+    defaultReps,
+    defaultRepRangeMin,
+    defaultRepRangeMax,
     Object.hashAll(graphs),
   );
 
@@ -112,6 +171,10 @@ class SettingsState {
     'notificationsEnabled': notificationsEnabled,
     'analyticsEnabled': analyticsEnabled,
     'freeStartPlacement': freeStartPlacement.name,
+    'defaultRepMode': defaultRepMode.name,
+    'defaultReps': defaultReps,
+    'defaultRepRangeMin': defaultRepRangeMin,
+    'defaultRepRangeMax': defaultRepRangeMax,
     'graphs': graphs.map((graph) => graph.toJson()).toList(),
   };
 }
@@ -129,6 +192,23 @@ class SettingsCubit extends HydratedCubit<SettingsState> {
 
   void setFreeStartPlacement(FreeStartPlacement placement) =>
       emit(state.copyWith(freeStartPlacement: placement));
+
+  /// Sets the default rep mode used for newly created sets.
+  void setDefaultRepMode(RepMode mode) =>
+      emit(state.copyWith(defaultRepMode: mode));
+
+  /// Sets the default rep count pre-filled for fixed sets (minimum 1).
+  void setDefaultReps(int reps) {
+    if (reps < 1) return;
+    emit(state.copyWith(defaultReps: reps));
+  }
+
+  /// Sets the default rep range pre-filled for range sets.
+  /// Ignored unless `1 <= min <= max`.
+  void setDefaultRepRange({required int min, required int max}) {
+    if (min < 1 || max < min) return;
+    emit(state.copyWith(defaultRepRangeMin: min, defaultRepRangeMax: max));
+  }
 
   void addGraph(GraphConfig graph) =>
       emit(state.copyWith(graphs: [...state.graphs, graph]));

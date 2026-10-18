@@ -68,6 +68,10 @@ Future<SweepFixtures> seedSweepFixtures(TrackerRepository repo) async {
             order: 0,
             targetSets: 4,
             targetReps: 8,
+            sets: [
+              for (var i = 0; i < 4; i++)
+                PlannedSet(order: i, minReps: 8, maxReps: 12),
+            ],
           ),
           ExerciseItem(exerciseId: incline.id, order: 1, targetSets: 3),
         ],

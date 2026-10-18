@@ -43,6 +43,7 @@ const WorkoutSplitSchema = CollectionSchema(
   embeddedSchemas: {
     r'WorkoutSplitDay': WorkoutSplitDaySchema,
     r'ExerciseItem': ExerciseItemSchema,
+    r'PlannedSet': PlannedSetSchema,
   },
 
   getId: _workoutSplitGetId,
@@ -1402,13 +1403,20 @@ const ExerciseItemSchema = Schema(
       name: r'restSeconds',
       type: IsarType.long,
     ),
-    r'targetReps': PropertySchema(
+    r'sets': PropertySchema(
       id: 3,
+      name: r'sets',
+      type: IsarType.objectList,
+
+      target: r'PlannedSet',
+    ),
+    r'targetReps': PropertySchema(
+      id: 4,
       name: r'targetReps',
       type: IsarType.long,
     ),
     r'targetSets': PropertySchema(
-      id: 4,
+      id: 5,
       name: r'targetSets',
       type: IsarType.long,
     ),
@@ -1426,6 +1434,14 @@ int _exerciseItemEstimateSize(
   Map<Type, List<int>> allOffsets,
 ) {
   var bytesCount = offsets.last;
+  bytesCount += 3 + object.sets.length * 3;
+  {
+    final offsets = allOffsets[PlannedSet]!;
+    for (var i = 0; i < object.sets.length; i++) {
+      final value = object.sets[i];
+      bytesCount += PlannedSetSchema.estimateSize(value, offsets, allOffsets);
+    }
+  }
   return bytesCount;
 }
 
@@ -1438,8 +1454,14 @@ void _exerciseItemSerialize(
   writer.writeLong(offsets[0], object.exerciseId);
   writer.writeLong(offsets[1], object.order);
   writer.writeLong(offsets[2], object.restSeconds);
-  writer.writeLong(offsets[3], object.targetReps);
-  writer.writeLong(offsets[4], object.targetSets);
+  writer.writeObjectList<PlannedSet>(
+    offsets[3],
+    allOffsets,
+    PlannedSetSchema.serialize,
+    object.sets,
+  );
+  writer.writeLong(offsets[4], object.targetReps);
+  writer.writeLong(offsets[5], object.targetSets);
 }
 
 ExerciseItem _exerciseItemDeserialize(
@@ -1452,8 +1474,16 @@ ExerciseItem _exerciseItemDeserialize(
     exerciseId: reader.readLongOrNull(offsets[0]) ?? 0,
     order: reader.readLongOrNull(offsets[1]) ?? 0,
     restSeconds: reader.readLongOrNull(offsets[2]),
-    targetReps: reader.readLongOrNull(offsets[3]),
-    targetSets: reader.readLongOrNull(offsets[4]),
+    sets:
+        reader.readObjectList<PlannedSet>(
+          offsets[3],
+          PlannedSetSchema.deserialize,
+          allOffsets,
+          PlannedSet(),
+        ) ??
+        const [],
+    targetReps: reader.readLongOrNull(offsets[4]),
+    targetSets: reader.readLongOrNull(offsets[5]),
   );
   return object;
 }
@@ -1472,8 +1502,17 @@ P _exerciseItemDeserializeProp<P>(
     case 2:
       return (reader.readLongOrNull(offset)) as P;
     case 3:
-      return (reader.readLongOrNull(offset)) as P;
+      return (reader.readObjectList<PlannedSet>(
+                offset,
+                PlannedSetSchema.deserialize,
+                allOffsets,
+                PlannedSet(),
+              ) ??
+              const [])
+          as P;
     case 4:
+      return (reader.readLongOrNull(offset)) as P;
+    case 5:
       return (reader.readLongOrNull(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -1668,6 +1707,59 @@ extension ExerciseItemQueryFilter
   }
 
   QueryBuilder<ExerciseItem, ExerciseItem, QAfterFilterCondition>
+  setsLengthEqualTo(int length) {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(r'sets', length, true, length, true);
+    });
+  }
+
+  QueryBuilder<ExerciseItem, ExerciseItem, QAfterFilterCondition>
+  setsIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(r'sets', 0, true, 0, true);
+    });
+  }
+
+  QueryBuilder<ExerciseItem, ExerciseItem, QAfterFilterCondition>
+  setsIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(r'sets', 0, false, 999999, true);
+    });
+  }
+
+  QueryBuilder<ExerciseItem, ExerciseItem, QAfterFilterCondition>
+  setsLengthLessThan(int length, {bool include = false}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(r'sets', 0, true, length, include);
+    });
+  }
+
+  QueryBuilder<ExerciseItem, ExerciseItem, QAfterFilterCondition>
+  setsLengthGreaterThan(int length, {bool include = false}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(r'sets', length, include, 999999, true);
+    });
+  }
+
+  QueryBuilder<ExerciseItem, ExerciseItem, QAfterFilterCondition>
+  setsLengthBetween(
+    int lower,
+    int upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(
+        r'sets',
+        lower,
+        includeLower,
+        upper,
+        includeUpper,
+      );
+    });
+  }
+
+  QueryBuilder<ExerciseItem, ExerciseItem, QAfterFilterCondition>
   targetRepsIsNull() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(
@@ -1815,4 +1907,278 @@ extension ExerciseItemQueryFilter
 }
 
 extension ExerciseItemQueryObject
-    on QueryBuilder<ExerciseItem, ExerciseItem, QFilterCondition> {}
+    on QueryBuilder<ExerciseItem, ExerciseItem, QFilterCondition> {
+  QueryBuilder<ExerciseItem, ExerciseItem, QAfterFilterCondition> setsElement(
+    FilterQuery<PlannedSet> q,
+  ) {
+    return QueryBuilder.apply(this, (query) {
+      return query.object(q, r'sets');
+    });
+  }
+}
+
+// coverage:ignore-file
+// ignore_for_file: duplicate_ignore, non_constant_identifier_names, constant_identifier_names, invalid_use_of_protected_member, unnecessary_cast, prefer_const_constructors, lines_longer_than_80_chars, require_trailing_commas, inference_failure_on_function_invocation, unnecessary_parenthesis, unnecessary_raw_strings, unnecessary_null_checks, join_return_with_assignment, prefer_final_locals, avoid_js_rounded_ints, avoid_positional_boolean_parameters, always_specify_types
+
+const PlannedSetSchema = Schema(
+  name: r'PlannedSet',
+  id: 274001502372112171,
+  properties: {
+    r'maxReps': PropertySchema(id: 0, name: r'maxReps', type: IsarType.long),
+    r'minReps': PropertySchema(id: 1, name: r'minReps', type: IsarType.long),
+    r'order': PropertySchema(id: 2, name: r'order', type: IsarType.long),
+  },
+
+  estimateSize: _plannedSetEstimateSize,
+  serialize: _plannedSetSerialize,
+  deserialize: _plannedSetDeserialize,
+  deserializeProp: _plannedSetDeserializeProp,
+);
+
+int _plannedSetEstimateSize(
+  PlannedSet object,
+  List<int> offsets,
+  Map<Type, List<int>> allOffsets,
+) {
+  var bytesCount = offsets.last;
+  return bytesCount;
+}
+
+void _plannedSetSerialize(
+  PlannedSet object,
+  IsarWriter writer,
+  List<int> offsets,
+  Map<Type, List<int>> allOffsets,
+) {
+  writer.writeLong(offsets[0], object.maxReps);
+  writer.writeLong(offsets[1], object.minReps);
+  writer.writeLong(offsets[2], object.order);
+}
+
+PlannedSet _plannedSetDeserialize(
+  Id id,
+  IsarReader reader,
+  List<int> offsets,
+  Map<Type, List<int>> allOffsets,
+) {
+  final object = PlannedSet(
+    maxReps: reader.readLongOrNull(offsets[0]),
+    minReps: reader.readLongOrNull(offsets[1]) ?? 0,
+    order: reader.readLongOrNull(offsets[2]) ?? 0,
+  );
+  return object;
+}
+
+P _plannedSetDeserializeProp<P>(
+  IsarReader reader,
+  int propertyId,
+  int offset,
+  Map<Type, List<int>> allOffsets,
+) {
+  switch (propertyId) {
+    case 0:
+      return (reader.readLongOrNull(offset)) as P;
+    case 1:
+      return (reader.readLongOrNull(offset) ?? 0) as P;
+    case 2:
+      return (reader.readLongOrNull(offset) ?? 0) as P;
+    default:
+      throw IsarError('Unknown property with id $propertyId');
+  }
+}
+
+extension PlannedSetQueryFilter
+    on QueryBuilder<PlannedSet, PlannedSet, QFilterCondition> {
+  QueryBuilder<PlannedSet, PlannedSet, QAfterFilterCondition> maxRepsIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        const FilterCondition.isNull(property: r'maxReps'),
+      );
+    });
+  }
+
+  QueryBuilder<PlannedSet, PlannedSet, QAfterFilterCondition>
+  maxRepsIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        const FilterCondition.isNotNull(property: r'maxReps'),
+      );
+    });
+  }
+
+  QueryBuilder<PlannedSet, PlannedSet, QAfterFilterCondition> maxRepsEqualTo(
+    int? value,
+  ) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.equalTo(property: r'maxReps', value: value),
+      );
+    });
+  }
+
+  QueryBuilder<PlannedSet, PlannedSet, QAfterFilterCondition>
+  maxRepsGreaterThan(int? value, {bool include = false}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(
+          include: include,
+          property: r'maxReps',
+          value: value,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<PlannedSet, PlannedSet, QAfterFilterCondition> maxRepsLessThan(
+    int? value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.lessThan(
+          include: include,
+          property: r'maxReps',
+          value: value,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<PlannedSet, PlannedSet, QAfterFilterCondition> maxRepsBetween(
+    int? lower,
+    int? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.between(
+          property: r'maxReps',
+          lower: lower,
+          includeLower: includeLower,
+          upper: upper,
+          includeUpper: includeUpper,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<PlannedSet, PlannedSet, QAfterFilterCondition> minRepsEqualTo(
+    int value,
+  ) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.equalTo(property: r'minReps', value: value),
+      );
+    });
+  }
+
+  QueryBuilder<PlannedSet, PlannedSet, QAfterFilterCondition>
+  minRepsGreaterThan(int value, {bool include = false}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(
+          include: include,
+          property: r'minReps',
+          value: value,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<PlannedSet, PlannedSet, QAfterFilterCondition> minRepsLessThan(
+    int value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.lessThan(
+          include: include,
+          property: r'minReps',
+          value: value,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<PlannedSet, PlannedSet, QAfterFilterCondition> minRepsBetween(
+    int lower,
+    int upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.between(
+          property: r'minReps',
+          lower: lower,
+          includeLower: includeLower,
+          upper: upper,
+          includeUpper: includeUpper,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<PlannedSet, PlannedSet, QAfterFilterCondition> orderEqualTo(
+    int value,
+  ) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.equalTo(property: r'order', value: value),
+      );
+    });
+  }
+
+  QueryBuilder<PlannedSet, PlannedSet, QAfterFilterCondition> orderGreaterThan(
+    int value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(
+          include: include,
+          property: r'order',
+          value: value,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<PlannedSet, PlannedSet, QAfterFilterCondition> orderLessThan(
+    int value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.lessThan(
+          include: include,
+          property: r'order',
+          value: value,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<PlannedSet, PlannedSet, QAfterFilterCondition> orderBetween(
+    int lower,
+    int upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.between(
+          property: r'order',
+          lower: lower,
+          includeLower: includeLower,
+          upper: upper,
+          includeUpper: includeUpper,
+        ),
+      );
+    });
+  }
+}
+
+extension PlannedSetQueryObject
+    on QueryBuilder<PlannedSet, PlannedSet, QFilterCondition> {}

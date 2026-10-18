@@ -4,6 +4,7 @@
 // test/integration/workout_test.dart.
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tracker/domain/models/workout_split.dart';
 import 'package:tracker/ui/workout/view_models/workout_cubit.dart';
 
 void main() {
@@ -81,6 +82,52 @@ void main() {
       });
       expect(state.plan, hasLength(1));
       expect(state.sets, hasLength(1));
+    });
+
+    test('plan exercises carry planned sets through hydration', () {
+      final state = WorkoutState(
+        isInProgress: true,
+        planTitle: 'Push',
+        plan: [
+          PlanExercise(
+            exerciseId: 1,
+            name: 'Bench',
+            order: 0,
+            sets: [
+              PlannedSet(order: 0, minReps: 10),
+              PlannedSet(order: 1, minReps: 8, maxReps: 12),
+            ],
+          ),
+        ],
+      );
+      final restored = WorkoutState.fromJson(state.toJson());
+      expect(restored.plan.single.sets, hasLength(2));
+      expect(restored.plan.single.sets[0].minReps, 10);
+      expect(restored.plan.single.sets[0].maxReps, isNull);
+      expect(restored.plan.single.sets[1].minReps, 8);
+      expect(restored.plan.single.sets[1].maxReps, 12);
+      expect(restored, state);
+    });
+
+    test('plan sets default to empty and tolerate malformed entries', () {
+      final state = WorkoutState.fromJson({
+        'plan': [
+          {
+            'exerciseId': 1,
+            'name': 'Bench',
+            'sets': [
+              null,
+              'bad',
+              {'order': 0, 'minReps': 10},
+            ],
+          },
+        ],
+      });
+      expect(state.plan.single.sets, hasLength(1));
+      expect(state.plan.single.sets.single.minReps, 10);
+
+      final legacy = PlanExercise.fromJson({'exerciseId': 1, 'name': 'Bench'});
+      expect(legacy.sets, isEmpty);
     });
   });
 

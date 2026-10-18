@@ -1,0 +1,10 @@
+# dependency_validator (CI "Validate dependencies" step) flags packages whose
+# usage it cannot see from imports alone:
+# - forui_lucide: used via its icon font (FLucideIcons glyphs), not imports
+# - integration_test: sdk package consumed by the flutter_test runner, not
+#   imported directly
+# - isar_community_flutter_libs: loads the Isar native libraries at runtime
+ignore:
+  - forui_lucide
+  - integration_test
+  - isar_community_flutter_libs

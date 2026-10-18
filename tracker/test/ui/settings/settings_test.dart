@@ -72,4 +72,37 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('lb'), findsOneWidget);
   });
+
+  testWidgets('workout defaults fields update the cubit', (tester) async {
+    final cubit = SettingsCubit();
+    await pumpAppPage(
+      tester,
+      BlocProvider.value(value: cubit, child: const SettingsPage()),
+    );
+
+    expect(find.text('Workout defaults'), findsOneWidget);
+    EditableText fieldOf(String label) => tester.widget<EditableText>(
+      find
+          .descendant(
+            of: find.widgetWithText(FTextField, label),
+            matching: find.byType(EditableText),
+          )
+          .first,
+    );
+
+    await tester.enterText(find.widgetWithText(FTextField, 'Reps'), '12');
+    expect(fieldOf('Reps').controller.text, '12');
+    expect(cubit.state.defaultReps, 12);
+
+    await tester.enterText(find.widgetWithText(FTextField, 'Min'), '6');
+    await tester.enterText(find.widgetWithText(FTextField, 'Max'), '9');
+    expect(cubit.state.defaultRepRangeMin, 6);
+    expect(cubit.state.defaultRepRangeMax, 9);
+
+    // A crossed range (min > max) is rejected: state unchanged, error shown.
+    await tester.enterText(find.widgetWithText(FTextField, 'Min'), '15');
+    await tester.pumpAndSettle();
+    expect(cubit.state.defaultRepRangeMin, 6);
+    expect(find.text('Must be at least the min'), findsOneWidget);
+  });
 }

@@ -35,6 +35,9 @@ void main() {
         'notificationsEnabled': 'bad',
         'analyticsEnabled': null,
         'freeStartPlacement': Object(),
+        'defaultReps': 'bad',
+        'defaultRepRangeMin': Object(),
+        'defaultRepRangeMax': 0,
         'graphs': [
           null,
           'bad',
@@ -45,6 +48,32 @@ void main() {
       expect(
         () => state.graphs.add(const GraphConfig(title: 'x')),
         throwsUnsupportedError,
+      );
+    });
+
+    test('malformed rep range falls back to the default range', () {
+      final crossed = SettingsState.fromJson({
+        'defaultRepRangeMin': 15,
+        'defaultRepRangeMax': 10,
+      });
+      expect(
+        crossed.defaultRepRangeMin,
+        SettingsState.initialDefaultRepRangeMin,
+      );
+      expect(
+        crossed.defaultRepRangeMax,
+        SettingsState.initialDefaultRepRangeMax,
+      );
+
+      final negative = SettingsState.fromJson({
+        'defaultReps': -2,
+        'defaultRepRangeMin': -1,
+        'defaultRepRangeMax': 12,
+      });
+      expect(negative.defaultReps, SettingsState.initialDefaultReps);
+      expect(
+        negative.defaultRepRangeMin,
+        SettingsState.initialDefaultRepRangeMin,
       );
     });
 
@@ -93,6 +122,26 @@ void main() {
       });
       expect(state.unit, WeightUnit.pounds);
       expect(state.notificationsEnabled, isFalse);
+    });
+
+    test('payloads without rep defaults fall back to defaults', () {
+      final state = SettingsState.fromJson({'unit': 'pounds'});
+      expect(state.defaultReps, SettingsState.initialDefaultReps);
+      expect(state.defaultRepRangeMin, SettingsState.initialDefaultRepRangeMin);
+      expect(state.defaultRepRangeMax, SettingsState.initialDefaultRepRangeMax);
+    });
+
+    test('rep defaults round-trip', () {
+      final state = SettingsState(
+        defaultReps: 5,
+        defaultRepRangeMin: 6,
+        defaultRepRangeMax: 9,
+      );
+      final restored = SettingsState.fromJson(state.toJson());
+      expect(restored.defaultReps, 5);
+      expect(restored.defaultRepRangeMin, 6);
+      expect(restored.defaultRepRangeMax, 9);
+      expect(restored, state);
     });
 
     test('versioned payload round-trips with the v field', () {

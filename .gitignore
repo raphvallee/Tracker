@@ -71,3 +71,6 @@ lib/generated_plugin_registrant.dart
 libisar.dylib
 
 .claude/worktrees
+
+### IntelliJ / Android Studio
+.idea/

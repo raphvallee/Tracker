@@ -13,6 +13,7 @@ import 'package:tracker/data/repositories/tracker_repository.dart';
 import 'package:tracker/domain/models/gym.dart';
 import 'package:tracker/domain/models/workout_session.dart';
 import 'package:tracker/domain/models/workout_set.dart';
+import 'package:tracker/domain/models/workout_split.dart';
 import 'package:tracker/ui/workout/view_models/workout_cubit.dart';
 
 import '../../../testing/fakes/in_memory_storage.dart';
@@ -245,6 +246,57 @@ void main() {
       expect(state.sets.single.reps, 5);
       expect(state.sets.single.type, SetType.warmup);
       expect(find.text('100 kg × 5'), findsOneWidget);
+    });
+
+    testWidgets('plan exercises show targets and pre-fill the next reps', (
+      tester,
+    ) async {
+      final cubit = await pumpApp(tester);
+      cubit.startPlanWorkout(
+        title: 'PPL · Push',
+        exercises: [
+          PlanExercise(
+            exerciseId: 1,
+            name: 'Bench Press',
+            order: 0,
+            sets: [
+              PlannedSet(order: 0, minReps: 10),
+              PlannedSet(order: 1, minReps: 8, maxReps: 12),
+            ],
+          ),
+        ],
+      );
+
+      tester
+          .widget<FBottomNavigationBar>(find.byType(FBottomNavigationBar))
+          .onChange!(2);
+      await tester.pumpAndSettle();
+
+      // The planned sets render as a summary line, and the reps field is
+      // pre-filled with the first planned set's target.
+      expect(find.text('Planned: 2 × 10, 8-12'), findsOneWidget);
+      final repsField = find
+          .descendant(
+            of: find.byType(FTextField).at(1),
+            matching: find.byType(EditableText),
+          )
+          .first;
+      expect(tester.widget<EditableText>(repsField).controller.text, '10');
+
+      // Logging the first planned set advances the pre-fill to the next
+      // planned set's target (the range minimum).
+      final weightField = find
+          .descendant(
+            of: find.byType(FTextField).at(0),
+            matching: find.byType(EditableText),
+          )
+          .first;
+      await tester.enterText(weightField, '100');
+      await tester.tap(find.text('Add set'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('100 kg × 10'), findsOneWidget);
+      expect(tester.widget<EditableText>(repsField).controller.text, '8');
     });
   });
 }

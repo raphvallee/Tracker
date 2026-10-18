@@ -6,6 +6,7 @@ import 'package:tracker/data/services/app_log.dart';
 import 'package:tracker/domain/models/gym.dart';
 import 'package:tracker/domain/models/workout_session.dart';
 import 'package:tracker/domain/models/workout_set.dart';
+import 'package:tracker/domain/models/workout_split.dart';
 import 'package:tracker/domain/services/analytics.dart';
 
 /// A single set logged during the in-progress workout.
@@ -75,41 +76,87 @@ class ActiveSet {
 
 /// An exercise the user intends to do this session ("the split's exercises for
 /// today"). Captured at start so the active-workout screen can lay out the plan
-/// even after the underlying [WorkoutSplit] changes.
+/// even after the underlying [WorkoutSplit] changes. Carries the planned sets
+/// so the session can pre-fill the add-set form from the plan.
 class PlanExercise {
   const PlanExercise({
     required this.exerciseId,
     required this.name,
     this.order = 0,
+    this.sets = const [],
   });
 
-  factory PlanExercise.fromJson(Map<String, dynamic> json) => PlanExercise(
-    exerciseId: _intValue(json['exerciseId']),
-    name: json['name'] is String ? json['name'] as String : '',
-    order: _intValue(json['order']),
-  );
+  factory PlanExercise.fromJson(Map<String, dynamic> json) {
+    // Bind to a local first: type promotion lets `.whereType().map()` dispatch
+    // statically (a dynamic receiver would erase the type argument and yield
+    // a List<dynamic> that fails the parameter check).
+    final rawSets = json['sets'];
+    return PlanExercise(
+      exerciseId: _intValue(json['exerciseId']),
+      name: json['name'] is String ? json['name'] as String : '',
+      order: _intValue(json['order']),
+      // `sets` is newer than the v1 hydration payload; older snapshots without
+      // it restore with no plan (the form simply stays empty).
+      sets: rawSets is List
+          ? rawSets
+                .whereType<Map>()
+                .map(_plannedSetFromJson)
+                .toList(growable: false)
+          : const [],
+    );
+  }
+
+  static PlannedSet _plannedSetFromJson(Map<dynamic, dynamic> json) =>
+      PlannedSet(
+        order: _intValue(json['order']),
+        minReps: _intValue(json['minReps']),
+        maxReps: _intValueOrNull(json['maxReps']),
+      );
 
   static int _intValue(Object? value) =>
       value is num ? value.toInt() : int.tryParse('$value') ?? 0;
+
+  static int? _intValueOrNull(Object? value) => value is num
+      ? value.toInt()
+      : value is String
+      ? int.tryParse(value)
+      : null;
 
   @override
   bool operator ==(Object other) =>
       other is PlanExercise &&
       exerciseId == other.exerciseId &&
       name == other.name &&
-      order == other.order;
+      order == other.order &&
+      _listEquals(sets, other.sets);
 
   @override
-  int get hashCode => Object.hash(exerciseId, name, order);
+  int get hashCode =>
+      Object.hash(exerciseId, name, order, Object.hashAll(sets));
   final int exerciseId;
   final String name;
   final int order;
+  final List<PlannedSet> sets;
 
   Map<String, dynamic> toJson() => {
     'exerciseId': exerciseId,
     'name': name,
     'order': order,
+    'sets': [
+      for (final set in sets)
+        {'order': set.order, 'minReps': set.minReps, 'maxReps': set.maxReps},
+    ],
   };
+}
+
+bool _listEquals(List<PlannedSet> a, List<PlannedSet> b) {
+  if (a.length != b.length) return false;
+  for (var i = 0; i < a.length; i++) {
+    if (a[i].minReps != b[i].minReps || a[i].maxReps != b[i].maxReps) {
+      return false;
+    }
+  }
+  return true;
 }
 
 Map<int, List<ActiveSet>> _groupSets(List<ActiveSet> sets) {

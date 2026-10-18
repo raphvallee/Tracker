@@ -5,6 +5,7 @@ import 'package:tracker/domain/models/exercise.dart';
 import 'package:tracker/domain/models/gym.dart';
 import 'package:tracker/domain/models/weight_unit.dart';
 import 'package:tracker/domain/models/workout_set.dart';
+import 'package:tracker/domain/models/workout_split.dart';
 import 'package:tracker/ui/core/ui/custom_app_bar.dart';
 import 'package:tracker/ui/core/ui/max_width.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
@@ -120,6 +121,7 @@ class _InProgressView extends StatelessWidget {
                     orderNumber: entry.exercise.order,
                     title: entry.exercise.name,
                     sets: entry.sets,
+                    plannedSets: entry.exercise.sets,
                     exerciseId: entry.exercise.exerciseId,
                     exerciseName: entry.exercise.name,
                   ),
@@ -392,6 +394,7 @@ class _ExerciseLogCard extends StatelessWidget {
     this.orderNumber,
     required this.title,
     required this.sets,
+    this.plannedSets = const [],
     this.exerciseId,
     this.exerciseName,
     this.exercises,
@@ -403,17 +406,30 @@ class _ExerciseLogCard extends StatelessWidget {
   final String title;
   final List<ActiveSet> sets;
 
+  /// Planned sets from the split day this session follows, used to show a
+  /// target summary and pre-fill the next set's reps. Empty for free-form.
+  final List<PlannedSet> plannedSets;
+
   /// Passed through to [_AddSetForm]: a fixed plan exercise ([exerciseId]
   /// with [exerciseName]), or a dropdown over [exercises] (free-form).
   final int? exerciseId;
   final String? exerciseName;
   final List<Exercise>? exercises;
 
+  /// Reps the next planned set targets, or null when every planned set has
+  /// been logged (or there is no plan).
+  int? get nextTargetReps {
+    final index = sets.length;
+    if (plannedSets.isEmpty || index >= plannedSets.length) return null;
+    return plannedSets[index].minReps;
+  }
+
   @override
   Widget build(BuildContext context) {
     final titleStyle = context.theme.typography.body.md.copyWith(
       fontWeight: FontWeight.w600,
     );
+    final planSummary = plannedSetsSummary(plannedSets);
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: FCard(
@@ -429,6 +445,13 @@ class _ExerciseLogCard extends StatelessWidget {
                   Expanded(child: Text(title, style: titleStyle)),
                 ],
               ),
+              if (planSummary != null)
+                Text(
+                  'Planned: $planSummary',
+                  style: context.theme.typography.body.xs.copyWith(
+                    color: context.theme.colors.mutedForeground,
+                  ),
+                ),
               const SizedBox(height: 8),
               if (sets.isEmpty)
                 Text(
@@ -444,6 +467,7 @@ class _ExerciseLogCard extends StatelessWidget {
                 exerciseId: exerciseId,
                 exerciseName: exerciseName,
                 exercises: exercises,
+                nextTargetReps: nextTargetReps,
               ),
             ],
           ),
@@ -561,7 +585,12 @@ class _WarmupBadge extends StatelessWidget {
 /// Inline editor: pick an exercise (either fixed by the plan or via a dropdown
 /// over [_ExerciseRepository]) and enter weight + reps with a warm-up toggle.
 class _AddSetForm extends StatefulWidget {
-  const _AddSetForm({this.exerciseId, this.exerciseName, this.exercises});
+  const _AddSetForm({
+    this.exerciseId,
+    this.exerciseName,
+    this.exercises,
+    this.nextTargetReps,
+  });
 
   /// When set, the exercise is fixed (plan-driven) and no dropdown is shown.
   final int? exerciseId;
@@ -570,6 +599,9 @@ class _AddSetForm extends StatefulWidget {
   /// When provided with [exerciseId] null, a dropdown of [Exercise] is shown
   /// instead (free-form logging).
   final List<Exercise>? exercises;
+
+  /// Reps targeted by the next planned set, pre-filled into the reps field.
+  final int? nextTargetReps;
 
   @override
   State<_AddSetForm> createState() => _AddSetFormState();
@@ -587,8 +619,20 @@ class _AddSetFormState extends State<_AddSetForm> {
   void initState() {
     super.initState();
     _selectedId = widget.exerciseId;
+    _reps.text = widget.nextTargetReps?.toString() ?? '';
     _weight.addListener(() => setState(() => _weightError = null));
     _reps.addListener(() => setState(() => _repsError = null));
+  }
+
+  @override
+  void didUpdateWidget(covariant _AddSetForm oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Follow the plan: when the next planned target moves (e.g. after logging
+    // a set) and the field is empty, pre-fill it with the new target.
+    if (widget.nextTargetReps != oldWidget.nextTargetReps &&
+        _reps.text.isEmpty) {
+      _reps.text = widget.nextTargetReps?.toString() ?? '';
+    }
   }
 
   @override
