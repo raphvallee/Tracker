@@ -285,13 +285,11 @@ void main() {
       }
 
       await openAndClose(
-        'GraphEditor dialog',
-        () => showFDialog<void>(
-          context: pageContext,
-          builder: (_, _, _) => GraphEditor(
-            exercises: fixtures.exercises,
-            initial: const GraphConfig(title: 'Strength - upper body'),
-          ),
+        'GraphEditor sheet',
+        () => GraphEditor.show(
+          pageContext,
+          exercises: fixtures.exercises,
+          initial: const GraphConfig(title: 'Strength - upper body'),
         ),
       );
       await openAndClose(
