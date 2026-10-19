@@ -22,13 +22,10 @@ class CustomAppBar extends StatelessWidget {
       titleSpacing: 16,
       title: Row(
         children: [
-          // Explicit ghost back-button (Phase 6): tab-root pages sit at the
-          // bottom of their nested Navigator, so canPop() is false there and
-          // no leading is shown.
-          if (Navigator.of(context).canPop()) ...[
+          if (ModalRoute.isFirstOf(context) == false) ...[
             FButton(
               variant: .ghost,
-              onPress: () => Navigator.of(context).pop(),
+              onPress: () => Navigator.maybePop(context),
               child: const Icon(FLucideIcons.chevronLeft),
             ),
             const SizedBox(width: 4),
