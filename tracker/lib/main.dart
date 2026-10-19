@@ -163,11 +163,20 @@ class MyApp extends StatelessWidget {
       ),
       theme: navLightTheme.toCustomMaterialTheme(),
       darkTheme: navDarkTheme.toCustomMaterialTheme(),
-      builder: (context, child) => FTheme(
-        data: Theme.brightnessOf(context) == Brightness.light
-            ? navLightTheme
-            : navDarkTheme,
-        child: FToaster(child: FTooltipGroup(child: child!)),
+      builder: (context, child) => GestureDetector(
+        // Tapping anywhere outside a text field clears focus (dismisses the
+        // on-screen keyboard). Flutter's built-in tap-outside handling does
+        // not unfocus on touch events outside web, so this fills that gap.
+        // It wraps the Navigator, so it applies to every page, including
+        // pushed routes. Inner widgets (buttons, fields, scrollables) win the
+        // gesture arena, so this only fires for taps on unconsumed areas.
+        onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+        child: FTheme(
+          data: Theme.brightnessOf(context) == Brightness.light
+              ? navLightTheme
+              : navDarkTheme,
+          child: FToaster(child: FTooltipGroup(child: child!)),
+        ),
       ),
       themeMode: ThemeMode.system,
       debugShowCheckedModeBanner: false,

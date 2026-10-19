@@ -11,6 +11,7 @@
 // is built (and can throw) even when not selected - the boot test therefore
 // also proves every tab resolves to a buildable screen.
 
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forui/forui.dart';
 import 'package:hydrated_bloc/hydrated_bloc.dart';
@@ -63,4 +64,37 @@ void main() {
       }
     },
   );
+
+  testWidgets('tapping outside a text field clears its focus', (
+    WidgetTester tester,
+  ) async {
+    // The field sits 200 logical pixels below the top edge, so the tap at the
+    // top-left lands on empty page background, well outside the field.
+    await pumpAppPage(
+      tester,
+      Scaffold(
+        body: Padding(
+          padding: const EdgeInsets.only(top: 200, left: 16),
+          child: TextField(
+            focusNode: _probeFocusNode,
+            controller: TextEditingController(),
+          ),
+        ),
+      ),
+    );
+
+    expect(_probeFocusNode.hasFocus, isFalse);
+    await tester.showKeyboard(find.byType(TextField));
+    expect(_probeFocusNode.hasFocus, isTrue);
+
+    // Flutter's built-in tap-outside handling deliberately does not unfocus
+    // on touch events (except web), so this only passes with the app-wide
+    // GestureDetector in MyApp's builder.
+    await tester.tapAt(const Offset(20, 40));
+    await tester.pump();
+
+    expect(_probeFocusNode.hasFocus, isFalse);
+  });
 }
+
+final FocusNode _probeFocusNode = FocusNode(debugLabel: 'probe-field');
