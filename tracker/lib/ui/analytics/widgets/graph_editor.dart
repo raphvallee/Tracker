@@ -12,8 +12,8 @@ import 'package:tracker/ui/core/ui/keyboard_inset.dart';
 /// frame-by-frame crawl over the chart-heavy feed, and its autofocus only
 /// fired after the route animation finished, so the keyboard lagged
 /// visibly behind the popup. The sheet uses a plain dim barrier, slides up
-/// with no blur, and focuses the title field mid-animation so the keyboard
-/// rises together with it.
+/// with no blur, and, when editing, focuses the title field mid-animation so
+/// the keyboard rises together with it.
 abstract final class GraphEditor {
   /// Shows the editor, resolving with the saved [GraphConfig] or null when
   /// dismissed.
@@ -66,10 +66,13 @@ class _GraphEditorSheetState extends State<_GraphEditorSheet> {
     _timeframe = initial?.timeframe ?? GraphTimeframe.all;
     // Focus the title while the sheet is still animating in: modal routes
     // only deliver `autofocus` after the entrance completes, which visibly
-    // delayed the keyboard.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _titleFocus.requestFocus();
-    });
+    // delayed the keyboard. Only for editing: adding a graph should not
+    // grab focus right away.
+    if (initial != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _titleFocus.requestFocus();
+      });
+    }
   }
 
   @override
