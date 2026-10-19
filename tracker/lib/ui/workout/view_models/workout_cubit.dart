@@ -449,7 +449,14 @@ class WorkoutCubit extends HydratedCubit<WorkoutState> {
     emit(state.copyWith(sets: sets));
   }
 
-  /// Finish the workout: writes a [WorkoutSession] to Isar (duration = now −
+  /// Abandon the workout without persisting anything. Nothing was saved to
+  /// Isar yet, so clearing the hydrated state is all that is needed.
+  Future<void> discardWorkout() async {
+    if (!state.isInProgress) return;
+    emit(WorkoutState.initial());
+  }
+
+  /// Finish the workout: writes a [WorkoutSession] to Isar (duration = now -
   /// start) and resets to the idle state. When no repository is wired (tests),
   /// it only resets state.
   Future<void> endWorkout() async {

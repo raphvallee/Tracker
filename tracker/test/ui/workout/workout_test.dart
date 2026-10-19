@@ -39,6 +39,26 @@ void main() {
     expect(cubit.state.sets, isEmpty);
   });
 
+  test('discardWorkout clears state without persisting a session', () async {
+    final isar = await openTestIsar([
+      WorkoutSessionSchema,
+      GymSchema,
+    ], name: 'workout_test_discard');
+    final repo = TrackerRepository(isar);
+    final cubit = WorkoutCubit(repository: repo);
+    addTearDown(cubit.close);
+    addTearDown(isar.close);
+
+    cubit.startWorkout();
+    cubit.logSet(exerciseId: 1, exerciseName: 'Squat', weight: 100, reps: 5);
+    await cubit.discardWorkout();
+
+    expect(cubit.state.isInProgress, isFalse);
+    expect(cubit.state.sets, isEmpty);
+    // The discarded session must never reach the history.
+    expect(await repo.sessions.getAll(), isEmpty);
+  });
+
   group('WorkoutCubit persistence', () {
     late Isar isar;
     late TrackerRepository repo;
