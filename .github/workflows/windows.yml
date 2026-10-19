@@ -1,0 +1,53 @@
+name: Windows
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    env:
+      APP_DIR: 'tracker'
+
+    defaults:
+      run:
+        working-directory: ${{ env.APP_DIR }}
+
+    steps:
+    - name: Clone repository
+      uses: actions/checkout@v6
+    - name: Set up Flutter
+      uses: subosito/flutter-action@v2
+      with:
+        channel: stable
+        flutter-version-file: tracker/pubspec.yaml
+        architecture: X64
+    - name: Install Dependencies
+      run: flutter pub get
+    - name: Run Tests
+      run: flutter test
+    - name: Build Windows
+      run: flutter build windows --release
+    - name: Extract version
+      id: version
+      run: |
+        $version = (Get-Content pubspec.yaml | Where-Object { $_ -match '^version:' }) -replace '^version:\s*', ''
+        "version=$version" >> $env:GITHUB_OUTPUT
+    - name: Archive build
+      run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath tracker-${{ steps.version.outputs.version }}-windows-x64.zip
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: tracker-windows-x64
+        path: tracker/tracker-*-windows-x64.zip
+    - name: Attach to release
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v2
+      with:
+        files: tracker/tracker-*-windows-x64.zip
