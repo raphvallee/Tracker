@@ -36,7 +36,10 @@ class WorkoutPage extends StatelessWidget {
               builder: (context, isInProgress) {
                 final cubit = context.read<WorkoutCubit>();
                 return isInProgress
-                    ? _InProgressView(onEnd: cubit.endWorkout)
+                    ? _InProgressView(
+                        onEnd: cubit.endWorkout,
+                        onDiscard: cubit.discardWorkout,
+                      )
                     : _IdleView(onStart: () => _startWorkout(context));
               },
             ),
@@ -88,9 +91,10 @@ class _IdleView extends StatelessWidget {
 enum _WorkoutAction { save, discard, cancel }
 
 class _InProgressView extends StatelessWidget {
-  const _InProgressView({required this.onEnd});
+  const _InProgressView({required this.onEnd, required this.onDiscard});
 
   final Future<void> Function() onEnd;
+  final Future<void> Function() onDiscard;
 
   @override
   Widget build(BuildContext context) {
@@ -137,7 +141,11 @@ class _InProgressView extends StatelessWidget {
                   ),
               const SizedBox(height: 24),
               FilledButton.icon(
-                onPressed: () => _confirmEnd(context, presentation.setCount),
+                onPressed: () => _confirmEnd(
+                  context,
+                  presentation.setCount,
+                  onDiscard: onDiscard,
+                ),
                 style: FilledButton.styleFrom(
                   backgroundColor: context.theme.colors.error,
                   foregroundColor: context.theme.colors.errorForeground,
@@ -153,7 +161,11 @@ class _InProgressView extends StatelessWidget {
     );
   }
 
-  Future<void> _confirmEnd(BuildContext context, int setCount) async {
+  Future<void> _confirmEnd(
+    BuildContext context,
+    int setCount, {
+    required Future<void> Function() onDiscard,
+  }) async {
     // Zero sets: prompt directly to discard
     if (setCount == 0) {
       final confirmDiscard = await _showDiscardConfirmation(
@@ -161,7 +173,7 @@ class _InProgressView extends StatelessWidget {
         noSets: true,
       );
       if (confirmDiscard && context.mounted) {
-        await onEnd();
+        await onDiscard();
       }
       return;
     }
@@ -176,7 +188,7 @@ class _InProgressView extends StatelessWidget {
         noSets: false,
       );
       if (confirmDiscard && context.mounted) {
-        await onEnd();
+        await onDiscard();
       }
     } else if (action == _WorkoutAction.save) {
       await onEnd();
