@@ -69,6 +69,11 @@ void main() {
 
       expect(find.byIcon(FLucideIcons.chevronLeft), findsOneWidget);
 
+      // A true round-trip (Exercises -> History -> Exercises) rebuilds the
+      // tab root via TabVisibilityScope. Re-selecting the same tab would NOT
+      // do that: _selectTab's same-tab branch pops the nested stack to the
+      // root, removing the subpage this test must keep open.
+      navBar.onChange!(1);
       await tester.pump();
       navBar.onChange!(4);
       await tester.pumpAndSettle();

@@ -7,6 +7,7 @@ import 'package:tracker/domain/models/weight_unit.dart';
 import 'package:tracker/domain/models/workout_set.dart';
 import 'package:tracker/domain/models/workout_split.dart';
 import 'package:tracker/ui/core/ui/custom_app_bar.dart';
+import 'package:tracker/ui/core/ui/keyboard_inset.dart';
 import 'package:tracker/ui/core/ui/max_width.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
 import 'package:tracker/ui/core/ui/weight_format.dart';
@@ -106,7 +107,16 @@ class _InProgressView extends StatelessWidget {
       child: BlocSelector<WorkoutCubit, WorkoutState, _WorkoutPresentation>(
         selector: _WorkoutPresentation.fromState,
         builder: (context, presentation) => Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+          // The bottom padding grows by the keyboard height so the inline
+          // add-set form and the End Workout action can scroll above the
+          // keyboard instead of being clipped by it (the shell Scaffold no
+          // longer resizes for the keyboard).
+          padding: EdgeInsets.fromLTRB(
+            16,
+            16,
+            16,
+            32 + keyboardInsetOf(context),
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[

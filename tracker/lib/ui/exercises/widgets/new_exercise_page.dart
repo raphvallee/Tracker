@@ -4,6 +4,7 @@ import 'package:tracker/ui/core/ui/repository_scope.dart';
 import 'package:tracker/domain/models/exercise.dart';
 import 'package:tracker/domain/models/muscle.dart';
 import 'package:tracker/ui/core/ui/custom_app_bar.dart';
+import 'package:tracker/ui/core/ui/keyboard_inset.dart';
 import 'package:tracker/utils/form_validators.dart';
 import 'package:tracker/ui/core/ui/max_width.dart';
 
@@ -80,7 +81,14 @@ class _NewExercisePageState extends State<NewExercisePage> {
         ),
         SliverToBoxAdapter(
           child: Padding(
-            padding: const EdgeInsets.all(16),
+            // Bottom padding tracks the keyboard so the focused field and the
+            // trailing selects can scroll above it (shell no longer resizes).
+            padding: EdgeInsets.fromLTRB(
+              16,
+              16,
+              16,
+              16 + keyboardInsetOf(context),
+            ),
             child: MaxWidth(
               child: Form(
                 key: _formKey,
