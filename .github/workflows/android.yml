@@ -1,0 +1,81 @@
+name: Android
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      APP_DIR: 'tracker'
+
+    defaults:
+      run:
+        working-directory: ${{ env.APP_DIR }}
+
+    steps:
+    - name: Clone repository
+      uses: actions/checkout@v6
+    - name: Set up Java
+      uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: '17'
+    - name: Set up Flutter
+      uses: subosito/flutter-action@v2
+      with:
+        channel: stable
+        flutter-version-file: tracker/pubspec.yaml
+        architecture: X64
+    - name: Install Dependencies
+      run: flutter pub get
+    - name: Verify generated code
+      run: dart run build_runner build --delete-conflicting-outputs
+    - name: Run Tests
+      run: flutter test
+    - name: Ensure Android SDK
+      # GitHub-hosted runners ship the Android SDK; act's local container image
+      # does not, so install cmdline-tools there (licenses accepted globally so
+      # Gradle can auto-install the missing platform components).
+      run: |
+        if [ -n "$ANDROID_HOME" ] && [ -d "$ANDROID_HOME" ]; then
+          echo "Android SDK found at $ANDROID_HOME"
+          exit 0
+        fi
+        echo "No Android SDK found (local act run). Installing cmdline-tools..."
+        SDK_ROOT="$HOME/android-sdk"
+        curl -sSLo /tmp/cmdline-tools.zip "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip"
+        mkdir -p "$SDK_ROOT/cmdline-tools"
+        unzip -q /tmp/cmdline-tools.zip -d /tmp
+        mv /tmp/cmdline-tools "$SDK_ROOT/cmdline-tools/latest"
+        echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
+        echo "$SDK_ROOT/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+        export ANDROID_HOME="$SDK_ROOT"
+        export PATH="$SDK_ROOT/cmdline-tools/latest/bin:$PATH"
+        yes | sdkmanager --licenses > /dev/null
+    - name: Build APK
+      # Release builds are debug-signed for now (no signing config yet in
+      # android/app/build.gradle.kts), so the APK is installable for testing
+      # but not Play Store ready.
+      run: flutter build apk --release
+    - name: Extract version
+      id: version
+      run: echo "version=$(grep -m1 '^version:' pubspec.yaml | sed 's/version:[[:space:]]*//')" >> "$GITHUB_OUTPUT"
+    - name: Rename APK
+      run: cp build/app/outputs/flutter-apk/app-release.apk tracker-${{ steps.version.outputs.version }}-android.apk
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: tracker-android
+        path: tracker/tracker-*-android.apk
+    - name: Attach to release
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v2
+      with:
+        files: tracker/tracker-*-android.apk
