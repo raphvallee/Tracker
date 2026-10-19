@@ -364,13 +364,11 @@ void main() {
           });
 
       await openAndClose(
-        'Graph editor dialog',
-        () => showFDialog<void>(
-          context: pageContext,
-          builder: (_, _, _) => GraphEditor(
-            exercises: fixtures.exercises,
-            initial: const GraphConfig(title: 'Strength - upper body'),
-          ),
+        'Graph editor sheet',
+        () => GraphEditor.show(
+          pageContext,
+          exercises: fixtures.exercises,
+          initial: const GraphConfig(title: 'Strength - upper body'),
         ),
       );
       await openAndClose(

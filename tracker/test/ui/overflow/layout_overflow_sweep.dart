@@ -239,13 +239,11 @@ Future<void> sweepSize(WidgetTester tester, String label, Size size) async {
   }
 
   await openAndClose(
-    'GraphEditor dialog',
-    () => showFDialog<void>(
-      context: pageContext,
-      builder: (_, _, _) => GraphEditor(
-        exercises: sweepFixtures.exercises,
-        initial: const GraphConfig(title: 'Strength - upper body'),
-      ),
+    'GraphEditor sheet',
+    () => GraphEditor.show(
+      pageContext,
+      exercises: sweepFixtures.exercises,
+      initial: const GraphConfig(title: 'Strength - upper body'),
     ),
   );
   await openAndClose(

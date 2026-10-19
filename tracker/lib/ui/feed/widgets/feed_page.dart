@@ -11,7 +11,6 @@ import 'package:tracker/ui/core/ui/custom_app_bar.dart';
 import 'package:tracker/ui/core/ui/custom_route.dart';
 import 'package:tracker/ui/feed/widgets/feed_page_graph_card.dart';
 import 'package:tracker/ui/history/widgets/session_detail_page.dart';
-import 'package:tracker/domain/models/graph_config.dart';
 import 'package:tracker/ui/settings/view_models/settings_cubit.dart';
 import 'package:tracker/ui/core/ui/weight_format.dart';
 import 'package:tracker/ui/settings/widgets/settings_page.dart';
@@ -58,12 +57,10 @@ class _FeedPageState extends State<FeedPage> {
   Future<void> _editGraph({int? index}) async {
     final settings = _settings;
     if (settings == null) return;
-    final result = await showFDialog<GraphConfig>(
-      context: context,
-      builder: (_, _, _) => GraphEditor(
-        initial: index == null ? null : settings.state.graphs[index],
-        exercises: _exercises,
-      ),
+    final result = await GraphEditor.show(
+      context,
+      initial: index == null ? null : settings.state.graphs[index],
+      exercises: _exercises,
     );
     if (!mounted || result == null) return;
     if (index == null) {
@@ -75,45 +72,59 @@ class _FeedPageState extends State<FeedPage> {
 
   Widget _analyticsSection(BuildContext context) {
     final settings = _settings;
-    final graphs = settings?.state.graphs ?? const <GraphConfig>[];
+    final header = Row(
+      children: [
+        Expanded(
+          child: Text(
+            'Analytics',
+            style: context.theme.typography.body.xl.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        TextButton.icon(
+          onPressed: _editGraph,
+          icon: const Icon(FLucideIcons.plus),
+          label: const Text('Add graph'),
+        ),
+      ],
+    );
+    if (settings == null) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [header],
+        ),
+      );
+    }
+    // BlocBuilder so a saved graph appears immediately: `context.read`
+    // alone never re-renders when the settings state changes.
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'Analytics',
-                  style: context.theme.typography.body.xl.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+      child: BlocBuilder<SettingsCubit, SettingsState>(
+        bloc: settings,
+        builder: (context, state) => Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            header,
+            for (var i = 0; i < state.graphs.length; i++)
+              FeedGraphCard(
+                config: state.graphs[i],
+                sessions: _allSessions,
+                multipliers: _multipliers,
+                exerciseName: state.graphs[i].exerciseId == null
+                    ? 'All exercises'
+                    : _exercises
+                              .where((e) => e.id == state.graphs[i].exerciseId)
+                              .map((e) => e.title)
+                              .firstOrNull ??
+                          'Exercise',
+                onEdit: () => _editGraph(index: i),
+                onDelete: () => settings.removeGraph(i),
               ),
-              TextButton.icon(
-                onPressed: _editGraph,
-                icon: const Icon(FLucideIcons.plus),
-                label: const Text('Add graph'),
-              ),
-            ],
-          ),
-          for (var i = 0; i < graphs.length; i++)
-            FeedGraphCard(
-              config: graphs[i],
-              sessions: _allSessions,
-              multipliers: _multipliers,
-              exerciseName: graphs[i].exerciseId == null
-                  ? 'All exercises'
-                  : _exercises
-                            .where((e) => e.id == graphs[i].exerciseId)
-                            .map((e) => e.title)
-                            .firstOrNull ??
-                        'Exercise',
-              onEdit: () => _editGraph(index: i),
-              onDelete: () => settings?.removeGraph(i),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }
