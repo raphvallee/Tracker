@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show SystemNavigator;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:forui/forui.dart';
 import 'package:tracker/ui/workout/view_models/workout_cubit.dart';
@@ -24,6 +25,12 @@ class _HomePageState extends State<HomePage> {
     (index) => GlobalKey<NavigatorState>(),
   );
   final Set<int> _visited = {0};
+
+  Future<bool> _handlePop() async {
+    final navigator = _navigatorKeys[_currentIndex].currentState;
+    if (navigator != null && await navigator.maybePop()) return true;
+    return false;
+  }
 
   void _selectTab(int index) {
     if (index != _currentIndex) {
@@ -93,56 +100,65 @@ class _HomePageState extends State<HomePage> {
     // input was focused. With `false` the keyboard simply overlays the shell
     // while pages pad their scrollable content by MediaQuery.viewInsets so the
     // focused field and primary actions stay reachable above the keyboard.
-    return Scaffold(
-      resizeToAvoidBottomInset: false,
-      body: Stack(
-        children: [
-          for (final index in visited)
-            _buildOffstageNavigator(index, _pageFor(index)),
-        ],
-      ),
-      bottomNavigationBar: FBottomNavigationBar(
-        index: _currentIndex,
-        onChange: _selectTab,
-        children: <Widget>[
-          const FBottomNavigationBarItem(
-            key: ValueKey('feed-tab'),
-            icon: Icon(FLucideIcons.house),
-            label: Text('Feed'),
-            semanticsLabel: 'Feed',
-          ),
-          const FBottomNavigationBarItem(
-            key: ValueKey('history-tab'),
-            icon: Icon(FLucideIcons.history),
-            label: Text('History'),
-            semanticsLabel: 'History',
-          ),
-          BlocBuilder<WorkoutCubit, WorkoutState>(
-            builder: (context, state) => FBottomNavigationBarItem(
-              key: const ValueKey('workout-tab'),
-              icon: Transform.translate(
-                offset: const Offset(0, -6),
-                child: const Icon(FLucideIcons.dumbbell),
-              ),
-              label: const Text('Workout'),
-              semanticsLabel: state.isInProgress
-                  ? 'Workout in progress'
-                  : 'Workout',
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        if (await _handlePop()) return;
+
+        SystemNavigator.pop();
+      },
+      child: Scaffold(
+        resizeToAvoidBottomInset: false,
+        body: Stack(
+          children: [
+            for (final index in visited)
+              _buildOffstageNavigator(index, _pageFor(index)),
+          ],
+        ),
+        bottomNavigationBar: FBottomNavigationBar(
+          index: _currentIndex,
+          onChange: _selectTab,
+          children: <Widget>[
+            const FBottomNavigationBarItem(
+              key: ValueKey('feed-tab'),
+              icon: Icon(FLucideIcons.house),
+              label: Text('Feed'),
+              semanticsLabel: 'Feed',
             ),
-          ),
-          const FBottomNavigationBarItem(
-            key: ValueKey('editor-tab'),
-            icon: Icon(FLucideIcons.notebookText),
-            label: Text('Editor'),
-            semanticsLabel: 'Editor',
-          ),
-          const FBottomNavigationBarItem(
-            key: ValueKey('exercises-tab'),
-            icon: Icon(FLucideIcons.personStanding),
-            label: Text('Exercises'),
-            semanticsLabel: 'Exercises',
-          ),
-        ],
+            const FBottomNavigationBarItem(
+              key: ValueKey('history-tab'),
+              icon: Icon(FLucideIcons.history),
+              label: Text('History'),
+              semanticsLabel: 'History',
+            ),
+            BlocBuilder<WorkoutCubit, WorkoutState>(
+              builder: (context, state) => FBottomNavigationBarItem(
+                key: const ValueKey('workout-tab'),
+                icon: Transform.translate(
+                  offset: const Offset(0, -6),
+                  child: const Icon(FLucideIcons.dumbbell),
+                ),
+                label: const Text('Workout'),
+                semanticsLabel: state.isInProgress
+                    ? 'Workout in progress'
+                    : 'Workout',
+              ),
+            ),
+            const FBottomNavigationBarItem(
+              key: ValueKey('editor-tab'),
+              icon: Icon(FLucideIcons.notebookText),
+              label: Text('Editor'),
+              semanticsLabel: 'Editor',
+            ),
+            const FBottomNavigationBarItem(
+              key: ValueKey('exercises-tab'),
+              icon: Icon(FLucideIcons.personStanding),
+              label: Text('Exercises'),
+              semanticsLabel: 'Exercises',
+            ),
+          ],
+        ),
       ),
     );
   }
