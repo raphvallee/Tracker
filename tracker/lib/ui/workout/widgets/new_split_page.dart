@@ -97,17 +97,30 @@ class _SplitEditorPageState extends State<SplitEditorPage> {
     final template = await showFSheet<WorkoutSplitTemplate>(
       context: context,
       side: .btt,
-      builder: (context) => ListView(
-        shrinkWrap: true,
-        children: [
-          for (final template in workoutSplitTemplates)
-            FItem(
-              title: Text(template.title),
-              subtitle: Text('${template.days.length} days'),
-              onPress: () => Navigator.of(context).pop(template),
-            ),
-        ],
-      ),
+      // showFSheet paints no surface of its own (see gym_picker.dart), so the
+      // sheet paints an opaque themed background with rounded top corners.
+      builder: (context) {
+        final radius = context.theme.style.borderRadius.lg.topLeft.x;
+        return Container(
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            color: context.theme.colors.background,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(radius)),
+          ),
+          padding: const EdgeInsets.only(top: 8),
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              for (final template in workoutSplitTemplates)
+                FItem(
+                  title: Text(template.title),
+                  subtitle: Text('${template.days.length} days'),
+                  onPress: () => Navigator.of(context).pop(template),
+                ),
+            ],
+          ),
+        );
+      },
     );
     if (template != null && mounted) {
       setState(() {
