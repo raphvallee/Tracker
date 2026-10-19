@@ -33,12 +33,5 @@ dev_dependencies:
   husky: ^0.1.7
   forui_cli: ^0.26.0
 
-# path_provider_android 2.3.x depends on package:jni 1.0.x, whose JList/JMap
-# extension-type wrappers fail to compile in Flutter builds (dart-lang/native
-# issue #3235; no fixed release exists as of jni 1.0.3). Pin to the pre-jni
-# 2.2.x line (MethodChannel-based) to keep the broken packages out of the build.
-dependency_overrides:
-  path_provider_android: ">=2.2.0 <2.3.0"
-
 flutter:
   uses-material-design: true

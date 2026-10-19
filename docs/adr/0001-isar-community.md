@@ -24,9 +24,10 @@ community-maintained, which is a long-term liability:
   releases page is checked manually when touching persistence, and before any
   store submission. A dependabot config for `tracker/` is an approved-but-not-
   scheduled Phase 1 nice-to-have.
-- The `dependency_overrides` pin `path_provider_android <2.3.0` (works around a
+- ~~The `dependency_overrides` pin `path_provider_android <2.3.0` (works around a
   `jni` 1.0.x compile break) is re-verified on every minor bump of
-  `path_provider_android`.
+  `path_provider_android`.~~ Retired 2026-10-19: `jni 1.1.0` fixed the compile
+  break (dart-lang/native#3235) and the pin was removed.
 
 ## Escape hatch (if the fork dies or an unpatched security issue appears)
 

@@ -16,7 +16,7 @@ top to bottom, no reordering needed
 - **`isar_community` fork risk.** The app depends on a community-maintained fork (`isar_community ^3.3.2`) of a stalled upstream project. This is a long-term maintenance liability to manage explicitly.
 - **Five platforms = five packaging/signing pipelines.** Android and iOS are the established paths; macOS notarization, Windows code signing, and Linux packaging each have their own prerequisites.
 - **Known current-state gates** (from CLAUDE.md / memory): batch 3 UI fixes remain; some features incomplete or absent; `tracker/ios/Podfile.lock` possibly stale; test-only `libisar.dylib` copy in `tracker/` (gitignored, fine, but keep it out of release tooling).
-- **Dependency pin is load-bearing:** `dependency_overrides: path_provider_android <2.3.0` works around a `jni` 1.0.x compile break. Re-verify when `path_provider_android` 2.3.x+ ships a fixed `jni`.
+- **Dependency pin retired:** the former `dependency_overrides: path_provider_android <2.3.0` pin (workaround for the `jni` 1.0.x compile break) was removed 2026-10-19. `jni 1.1.0` fixed dart-lang/native issue #3235; the app now builds on `path_provider_android 2.3.1` + `jni 1.1.0` unmodified.
 
 ### Decisions (2026-09-02)
 
@@ -89,7 +89,7 @@ zero TODO/FIXME in `lib/`; `libisar.dylib` gitignored and out of release tooling
 
   Read via `const String.fromEnvironment('APP_ENV', defaultValue: 'dev')`. Use it to force dev seed data, verbose logging, and debug-only affordances off in prod. *(Done 2026-09-03: `lib/data/services/app_env.dart`; wired to AppLog verbosity + prod ErrorWidget fallback.)*
 - [x] **Toolchain pinning.** `pubspec.yaml` already pins Flutter 3.47.2; ensure CI and local docs match, and record intended Dart SDK upper bound. *(Verified 2026-09-03: CI reads `flutter-version-file: tracker/pubspec.yaml`; SDK bound `>=3.13.2 <4.0.0`.)*
-- [x] **Re-verify `path_provider_android` override** each minor bump (`jni` issue #3235 may get a fixed release; the comment in `pubspec.yaml` documents it). *(Verified 2026-09-03: `path_provider_android` 2.3.1 still pulls `jni ^1.0.0`, latest `jni 1.0.3` still broken - override `<2.3.0` stays, lockfile holds 2.2.23.)*
+- [x] **Re-verify `path_provider_android` override** each minor bump (`jni` issue #3235 may get a fixed release; the comment in `pubspec.yaml` documents it). *(Verified 2026-09-03: `path_provider_android` 2.3.1 still pulls `jni ^1.0.0`, latest `jni 1.0.3` still broken - override `<2.3.0` stays, lockfile holds 2.2.23.)* **(Closed 2026-10-19: `jni 1.1.0` ships the #3235 fix; override removed, lockfile holds `path_provider_android 2.3.1` + `jni 1.1.0`. Android debug apk builds and the full test suite passes. Note 2.3.x switched the Android implementation from Pigeon to JNI - smoke-test the documents-dir call on a device once.)**
 
 ---
 
