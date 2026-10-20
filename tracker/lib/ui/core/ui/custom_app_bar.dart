@@ -18,6 +18,7 @@ class CustomAppBar extends StatelessWidget {
       pinned: true,
       snap: false,
       floating: false,
+      toolbarHeight: 48,
       automaticallyImplyLeading: false,
       titleSpacing: 16,
       title: Row(
