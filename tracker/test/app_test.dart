@@ -41,11 +41,11 @@ void main() {
       // resolves to a buildable screen.
       expect(find.text('Progression'), findsOneWidget);
 
-      expect(find.text('Go to Current Workout'), findsOneWidget);
+      expect(find.text('Go to Current Workout'), findsNothing);
       cubit.startWorkout();
       expect(cubit.state.isInProgress, isTrue);
       await tester.pumpAndSettle();
-      expect(find.text('Go to Current Workout'), findsNothing);
+      expect(find.text('Go to Current Workout'), findsOneWidget);
 
       // Drive tab switches through onChange rather than hit-testing, which is
       // brittle under the Offstage navigators.

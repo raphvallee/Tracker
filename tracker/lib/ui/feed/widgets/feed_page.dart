@@ -221,7 +221,7 @@ class _FeedPageState extends State<FeedPage> {
         slivers.add(
           BlocBuilder<WorkoutCubit, WorkoutState>(
             builder: (context, state) {
-              if (state.isInProgress) return const SliverToBoxAdapter();
+              if (!state.isInProgress) return const SliverToBoxAdapter();
               return SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
