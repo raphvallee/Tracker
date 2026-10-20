@@ -26,7 +26,12 @@ Future<void> initIsarCore() async {
     libraries: {
       Abi.windowsX64: 'test/assets/isar_windows_x64.dll',
       Abi.linuxX64: 'test/assets/libisar_linux_x64.so',
+      // The vendored dylib is a universal binary (x64 + arm64), so both macOS
+      // ABIs point at the same file. Without an arm64 entry, isar_community
+      // falls back to a bare `libisar_macos_arm64.dylib` lookup and fails
+      // (Apple Silicon Macs and arm64 CI runners).
       Abi.macosX64: 'test/assets/libisar_macos.dylib',
+      Abi.macosArm64: 'test/assets/libisar_macos.dylib',
     },
   );
 }
