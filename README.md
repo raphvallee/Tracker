@@ -21,6 +21,15 @@ without hiding the page with a floating action button or something of the sort.
 - [x] Move settings to Feed
 - [ ] Add Current Workout to navigation
 
+## Commit messages
+
+Commits MUST follow [Conventional Commits](https://www.conventionalcommits.org/):
+`type(scope): description`. Allowed types: `feat`, `fix`, `docs`, `style`,
+`refactor`, `perf`, `test`, `build`, `ci`, `chore`, `revert`; `scope` is
+optional. Examples: `feat(workout): add warmup set toggle`, `fix: clamp chart
+height`. Subject is lowercase, imperative, no trailing period. This applies
+to everyone contributing to the repo, including coding agents.
+
 ## Git hooks
 
 This repo uses **Husky (the Dart package, pub.dev)** to run a `pre-commit`

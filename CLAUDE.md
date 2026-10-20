@@ -42,6 +42,13 @@ cd tracker && flutter test
 cd tracker && dart run build_runner build
 ```
 
+**Commit messages.** All commits (from agents and human contributors
+alike) MUST follow [Conventional Commits](https://www.conventionalcommits.org/):
+`type(scope): description`. Allowed types: `feat`, `fix`, `docs`, `style`,
+`refactor`, `perf`, `test`, `build`, `ci`, `chore`, `revert`; `scope` is
+optional (e.g. `feat(workout): add warmup set toggle`, `fix: clamp chart
+height`). Subject is lowercase, imperative, no trailing period.
+
 **Git hooks.** Husky (Dart package on pub.dev, not npm) runs a `pre-commit`
 hook that formats code with `dart fix --apply` then `dart format .`. The
 hook lives at repo-root `.husky/pre-commit` (committed, so it's
