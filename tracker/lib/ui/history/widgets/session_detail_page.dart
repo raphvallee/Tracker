@@ -1,15 +1,23 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
+import 'package:tracker/data/repositories/tracker_repository.dart';
+import 'package:tracker/data/services/app_log.dart';
 import 'package:tracker/domain/models/workout_session.dart';
 import 'package:tracker/domain/models/workout_set.dart';
 import 'package:tracker/ui/core/ui/custom_app_bar.dart';
+import 'package:tracker/ui/core/ui/custom_route.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
 import 'package:tracker/ui/core/ui/weight_format.dart';
+import 'package:tracker/ui/history/widgets/session_edit_page.dart';
 
 /// Full view of a single past [WorkoutSession] (Plan.md §1.2): header stats
 /// plus every logged set with its warm-up/working indicator and working volume.
 ///
 /// Reached from the history list and the calendar's day logs (Checkpoint 5).
+/// Offers Edit (a past-session editor that persists through the session
+/// repository) and Delete (with a confirmation dialog).
 class SessionDetailPage extends StatefulWidget {
   const SessionDetailPage({super.key, required this.session, this.gymName});
 
@@ -23,8 +31,19 @@ class SessionDetailPage extends StatefulWidget {
 }
 
 class _SessionDetailPageState extends State<SessionDetailPage> {
+  // Tracks edits/deletes made after this page was opened; the widget's session
+  // is just the snapshot the caller had.
+  late WorkoutSession _session;
+  String? _gymName;
   Map<int, String> _exerciseNames = const {};
   bool _didLoad = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _session = widget.session;
+    _gymName = widget.gymName;
+  }
 
   @override
   void didChangeDependencies() {
@@ -45,10 +64,115 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
     });
   }
 
+  Future<void> _resolveGymName() async {
+    final gymId = _session.gymId;
+    if (gymId == null) {
+      setState(() => _gymName = null);
+      return;
+    }
+    final gym = await RepositoryScope.maybeOf(context)?.gyms.getById(gymId);
+    if (!mounted) return;
+    setState(() => _gymName = gym?.name);
+  }
+
+  /// Opens the editor, applies its draft optimistically and persists through
+  /// the repository (error-surfacing contract for writes, mirroring the
+  /// workout cubit: a failed save keeps the edited view and toasts once).
+  Future<void> _edit() async {
+    final repo = RepositoryScope.maybeOf(context);
+    final updated = await pushTo(context, SessionEditPage(session: _session));
+    if (updated == null) return;
+    setState(() => _session = updated);
+    await _resolveGymName();
+    if (repo == null) return;
+    unawaited(_persist(repo, updated));
+  }
+
+  Future<void> _persist(TrackerRepository repo, WorkoutSession updated) async {
+    try {
+      await repo.sessions.put(updated);
+      await _refresh(repo);
+    } catch (error, stackTrace) {
+      AppLog.error('history-edit', error, stackTrace);
+      if (!mounted) return;
+      showFToast(
+        context: context,
+        title: const Text('Could not save the changes.'),
+        duration: const Duration(seconds: 4),
+      );
+    }
+  }
+
+  /// Re-reads the session after a save lands so the page reflects what was
+  /// actually persisted (and keeps gym names fresh if the gym was edited).
+  Future<void> _refresh(TrackerRepository repo) async {
+    final fresh = await repo.sessions.getById(_session.id);
+    if (!mounted) return;
+    setState(() => _session = fresh ?? _session);
+    await _resolveGymName();
+  }
+
+  /// Deletes the session (and its embedded sets) permanently after
+  /// confirmation, pops back to the list immediately and removes the record
+  /// through the repository in the background (the lists refresh via their
+  /// watch streams).
+  Future<void> _delete() async {
+    final repo = RepositoryScope.maybeOf(context);
+    if (repo == null) return;
+    final confirmed = await showFDialog<bool>(
+      context: context,
+      builder: (dialogContext, _, _) => FDialog(
+        builder: (context, style) => Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('Delete session?', style: style.titleTextStyle),
+            const SizedBox(height: 8),
+            Text(
+              'This permanently removes "${_session.title}" and all its sets '
+              'from history.',
+              style: style.bodyTextStyle,
+            ),
+            const SizedBox(height: 24),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              alignment: WrapAlignment.end,
+              children: [
+                FButton(
+                  variant: .outline,
+                  onPress: () => Navigator.of(dialogContext).pop(false),
+                  child: const Text('Cancel'),
+                ),
+                FButton(
+                  onPress: () => Navigator.of(dialogContext).pop(true),
+                  child: const Text('Delete'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+    // ignore: avoid_print
+    print('DEBUG confirmed=$confirmed mounted=$mounted');
+    if (confirmed != true) return;
+    // Let the dialog route finish leaving the navigator before popping this
+    // page, so pop() lands on the detail route and not the dialog.
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    if (mounted) Navigator.of(context).pop();
+    try {
+      await repo.sessions.delete(_session.id);
+    } catch (error, stackTrace) {
+      // The user already left the page; the session simply stays in history.
+      AppLog.error('history-delete', error, stackTrace);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = context.theme;
-    final session = widget.session;
+    final session = _session;
     final workingSets = session.sets.where((s) => !s.isWarmup).toList();
     final workingVolume = workingSets.fold<double>(
       0,
@@ -57,14 +181,18 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
 
     return CustomScrollView(
       slivers: <Widget>[
-        CustomAppBar(context, title: session.title),
+        CustomAppBar(
+          context,
+          title: session.title,
+          actionButton: (title: 'Edit', onPressed: _edit),
+        ),
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
-                _HeaderCard(session: session, gymName: widget.gymName),
+                _HeaderCard(session: session, gymName: _gymName),
                 const SizedBox(height: 12),
                 IntrinsicHeight(
                   child: Row(
@@ -97,6 +225,17 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
                           'Exercise ${set.exerciseId}',
                       set: set,
                     ),
+                const SizedBox(height: 24),
+                FilledButton.icon(
+                  onPressed: _delete,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: theme.colors.error,
+                    foregroundColor: theme.colors.errorForeground,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
+                  icon: const Icon(FLucideIcons.trash2),
+                  label: const Text('Delete session'),
+                ),
               ],
             ),
           ),
