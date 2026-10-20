@@ -88,7 +88,7 @@ zero TODO/FIXME in `lib/`; `libisar.dylib` gitignored and out of release tooling
   ```
 
   Read via `const String.fromEnvironment('APP_ENV', defaultValue: 'dev')`. Use it to force dev seed data, verbose logging, and debug-only affordances off in prod. *(Done 2026-09-03: `lib/data/services/app_env.dart`; wired to AppLog verbosity + prod ErrorWidget fallback.)*
-- [x] **Toolchain pinning.** `pubspec.yaml` already pins Flutter 3.47.2; ensure CI and local docs match, and record intended Dart SDK upper bound. *(Verified 2026-09-03: CI reads `flutter-version-file: tracker/pubspec.yaml`; SDK bound `>=3.13.2 <4.0.0`.)*
+- [x] **Toolchain pinning.** `pubspec.yaml` already pins Flutter 3.47.7; ensure CI and local docs match, and record intended Dart SDK upper bound. *(Verified 2026-09-03: CI reads `flutter-version-file: tracker/pubspec.yaml`; SDK bound `>=3.13.2 <4.0.0`.)*
 - [x] **Re-verify `path_provider_android` override** each minor bump (`jni` issue #3235 may get a fixed release; the comment in `pubspec.yaml` documents it). *(Verified 2026-09-03: `path_provider_android` 2.3.1 still pulls `jni ^1.0.0`, latest `jni 1.0.3` still broken - override `<2.3.0` stays, lockfile holds 2.2.23.)* **(Closed 2026-10-19: `jni 1.1.0` ships the #3235 fix; override removed, lockfile holds `path_provider_android 2.3.1` + `jni 1.1.0`. Android debug apk builds and the full test suite passes. Note 2.3.x switched the Android implementation from Pigeon to JNI - smoke-test the documents-dir call on a device once.)**
 
 ---
@@ -114,7 +114,7 @@ zero TODO/FIXME in `lib/`; `libisar.dylib` gitignored and out of release tooling
   ```
 
   If misaligned: bump the fork / rebuild its native core / plan migration. Repeat for `libisar.so` in each ABI.
-- [ ] **Target SDK current.** Use the newest `targetSdkVersion` Play requires this year (check Play Console's current deadline - it advances annually). Flutter 3.47.2 sets this per build config.
+- [ ] **Target SDK current.** Use the newest `targetSdkVersion` Play requires this year (check Play Console's current deadline - it advances annually). Flutter sets this per build config.
 
 ### High Priority
 
