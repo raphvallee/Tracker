@@ -91,6 +91,14 @@ The README records intended refactors/features, not current behavior; several ar
 
 `run-github-actions-locally.ps1` is a cross-platform (Windows/macOS/Linux) PowerShell script that ensures an Internet connection, then installs (if needed) the `act` CLI (nektos/act) and Docker, starts Docker Desktop/systemctl, then runs the GitHub Actions workflow locally. It self-elevates via `sudo`/RunAs. macOS support is partial and untested. Run as: `pwsh run-github-actions-locally.ps1`.
 
+## Capturing screenshots/videos of the app (fixed procedure)
+
+**Never research capture methods** - follow `docs/CAPTURING_MEDIA.md`. Static
+page screenshots: `pwsh run-visual-tests.ps1` (Tier 1). Screenshots of
+interactive states and all videos: write an integration test that drives the
+app and run `pwsh ./capture-app-media.ps1 -Mode video -Test ...` (Tier 2).
+A working Tier 2 template lives at `tracker/integration_test/capture_smoke_test.dart`.
+
 ## Visual debugging screenshots (widget-test sweep)
 
 `pwsh run-visual-tests.ps1` (repo root) renders every app page, dialog and sheet at 320x568, 800x600 and 1280x720 with real Inter text and Lucide/Material icon fonts, writing ~66 PNGs plus `manifest.json` to `tracker/build/test_screenshots/` (gitignored). Exit code = flutter test exit code. The sweep also runs on Linux CI via bare `flutter test`.
