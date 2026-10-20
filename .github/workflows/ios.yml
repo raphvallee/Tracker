@@ -47,7 +47,7 @@ jobs:
       run: |
         mkdir Payload
         cp -R build/ios/iphoneos/Runner.app Payload/
-        zip -qr ../tracker-${{ steps.version.outputs.version }}-ios.ipa Payload
+        zip -qr tracker-${{ steps.version.outputs.version }}-ios.ipa Payload
     - name: Create source archive
       # git archive includes every tracked file in the repo; the zip is written
       # to the workspace root so the release paths stay flat.
