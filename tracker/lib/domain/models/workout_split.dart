@@ -86,6 +86,34 @@ extension PlannedSetX on PlannedSet {
   String get repsLabel => maxReps == null ? '$minReps' : '$minReps-$maxReps';
 }
 
+/// Whether two exercise lists are content-identical: same exercises in the
+/// same order with the same planned sets (rep values per set). Stale
+/// positional `order` fields are ignored - the editors re-index them on save
+/// - so a remove-then-re-add of an identical row does not read as a change.
+/// Used to detect unsaved changes when leaving a split editor without saving.
+bool exercisePlanEquals(List<ExerciseItem> a, List<ExerciseItem> b) {
+  if (a.length != b.length) return false;
+  for (var i = 0; i < a.length; i++) {
+    if (a[i].exerciseId != b[i].exerciseId) return false;
+    if (a[i].sets.length != b[i].sets.length) return false;
+    for (var j = 0; j < a[i].sets.length; j++) {
+      if (a[i].sets[j].minReps != b[i].sets[j].minReps ||
+          a[i].sets[j].maxReps != b[i].sets[j].maxReps) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+/// Whether two split days are content-identical: same title, description and
+/// exercise plan (see [exercisePlanEquals]). Used to detect unsaved changes
+/// when leaving the split editor without saving.
+bool splitDayPlanEquals(WorkoutSplitDay a, WorkoutSplitDay b) =>
+    a.title == b.title &&
+    a.description == b.description &&
+    exercisePlanEquals(a.exercises, b.exercises);
+
 /// Compact summary of an exercise's planned sets, e.g. `3 × 8-12` or
 /// `3 × 10, 8-12` when the sets differ. Null when there are no sets.
 String? plannedSetsSummary(List<PlannedSet> sets) {

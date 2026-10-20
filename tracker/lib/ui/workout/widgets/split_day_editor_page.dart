@@ -6,6 +6,7 @@ import 'package:tracker/ui/core/ui/custom_app_bar.dart';
 import 'package:tracker/ui/core/ui/custom_route.dart';
 import 'package:tracker/ui/core/ui/keyboard_inset.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
+import 'package:tracker/ui/core/ui/unsaved_changes_dialog.dart';
 import 'package:tracker/ui/settings/view_models/settings_cubit.dart';
 import 'package:tracker/ui/workout/widgets/exercise_picker_page.dart';
 import 'package:tracker/utils/form_validators.dart';
@@ -33,6 +34,15 @@ class _SplitDayEditorPageState extends State<SplitDayEditorPage> {
   bool _didLoad = false;
   String? _titleError;
 
+  /// Snapshot of the day as seeded; compared against the live draft to
+  /// detect unsaved changes when the user tries to leave without saving.
+  WorkoutSplitDay? _initial;
+
+  /// Cached dirty flag driving [PopScope.canPop]. Kept in sync through
+  /// [_refreshPopGuard] instead of a full rebuild on every keystroke, so
+  /// set-row validation errors (cleared in didUpdateWidget) survive typing.
+  bool _dirty = false;
+
   SettingsState get _settings =>
       SettingsCubit.maybeOf(context)?.state ?? SettingsState();
 
@@ -46,6 +56,38 @@ class _SplitDayEditorPageState extends State<SplitDayEditorPage> {
     // exercise always has at least one set. The set lists are copied so the
     // editor never mutates the caller's day object.
     _items = [for (final item in widget.day.exercises) _withSeededSets(item)];
+    _initial = _snapshot();
+    _dirty = false;
+  }
+
+  /// A normalized copy of the current draft, used as the dirty-check
+  /// baseline. Normalization mirrors [_save] (trimmed texts, reindexed
+  /// orders) so only content differences read as unsaved changes.
+  WorkoutSplitDay _snapshot() => WorkoutSplitDay(
+    title: _title.text.trim(),
+    description: _description.text.trim(),
+    exercises: [
+      for (var i = 0; i < _items.length; i++)
+        ExerciseItem(
+          exerciseId: _items[i].exerciseId,
+          order: i,
+          sets: List.of(_items[i].sets),
+        ),
+    ],
+  );
+
+  /// True when the draft differs from what was seeded (see [_initial]):
+  /// title, description, exercises, or their planned sets.
+  bool get _hasUnsavedChanges => _dirty;
+
+  /// Recomputes the dirty flag and rebuilds only when it flips, so per-
+  /// keystroke rebuilds do not disturb the set rows' editing state.
+  void _refreshPopGuard() {
+    final initial = _initial;
+    final dirty = initial != null && !splitDayPlanEquals(_snapshot(), initial);
+    if (dirty != _dirty) {
+      setState(() => _dirty = dirty);
+    }
   }
 
   /// Returns a copy of [item] with its set list guaranteed non-empty. Items
@@ -136,6 +178,7 @@ class _SplitDayEditorPageState extends State<SplitDayEditorPage> {
           ),
         );
       });
+      _refreshPopGuard();
     }
   }
 
@@ -157,12 +200,14 @@ class _SplitDayEditorPageState extends State<SplitDayEditorPage> {
         );
       }
     });
+    _refreshPopGuard();
   }
 
   void _removeSet(int exerciseIndex, int setIndex) {
     // Mandatory sets: never remove an exercise's last remaining set.
     if (_items[exerciseIndex].sets.length <= 1) return;
     setState(() => _items[exerciseIndex].sets.removeAt(setIndex));
+    _refreshPopGuard();
   }
 
   /// Commits an edited set into [_items] without a parent rebuild: the row
@@ -170,6 +215,9 @@ class _SplitDayEditorPageState extends State<SplitDayEditorPage> {
   /// could disturb focus while typing).
   void _onSetChanged(int exerciseIndex, int setIndex, PlannedSet set) {
     _items[exerciseIndex].sets[setIndex] = set;
+    // The row owns its text fields, so only refresh the PopScope discard
+    // guard; a full rebuild here would clear the row's inline errors.
+    _refreshPopGuard();
   }
 
   /// Normalizes a degenerate range (max <= min) to a fixed set.
@@ -211,65 +259,88 @@ class _SplitDayEditorPageState extends State<SplitDayEditorPage> {
 
   @override
   Widget build(BuildContext context) {
-    return CustomScrollView(
-      slivers: <Widget>[
-        CustomAppBar(
-          context,
-          title: _title.text.isEmpty ? 'Edit Day' : _title.text,
-          actionButton: (title: 'Done', onPressed: _save),
-        ),
-        SliverToBoxAdapter(
-          child: Padding(
-            // Bottom padding tracks the keyboard so the fields and the
-            // planned-set editors can scroll above it (shell no longer
-            // resizes for the keyboard).
-            padding: EdgeInsets.fromLTRB(
-              16,
-              16,
-              16,
-              16 + keyboardInsetOf(context),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: <Widget>[
-                FTextField(
-                  control: FTextFieldControl.managed(
-                    controller: _title,
-                    onChange: (_) => setState(() => _titleError = null),
-                  ),
-                  label: const Text('Day name'),
-                  error: _titleError == null ? null : Text(_titleError!),
-                ),
-                const SizedBox(height: 16),
-                FTextField(
-                  control: FTextFieldControl.managed(controller: _description),
-                  label: const Text('Description (optional)'),
-                  minLines: 1,
-                  maxLines: null,
-                  keyboardType: TextInputType.multiline,
-                ),
-                const SizedBox(height: 24),
-                Row(
-                  children: <Widget>[
-                    Text('Exercises', style: context.theme.typography.body.md),
-                    const Spacer(),
-                    OutlinedButton.icon(
-                      onPressed: _addExercise,
-                      icon: const Icon(FLucideIcons.plus, size: 18),
-                      label: const Text('Add'),
+    return PopScope(
+      // Guard back navigation (app-bar chevron and system back) so a day
+      // with unsaved changes asks before being thrown away. Done pops the
+      // edited day through _save, which is not intercepted.
+      canPop: !_hasUnsavedChanges,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        final navigator = Navigator.of(context);
+        if (await confirmDiscardUnsavedChanges(context) && mounted) {
+          navigator.pop();
+        }
+      },
+      child: CustomScrollView(
+        slivers: <Widget>[
+          CustomAppBar(
+            context,
+            title: _title.text.isEmpty ? 'Edit Day' : _title.text,
+            actionButton: (title: 'Done', onPressed: _save),
+          ),
+          SliverToBoxAdapter(
+            child: Padding(
+              // Bottom padding tracks the keyboard so the fields and the
+              // planned-set editors can scroll above it (shell no longer
+              // resizes for the keyboard).
+              padding: EdgeInsets.fromLTRB(
+                16,
+                16,
+                16,
+                16 + keyboardInsetOf(context),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  FTextField(
+                    control: FTextFieldControl.managed(
+                      controller: _title,
+                      onChange: (_) {
+                        setState(() => _titleError = null);
+                        _refreshPopGuard();
+                      },
                     ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                if (_items.isEmpty)
-                  const Text('No exercises yet')
-                else
-                  _buildReorderableList(),
-              ],
+                    label: const Text('Day name'),
+                    error: _titleError == null ? null : Text(_titleError!),
+                  ),
+                  const SizedBox(height: 16),
+                  FTextField(
+                    control: FTextFieldControl.managed(
+                      controller: _description,
+                      // Refresh the PopScope discard guard on edits.
+                      onChange: (_) => _refreshPopGuard(),
+                    ),
+                    label: const Text('Description (optional)'),
+                    minLines: 1,
+                    maxLines: null,
+                    keyboardType: TextInputType.multiline,
+                  ),
+                  const SizedBox(height: 24),
+                  Row(
+                    children: <Widget>[
+                      Text(
+                        'Exercises',
+                        style: context.theme.typography.body.md,
+                      ),
+                      const Spacer(),
+                      OutlinedButton.icon(
+                        onPressed: _addExercise,
+                        icon: const Icon(FLucideIcons.plus, size: 18),
+                        label: const Text('Add'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  if (_items.isEmpty)
+                    const Text('No exercises yet')
+                  else
+                    _buildReorderableList(),
+                ],
+              ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -324,7 +395,10 @@ class _SplitDayEditorPageState extends State<SplitDayEditorPage> {
           icon2: _gridIconButton(
             icon: FLucideIcons.trash2,
             tooltip: 'Remove exercise',
-            onPressed: () => setState(() => _items.removeAt(i)),
+            onPressed: () {
+              setState(() => _items.removeAt(i));
+              _refreshPopGuard();
+            },
           ),
         ),
         if (item.sets.isNotEmpty)
@@ -352,6 +426,7 @@ class _SplitDayEditorPageState extends State<SplitDayEditorPage> {
       final item = _items.removeAt(oldIndex);
       _items.insert(newIndex, item);
     });
+    _refreshPopGuard();
   }
 }
 

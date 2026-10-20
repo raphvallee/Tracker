@@ -6,6 +6,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:forui/forui.dart';
 import 'package:hydrated_bloc/hydrated_bloc.dart';
 import 'package:tracker/domain/models/rep_mode.dart';
 import 'package:tracker/domain/models/workout_split.dart';
@@ -310,5 +311,102 @@ void main() {
     final set = (await result)!.exercises.single.sets.single;
     expect(set.minReps, 12);
     expect(set.maxReps, isNull);
+  });
+
+  testWidgets('back with unsaved changes asks before leaving', (tester) async {
+    await pumpApp(tester);
+    final result = pushEditor(tester, WorkoutSplitDay(title: 'Push'));
+    await tester.pumpAndSettle();
+
+    // Make the draft dirty: edit the title.
+    await tester.enterText(find.widgetWithText(FTextField, 'Day name'), 'Pull');
+    await tester.pumpAndSettle();
+
+    // Back navigation is now intercepted by the discard confirmation.
+    await tester.tap(find.byIcon(FLucideIcons.chevronLeft));
+    await tester.pumpAndSettle();
+    expect(find.text('Discard changes?'), findsOneWidget);
+
+    // Cancel keeps the editor (and its draft) on screen: Done still saves.
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Done'));
+    await tester.pumpAndSettle();
+
+    final saved = await result;
+    expect(saved, isNotNull);
+    expect(saved!.title, 'Pull');
+  });
+
+  testWidgets('clean day editor leaves without a confirmation', (tester) async {
+    await pumpApp(tester);
+    final result = pushEditor(tester, WorkoutSplitDay(title: 'Push'));
+    await tester.pumpAndSettle();
+
+    // No edits: back pops immediately, no dialog.
+    await tester.tap(find.byIcon(FLucideIcons.chevronLeft));
+    await tester.pumpAndSettle();
+
+    expect(await result, isNull);
+    expect(find.text('Discard changes?'), findsNothing);
+  });
+
+  testWidgets('set edits mark the day dirty too', (tester) async {
+    // An uncommitted (invalid) keystroke is not a change: back pops
+    // immediately.
+    await pumpApp(tester);
+    var result = pushEditor(
+      tester,
+      WorkoutSplitDay(
+        title: 'Push',
+        exercises: [
+          ExerciseItem(
+            exerciseId: 1,
+            order: 0,
+            sets: [PlannedSet(order: 0, minReps: 10)],
+          ),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.descendant(of: setRow(0, 0), matching: find.byType(EditableText)),
+      '0',
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Must be at least 1'), findsOneWidget);
+
+    await tester.tap(find.byIcon(FLucideIcons.chevronLeft));
+    await tester.pumpAndSettle();
+    expect(find.text('Discard changes?'), findsNothing);
+    expect(await result, isNull);
+
+    // A committed valid change makes the editor dirty.
+    result = pushEditor(
+      tester,
+      WorkoutSplitDay(
+        title: 'Push',
+        exercises: [
+          ExerciseItem(
+            exerciseId: 1,
+            order: 0,
+            sets: [PlannedSet(order: 0, minReps: 10)],
+          ),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.descendant(of: setRow(0, 0), matching: find.byType(EditableText)),
+      '9',
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(FLucideIcons.chevronLeft));
+    await tester.pumpAndSettle();
+    expect(find.text('Discard changes?'), findsOneWidget);
+
+    await tester.tap(find.text('Discard'));
+    await tester.pumpAndSettle();
+    expect(await result, isNull);
   });
 }
