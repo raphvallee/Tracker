@@ -263,17 +263,20 @@ class _FeedEmpty extends StatelessWidget {
   const _FeedEmpty();
 
   @override
-  Widget build(BuildContext context) => FCard(
-    child: Padding(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        children: const [
-          Icon(FLucideIcons.dumbbell, size: 40),
-          SizedBox(height: 8),
-          Text('No workouts logged yet.'),
-          SizedBox(height: 4),
-          Text('Complete a workout to see activity here.'),
-        ],
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 16),
+    child: FCard(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          children: const [
+            Icon(FLucideIcons.dumbbell, size: 40),
+            SizedBox(height: 8),
+            Text('No workouts logged yet.'),
+            SizedBox(height: 4),
+            Text('Complete a workout to see activity here.'),
+          ],
+        ),
       ),
     ),
   );
