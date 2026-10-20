@@ -206,21 +206,13 @@ class _InProgressView extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text('End workout?', style: style.titleTextStyle),
-                const SizedBox(height: 8),
-                Text(
-                  'Log ${plural('set', setCount)} and save this workout to history.',
-                  style: style.bodyTextStyle,
-                ),
-                const SizedBox(height: 16),
-                // Wrap (not Row + Spacer): the dialog is only ~240px wide at
-                // the minimum desktop window size, and a fixed row overflows.
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  alignment: WrapAlignment.end,
-                  crossAxisAlignment: WrapCrossAlignment.center,
+                // Discard sits top-right, vertically centered with the title
+                // (Row's default crossAxisAlignment is center).
+                Row(
                   children: [
+                    Expanded(
+                      child: Text('End workout?', style: style.titleTextStyle),
+                    ),
                     // The tooltip covers visual hover text; Semantics makes
                     // the bare icon announce itself to screen readers too.
                     Semantics(
@@ -236,6 +228,22 @@ class _InProgressView extends StatelessWidget {
                         ),
                       ),
                     ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Log ${plural('set', setCount)} and save this workout to history.',
+                  style: style.bodyTextStyle,
+                ),
+                const SizedBox(height: 16),
+                // Wrap (not Row + Spacer): the dialog is only ~240px wide at
+                // the minimum desktop window size, and a fixed row overflows.
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  alignment: WrapAlignment.end,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
                     FButton(
                       variant: .outline,
                       onPress: () =>
