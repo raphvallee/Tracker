@@ -697,7 +697,9 @@ class _AddSetFormState extends State<_AddSetForm> {
             Expanded(
               child: FTextField(
                 control: FTextFieldControl.managed(controller: _reps),
-                keyboardType: TextInputType.number,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
                 label: const Text('Reps'),
                 error: _repsError == null ? null : Text(_repsError!),
               ),
@@ -736,12 +738,22 @@ class _AddSetFormState extends State<_AddSetForm> {
   void _add() {
     final weightError = requiredDouble(_weight.text);
     final repsError = requiredDouble(_reps.text);
-    final reps = int.tryParse(_reps.text);
+    // Fractions are accepted ("3.5"); reps are rounded half-up when logged
+    // because ActiveSet/WorkoutSet store whole numbers (see logSet).
+    final reps = double.tryParse(_reps.text);
     if (weightError != null || repsError != null || reps == null) {
       setState(() {
         _weightError = weightError;
         _repsError = repsError;
       });
+      return;
+    }
+    final loggedReps = reps.round();
+    if (loggedReps < 1) {
+      // A fraction under 0.5 rounds to zero reps - reject it with the same
+      // message as a whole-number parse failure instead of logging an empty
+      // set.
+      setState(() => _repsError = 'Must be at least 1');
       return;
     }
     final id = _selectedId;
@@ -764,7 +776,7 @@ class _AddSetFormState extends State<_AddSetForm> {
       exerciseId: id,
       exerciseName: name,
       weight: weight,
-      reps: reps,
+      reps: loggedReps,
       type: _warmup ? SetType.warmup : SetType.working,
     );
     _reps.clear();

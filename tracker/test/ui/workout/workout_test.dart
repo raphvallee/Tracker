@@ -318,5 +318,58 @@ void main() {
       expect(find.text('100 kg × 10'), findsOneWidget);
       expect(tester.widget<EditableText>(repsField).controller.text, '8');
     });
+
+    testWidgets('fractional reps round half-up instead of a silent no-op', (
+      tester,
+    ) async {
+      final cubit = await pumpApp(tester);
+      cubit.startPlanWorkout(
+        title: 'PPL · Push',
+        exercises: const [
+          PlanExercise(exerciseId: 1, name: 'Bench Press', order: 0),
+        ],
+      );
+
+      tester
+          .widget<FBottomNavigationBar>(find.byType(FBottomNavigationBar))
+          .onChange!(2);
+      await tester.pumpAndSettle();
+
+      final weightField = find
+          .descendant(
+            of: find.byType(FTextField).at(0),
+            matching: find.byType(EditableText),
+          )
+          .first;
+      final repsField = find
+          .descendant(
+            of: find.byType(FTextField).at(1),
+            matching: find.byType(EditableText),
+          )
+          .first;
+
+      // "3.5" parses and logs (rounded half-up to 4) - never a silent no-op.
+      await tester.enterText(weightField, '100');
+      await tester.enterText(repsField, '3.5');
+      await tester.tap(find.text('Add set'));
+      await tester.pumpAndSettle();
+      expect(cubit.state.sets, hasLength(1));
+      expect(cubit.state.sets.single.reps, 4);
+      expect(find.text('100 kg × 4'), findsOneWidget);
+
+      // A fraction that rounds below one rep shows a validation error.
+      await tester.enterText(repsField, '0.4');
+      await tester.tap(find.text('Add set'));
+      await tester.pumpAndSettle();
+      expect(cubit.state.sets, hasLength(1));
+      expect(find.text('Must be at least 1'), findsOneWidget);
+
+      // Genuinely invalid input still shows the standard validation error.
+      await tester.enterText(repsField, 'abc');
+      await tester.tap(find.text('Add set'));
+      await tester.pumpAndSettle();
+      expect(cubit.state.sets, hasLength(1));
+      expect(find.text('Must be greater than 0'), findsOneWidget);
+    });
   });
 }
