@@ -52,6 +52,10 @@ class _SplitDayPageState extends State<SplitDayPage> {
 
   Future<void> _startWorkout(BuildContext context) async {
     final cubit = context.read<WorkoutCubit>();
+    // Never clobber an active session (it would drop every logged set); the
+    // start button is hidden while one is in progress, this is the belt to
+    // that suspenders.
+    if (cubit.state.isInProgress) return;
     final repo = RepositoryScope.maybeOf(context);
     final gyms = (await repo?.gyms.getAll()) ?? const <Gym>[];
     if (!context.mounted) return;
@@ -138,10 +142,18 @@ class _SplitDayPageState extends State<SplitDayPage> {
                     ),
                 const SizedBox(height: 4),
                 const SizedBox(height: 24),
-                FButton(
-                  onPress: () => _startWorkout(context),
-                  prefix: const Icon(FLucideIcons.play),
-                  child: const Text('Start this workout'),
+                // Reactive on the cubit so the button comes back the moment
+                // the active session ends (no dialog, no discard choice - the
+                // running session's logged sets must never be at risk).
+                BlocSelector<WorkoutCubit, WorkoutState, bool>(
+                  selector: (state) => state.isInProgress,
+                  builder: (context, isInProgress) => isInProgress
+                      ? const _ActiveSessionNotice()
+                      : FButton(
+                          onPress: () => _startWorkout(context),
+                          prefix: const Icon(FLucideIcons.play),
+                          child: const Text('Start this workout'),
+                        ),
                 ),
               ],
             ),
@@ -163,5 +175,32 @@ class _SplitDayPageState extends State<SplitDayPage> {
     if (item.targetSets != null) parts.add('${item.targetSets} sets');
     if (item.targetReps != null) parts.add('${item.targetReps} reps');
     return Text(parts.join(' × '));
+  }
+}
+
+/// Shown instead of the start button while a workout session is already in
+/// progress: explains why starting is blocked and offers a shortcut to the
+/// running session. No discard path - zero data-loss routes by design.
+class _ActiveSessionNotice extends StatelessWidget {
+  const _ActiveSessionNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        Text(
+          'Finish your current workout first',
+          textAlign: TextAlign.center,
+          style: context.theme.typography.body.sm,
+        ),
+        const SizedBox(height: 12),
+        FButton(
+          onPress: () => HomePageSingleton().changeTab(TabName.currentWorkout),
+          prefix: const Icon(FLucideIcons.squareArrowRight),
+          child: const Text('Go to current workout'),
+        ),
+      ],
+    );
   }
 }
