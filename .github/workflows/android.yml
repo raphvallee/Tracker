@@ -69,21 +69,13 @@ jobs:
       run: echo "version=$(grep -m1 '^version:' pubspec.yaml | sed 's/version:[[:space:]]*//')" >> "$GITHUB_OUTPUT"
     - name: Rename APK
       run: cp build/app/outputs/flutter-apk/app-release.apk tracker-${{ steps.version.outputs.version }}-android.apk
-    - name: Create source archive
-      # git archive includes every tracked file in the repo; the zip is written
-      # to the workspace root so the release paths stay flat.
-      run: git archive --format=zip --prefix=tracker-${{ steps.version.outputs.version }}/ -o ../tracker-${{ steps.version.outputs.version }}-source.zip HEAD
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
         name: tracker-android
-        path: |
-          tracker/tracker-*-android.apk
-          tracker-*-source.zip
+        path: tracker/tracker-*-android.apk
     - name: Attach to release
       if: startsWith(github.ref, 'refs/tags/')
       uses: softprops/action-gh-release@v2
       with:
-        files: |
-          tracker/tracker-*-android.apk
-          tracker-*-source.zip
+        files: tracker/tracker-*-android.apk

@@ -48,21 +48,13 @@ jobs:
         mkdir Payload
         cp -R build/ios/iphoneos/Runner.app Payload/
         zip -qr tracker-${{ steps.version.outputs.version }}-ios.ipa Payload
-    - name: Create source archive
-      # git archive includes every tracked file in the repo; the zip is written
-      # to the workspace root so the release paths stay flat.
-      run: git archive --format=zip --prefix=tracker-${{ steps.version.outputs.version }}/ -o ../tracker-${{ steps.version.outputs.version }}-source.zip HEAD
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
         name: tracker-ios
-        path: |
-          tracker/tracker-*-ios.ipa
-          tracker-*-source.zip
+        path: tracker/tracker-*-ios.ipa
     - name: Attach to release
       if: startsWith(github.ref, 'refs/tags/')
       uses: softprops/action-gh-release@v2
       with:
-        files: |
-          tracker/tracker-*-ios.ipa
-          tracker-*-source.zip
+        files: tracker/tracker-*-ios.ipa
