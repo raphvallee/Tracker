@@ -1,6 +1,7 @@
 import 'package:isar_community/isar.dart';
 
 import 'package:tracker/domain/models/workout_session.dart';
+import 'package:tracker/domain/models/workout_set.dart';
 
 /// Pages and cubits talk to these repositories, never to [Isar] directly.
 /// Each wraps the [Isar] collection query API for one entity.
@@ -71,6 +72,16 @@ class WorkoutSessionRepository {
 
   Future<bool> delete(int id) =>
       _isar.writeTxn(() => _isar.workoutSessions.delete(id));
+
+  /// Number of sessions that logged at least one set of [exerciseId], used to
+  /// guard exercise deletion.
+  Future<int> countLoggingSessions(int exerciseId) async {
+    final sessions = await _isar.workoutSessions
+        .filter()
+        .setsElement((set) => set.exerciseIdEqualTo(exerciseId))
+        .findAll();
+    return sessions.length;
+  }
 
   Stream<List<WorkoutSession>> watchAll() =>
       _isar.workoutSessions.where().watch(fireImmediately: true);

@@ -20,6 +20,20 @@ class WorkoutSplitRepository {
   Future<bool> delete(int id) =>
       _isar.writeTxn(() => _isar.workoutSplits.delete(id));
 
+  /// Number of split templates referencing [exerciseId] in any day, used to
+  /// guard exercise deletion.
+  Future<int> countReferencingSplits(int exerciseId) async {
+    final splits = await _isar.workoutSplits
+        .filter()
+        .splitDaysElement(
+          (day) => day.exercisesElement(
+            (item) => item.exerciseIdEqualTo(exerciseId),
+          ),
+        )
+        .findAll();
+    return splits.length;
+  }
+
   Stream<List<WorkoutSplit>> watchAll() =>
       _isar.workoutSplits.where().watch(fireImmediately: true);
 }

@@ -8,11 +8,16 @@ import 'package:tracker/ui/core/ui/keyboard_inset.dart';
 import 'package:tracker/utils/form_validators.dart';
 import 'package:tracker/ui/core/ui/max_width.dart';
 
-/// Custom exercise creation form (Plan.md §1.4): title, movement pattern,
+/// Exercise create/edit form (Plan.md §1.4): title, movement pattern,
 /// target muscle groups, equipment and a description, persisted to the library
-/// via the repository. Pops the created [Exercise] so the caller can react.
+/// via the repository. Pops the saved [Exercise] so the caller can react.
+/// Pass an existing [NewExercisePage.exercise] to rename/edit it in place; the
+/// form then also offers a reference-checked delete.
 class NewExercisePage extends StatefulWidget {
-  const NewExercisePage({super.key});
+  const NewExercisePage({super.key, this.exercise});
+
+  /// Existing exercise to edit; null creates a new one.
+  final Exercise? exercise;
 
   @override
   State<NewExercisePage> createState() => _NewExercisePageState();
@@ -28,7 +33,28 @@ class _NewExercisePageState extends State<NewExercisePage> {
   final Set<Muscle> _secondary = {};
   final Set<Equipment> _equipment = {Equipment.bodyweight};
 
+  String? _duplicateError;
   bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final exercise = widget.exercise;
+    if (exercise != null) {
+      _title.text = exercise.title;
+      _description.text = exercise.description ?? '';
+      _movement = exercise.movementPattern;
+      _primary.addAll(exercise.primaryMuscle);
+      _secondary.addAll(exercise.secondaryMuscle ?? const []);
+      _equipment
+        ..clear()
+        ..addAll(exercise.equipment);
+    }
+    // Drop the stale duplicate error as soon as the name changes again.
+    _title.addListener(() {
+      if (_duplicateError != null) setState(() => _duplicateError = null);
+    });
+  }
 
   @override
   void dispose() {
@@ -38,6 +64,7 @@ class _NewExercisePageState extends State<NewExercisePage> {
   }
 
   Future<void> _save() async {
+    setState(() => _duplicateError = null);
     if (!_formKey.currentState!.validate()) return;
     if (_primary.isEmpty) {
       showFToast(
@@ -48,20 +75,33 @@ class _NewExercisePageState extends State<NewExercisePage> {
       return;
     }
 
-    setState(() => _saving = true);
     final repo = RepositoryScope.maybeOf(context);
-    final exercise = Exercise(
-      title: _title.text.trim(),
-      description: _description.text.trim().isEmpty
-          ? null
-          : _description.text.trim(),
-      primaryMuscle: _primary.toList(),
-      secondaryMuscle: _secondary.isEmpty ? null : _secondary.toList(),
-      equipment: _equipment.isEmpty
-          ? [Equipment.bodyweight]
-          : _equipment.toList(),
-      movementPattern: _movement,
+    final name = _title.text.trim();
+    final duplicate = await repo?.exercises.getByTitle(
+      name,
+      excludeId: widget.exercise?.id,
     );
+    if (duplicate != null) {
+      setState(() => _duplicateError = '"${duplicate.title}" already exists.');
+      _formKey.currentState!.validate();
+      return;
+    }
+
+    setState(() => _saving = true);
+    final exercise =
+        widget.exercise ??
+        Exercise(title: name, primaryMuscle: const [], equipment: const []);
+    exercise
+      ..title = name
+      ..description = _description.text.trim().isEmpty
+          ? null
+          : _description.text.trim()
+      ..primaryMuscle = _primary.toList()
+      ..secondaryMuscle = _secondary.isEmpty ? null : _secondary.toList()
+      ..equipment = _equipment.isEmpty
+          ? [Equipment.bodyweight]
+          : _equipment.toList()
+      ..movementPattern = _movement;
     if (repo != null) {
       final id = await repo.exercises.put(exercise);
       exercise.id = id;
@@ -70,13 +110,76 @@ class _NewExercisePageState extends State<NewExercisePage> {
     Navigator.of(context).pop(exercise);
   }
 
+  /// Deletes the edited exercise. Deletion is blocked while split templates or
+  /// logged sessions still reference it; otherwise it asks for confirmation.
+  Future<void> _delete() async {
+    final exercise = widget.exercise!;
+    final repo = RepositoryScope.maybeOf(context);
+    if (repo == null) return;
+
+    final splitCount = await repo.splits.countReferencingSplits(exercise.id);
+    final sessionCount = await repo.sessions.countLoggingSessions(exercise.id);
+    if (!mounted) return;
+
+    final referenced = splitCount + sessionCount > 0;
+    final confirmed = await showFDialog<bool>(
+      context: context,
+      builder: (dialogContext, _, _) => FDialog(
+        builder: (dialogContext, style) => Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              referenced ? 'Cannot delete exercise' : 'Delete exercise?',
+              style: style.titleTextStyle,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              referenced
+                  ? '"${exercise.title}" is used by $splitCount '
+                        'split${splitCount == 1 ? '' : 's'} and $sessionCount '
+                        'logged session${sessionCount == 1 ? '' : 's'}. Remove '
+                        'it from those first.'
+                  : 'Remove "${exercise.title}" from the library? '
+                        'This cannot be undone.',
+              style: style.bodyTextStyle,
+            ),
+            const SizedBox(height: 24),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              alignment: WrapAlignment.end,
+              children: [
+                FButton(
+                  variant: .outline,
+                  onPress: () => Navigator.of(dialogContext).pop(false),
+                  child: const Text('Cancel'),
+                ),
+                if (!referenced)
+                  FButton(
+                    onPress: () => Navigator.of(dialogContext).pop(true),
+                    child: const Text('Delete'),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+    if (confirmed == true) {
+      await repo.exercises.delete(exercise.id);
+      // Pop without a result; the detail page notices the exercise is gone.
+      if (mounted) Navigator.of(context).pop();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return CustomScrollView(
       slivers: <Widget>[
         CustomAppBar(
           context,
-          title: 'New Exercise',
+          title: widget.exercise == null ? 'New Exercise' : 'Edit Exercise',
           actionButton: _saving ? null : (title: 'Save', onPressed: _save),
         ),
         SliverToBoxAdapter(
@@ -98,7 +201,7 @@ class _NewExercisePageState extends State<NewExercisePage> {
                     FTextFormField(
                       control: FTextFieldControl.managed(controller: _title),
                       label: const Text('Name'),
-                      validator: (v) => requiredText(v),
+                      validator: (v) => _duplicateError ?? requiredText(v),
                     ),
                     const SizedBox(height: 16),
                     FTextFormField(
@@ -153,6 +256,14 @@ class _NewExercisePageState extends State<NewExercisePage> {
                       ),
                     ),
                     const SizedBox(height: 24),
+                    if (widget.exercise != null) ...[
+                      FButton(
+                        variant: .outline,
+                        onPress: _saving ? null : _delete,
+                        child: const Text('Delete exercise'),
+                      ),
+                      const SizedBox(height: 24),
+                    ],
                   ],
                 ),
               ),

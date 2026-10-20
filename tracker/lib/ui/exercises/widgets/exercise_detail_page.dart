@@ -5,10 +5,12 @@ import 'package:tracker/domain/models/weight_unit.dart';
 import 'package:tracker/domain/models/workout_session.dart';
 import 'package:tracker/domain/services/analytics.dart';
 import 'package:tracker/ui/core/ui/custom_app_bar.dart';
+import 'package:tracker/ui/core/ui/custom_route.dart';
 import 'package:tracker/ui/core/ui/line_chart.dart';
 import 'package:tracker/ui/core/ui/max_width.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
 import 'package:tracker/ui/core/ui/weight_format.dart';
+import 'package:tracker/ui/exercises/widgets/new_exercise_page.dart';
 
 /// Individual exercise view (Plan.md §1.4.1.1): profile rows plus a
 /// performance-history section (Milestone 6) charting the best normalized
@@ -26,6 +28,8 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage> {
   Map<int, double> _multipliers = const {};
   bool _didLoad = false;
   final AnalyticsService _analytics = AnalyticsService();
+  // Local copy so an edit from the editor page refreshes this view.
+  late Exercise _exercise = widget.exercise;
   AnalyticsSnapshot _snapshot = AnalyticsSnapshot(
     best1rm: const [],
     peakWeight: const [],
@@ -69,16 +73,39 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage> {
     });
   }
 
+  /// Opens the editor for this exercise. The editor pops the saved exercise,
+  /// or nothing when it deleted the exercise (verified against the repository,
+  /// since cancelling also pops without a result).
+  Future<void> _edit() async {
+    final updated = await pushTo<Exercise>(
+      context,
+      NewExercisePage(exercise: _exercise),
+    );
+    if (!mounted) return;
+    final repo = RepositoryScope.maybeOf(context);
+    final fresh = await repo?.exercises.getById(_exercise.id);
+    if (!mounted) return;
+    if (fresh == null) {
+      Navigator.of(context).pop();
+    } else if (updated != null) {
+      setState(() => _exercise = fresh);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = context.theme;
-    final exercise = widget.exercise;
+    final exercise = _exercise;
     final series = displayProgressionPoints(context, _snapshot.best1rm);
     final summary = _snapshot.summary;
 
     return CustomScrollView(
       slivers: <Widget>[
-        CustomAppBar(context, title: exercise.title),
+        CustomAppBar(
+          context,
+          title: exercise.title,
+          actionButton: (title: 'Edit', onPressed: _edit),
+        ),
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.all(16),
