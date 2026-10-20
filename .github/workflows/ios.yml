@@ -1,0 +1,68 @@
+name: iOS
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-latest
+    env:
+      APP_DIR: 'tracker'
+
+    defaults:
+      run:
+        working-directory: ${{ env.APP_DIR }}
+
+    steps:
+    - name: Clone repository
+      uses: actions/checkout@v6
+    - name: Set up Flutter
+      uses: subosito/flutter-action@v2
+      with:
+        channel: stable
+        flutter-version-file: tracker/pubspec.yaml
+    - name: Install Dependencies
+      run: flutter pub get
+    - name: Verify generated code
+      run: dart run build_runner build --delete-conflicting-outputs
+    - name: Run Tests
+      run: flutter test
+    - name: Build iOS app (unsigned)
+      # No signing identity or provisioning profile is available on the
+      # runner, so codesigning is skipped entirely. The resulting IPA is
+      # unsigned and must be re-signed (Sideloadly, AltStore, Xcode, or an
+      # ad-hoc provisioning profile) before it can be installed on a device.
+      run: flutter build ios --release --no-codesign
+    - name: Extract version
+      id: version
+      run: echo "version=$(grep -m1 '^version:' pubspec.yaml | sed 's/version:[[:space:]]*//')" >> "$GITHUB_OUTPUT"
+    - name: Package IPA
+      # An IPA is just a zip with the .app bundle inside a Payload directory.
+      run: |
+        mkdir Payload
+        cp -R build/ios/iphoneos/Runner.app Payload/
+        zip -qr ../tracker-${{ steps.version.outputs.version }}-ios.ipa Payload
+    - name: Create source archive
+      # git archive includes every tracked file in the repo; the zip is written
+      # to the workspace root so the release paths stay flat.
+      run: git archive --format=zip --prefix=tracker-${{ steps.version.outputs.version }}/ -o ../tracker-${{ steps.version.outputs.version }}-source.zip HEAD
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: tracker-ios
+        path: |
+          tracker/tracker-*-ios.ipa
+          tracker-*-source.zip
+    - name: Attach to release
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v2
+      with:
+        files: |
+          tracker/tracker-*-ios.ipa
+          tracker-*-source.zip
