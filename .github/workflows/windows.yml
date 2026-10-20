@@ -41,21 +41,13 @@ jobs:
         "version=$version" >> $env:GITHUB_OUTPUT
     - name: Archive build
       run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath tracker-${{ steps.version.outputs.version }}-windows-x64.zip
-    - name: Create source archive
-      # git archive includes every tracked file in the repo; the zip is written
-      # to the workspace root so the release paths stay flat.
-      run: git archive --format=zip --prefix=tracker-${{ steps.version.outputs.version }}/ -o ../tracker-${{ steps.version.outputs.version }}-source.zip HEAD
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
         name: tracker-windows-x64
-        path: |
-          tracker/tracker-*-windows-x64.zip
-          tracker-*-source.zip
+        path: tracker/tracker-*-windows-x64.zip
     - name: Attach to release
       if: startsWith(github.ref, 'refs/tags/')
       uses: softprops/action-gh-release@v2
       with:
-        files: |
-          tracker/tracker-*-windows-x64.zip
-          tracker-*-source.zip
+        files: tracker/tracker-*-windows-x64.zip
