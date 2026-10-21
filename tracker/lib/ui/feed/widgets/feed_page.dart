@@ -9,6 +9,7 @@ import 'package:tracker/ui/analytics/widgets/graph_editor.dart';
 import 'package:tracker/ui/analytics/widgets/progression_page.dart';
 import 'package:tracker/ui/core/ui/custom_app_bar.dart';
 import 'package:tracker/ui/core/ui/custom_route.dart';
+import 'package:tracker/ui/feed/view_models/feed_cubit.dart';
 import 'package:tracker/ui/feed/widgets/feed_page_graph_card.dart';
 import 'package:tracker/ui/history/widgets/session_detail_page.dart';
 import 'package:tracker/ui/settings/view_models/settings_cubit.dart';
@@ -25,7 +26,7 @@ class FeedPage extends StatefulWidget {
 }
 
 class _FeedPageState extends State<FeedPage> {
-  Stream<List<WorkoutSession>>? _stream;
+  FeedCubit? _cubit;
   Map<int, String> _gymNames = const {};
   List<WorkoutSession> _allSessions = const [];
   List<Exercise> _exercises = const [];
@@ -135,10 +136,18 @@ class _FeedPageState extends State<FeedPage> {
     if (!_didLoad) {
       _didLoad = true;
       final repo = RepositoryScope.maybeOf(context);
-      _stream = repo?.sessions.watchRecent(limit: 3);
+      if (repo != null) {
+        _cubit = FeedCubit(repository: repo)..load();
+      }
       _loadGyms();
       _loadAnalyticsData();
     }
+  }
+
+  @override
+  void dispose() {
+    _cubit?.close();
+    super.dispose();
   }
 
   Future<void> _loadGyms() async {
@@ -150,112 +159,118 @@ class _FeedPageState extends State<FeedPage> {
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<List<WorkoutSession>>(
-      stream: _stream,
-      builder: (context, snapshot) {
-        final slivers = <Widget>[
-          CustomAppBar(
-            context,
-            title: 'Feed',
-            actionButton: (
-              title: 'Settings',
-              onPressed: () => pushTo(context, const SettingsPage()),
-            ),
-          ),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-              child: Text(
-                'Recent activity',
-                style: context.theme.typography.body.xl.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ),
-        ];
-        if (_stream == null) {
-          slivers.add(const SliverToBoxAdapter(child: _FeedEmpty()));
-        } else if (snapshot.hasError) {
-          slivers.add(
-            SliverToBoxAdapter(
-              child: _FeedMessage(
-                icon: FLucideIcons.circleAlert,
-                message: 'Could not load recent activity.',
-                action: TextButton(
-                  onPressed: () => setState(() {}),
-                  child: const Text('Retry'),
-                ),
-              ),
-            ),
-          );
-        } else if (snapshot.connectionState == ConnectionState.waiting &&
-            !snapshot.hasData) {
-          slivers.add(
-            const SliverFillRemaining(
-              hasScrollBody: false,
-              child: Center(child: CircularProgressIndicator()),
-            ),
-          );
-        } else {
-          final sessions = snapshot.data ?? const <WorkoutSession>[];
-          if (sessions.isEmpty) {
-            slivers.add(const SliverToBoxAdapter(child: _FeedEmpty()));
-          } else {
-            slivers.add(
-              SliverPadding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                sliver: SliverList.builder(
-                  itemCount: sessions.length,
-                  itemBuilder: (context, index) => _ActivityCard(
-                    session: sessions[index],
-                    gymName: sessions[index].gymId == null
-                        ? null
-                        : _gymNames[sessions[index].gymId],
-                  ),
-                ),
-              ),
-            );
-          }
-        }
-        slivers.add(
-          BlocBuilder<WorkoutCubit, WorkoutState>(
-            builder: (context, state) {
-              if (!state.isInProgress) return const SliverToBoxAdapter();
-              return SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                  child: FButton(
-                    onPress: () =>
-                        HomePageSingleton().changeTab(TabName.currentWorkout),
-                    prefix: const Icon(FLucideIcons.dumbbell),
-                    child: const Text('Go to Current Workout'),
-                  ),
-                ),
-              );
-            },
-          ),
-        );
-        slivers.add(SliverToBoxAdapter(child: _analyticsSection(context)));
-        slivers.add(
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
-              child: FItem(
-                prefix: const Icon(FLucideIcons.chartLine),
-                title: const Text('Progression'),
-                subtitle: const Text(
-                  'Strength and volume trends across all exercises',
-                ),
-                suffix: const Icon(FLucideIcons.chevronRight),
-                onPress: () => pushTo(context, const ProgressionPage()),
-              ),
-            ),
-          ),
-        );
-        return CustomScrollView(slivers: slivers);
-      },
+    final cubit = _cubit;
+    // Without a repository scope (isolate tests) there is nothing to watch:
+    // render the empty feed directly.
+    if (cubit == null) {
+      return _buildBody(context, const FeedState(status: FeedStatus.ready));
+    }
+    return BlocBuilder<FeedCubit, FeedState>(
+      bloc: cubit,
+      builder: (context, state) => _buildBody(context, state),
     );
+  }
+
+  Widget _buildBody(BuildContext context, FeedState state) {
+    final slivers = <Widget>[
+      CustomAppBar(
+        context,
+        title: 'Feed',
+        actionButton: (
+          title: 'Settings',
+          onPressed: () => pushTo(context, const SettingsPage()),
+        ),
+      ),
+      SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+          child: Text(
+            'Recent activity',
+            style: context.theme.typography.body.xl.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ),
+    ];
+    switch (state.status) {
+      case FeedStatus.error:
+        slivers.add(
+          SliverToBoxAdapter(
+            child: _FeedMessage(
+              icon: FLucideIcons.circleAlert,
+              message: 'Could not load recent activity.',
+              action: TextButton(
+                onPressed: () => _cubit?.retry(),
+                child: const Text('Retry'),
+              ),
+            ),
+          ),
+        );
+      case FeedStatus.loading:
+        slivers.add(
+          const SliverFillRemaining(
+            hasScrollBody: false,
+            child: Center(child: CircularProgressIndicator()),
+          ),
+        );
+      case FeedStatus.ready:
+        final sessions = state.sessions;
+        if (sessions.isEmpty) {
+          slivers.add(const SliverToBoxAdapter(child: _FeedEmpty()));
+        } else {
+          slivers.add(
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              sliver: SliverList.builder(
+                itemCount: sessions.length,
+                itemBuilder: (context, index) => _ActivityCard(
+                  session: sessions[index],
+                  gymName: sessions[index].gymId == null
+                      ? null
+                      : _gymNames[sessions[index].gymId],
+                ),
+              ),
+            ),
+          );
+        }
+    }
+    slivers.add(
+      BlocBuilder<WorkoutCubit, WorkoutState>(
+        builder: (context, state) {
+          if (!state.isInProgress) return const SliverToBoxAdapter();
+          return SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+              child: FButton(
+                onPress: () =>
+                    HomePageSingleton().changeTab(TabName.currentWorkout),
+                prefix: const Icon(FLucideIcons.dumbbell),
+                child: const Text('Go to Current Workout'),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+    slivers.add(SliverToBoxAdapter(child: _analyticsSection(context)));
+    slivers.add(
+      SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
+          child: FItem(
+            prefix: const Icon(FLucideIcons.chartLine),
+            title: const Text('Progression'),
+            subtitle: const Text(
+              'Strength and volume trends across all exercises',
+            ),
+            suffix: const Icon(FLucideIcons.chevronRight),
+            onPress: () => pushTo(context, const ProgressionPage()),
+          ),
+        ),
+      ),
+    );
+    return CustomScrollView(slivers: slivers);
   }
 }
 
