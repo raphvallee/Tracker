@@ -438,6 +438,7 @@ class _EditSetDialog extends StatefulWidget {
 class _EditSetDialogState extends State<_EditSetDialog> {
   late final TextEditingController _weight;
   late final TextEditingController _reps;
+  late final String _prefilledWeight;
   late bool _warmup;
   String? _weightError;
   String? _repsError;
@@ -447,9 +448,10 @@ class _EditSetDialogState extends State<_EditSetDialog> {
     super.initState();
     // context.read inside SettingsCubit.maybeOf works here, so the display-unit
     // conversion is safe before the first frame.
-    _weight = TextEditingController(
-      text: _weightText(displayWeightOf(context, widget.initial.weight)),
+    _prefilledWeight = _weightText(
+      displayWeightOf(context, widget.initial.weight),
     );
+    _weight = TextEditingController(text: _prefilledWeight);
     _reps = TextEditingController(text: _weightText(widget.initial.reps));
     _warmup = widget.initial.isWarmup;
     _weight.addListener(() => setState(() => _weightError = null));
@@ -542,11 +544,16 @@ class _EditSetDialogState extends State<_EditSetDialog> {
       setState(() => _repsError = 'Must be at least 1');
       return;
     }
+    // The prefilled text is the rounded display value, so converting it back
+    // would drift the stored weight. Keep the original unless the user edited it.
+    final weightEdited = _weight.text.trim() != _prefilledWeight;
     Navigator.of(context).pop(
       WorkoutSet(
         exerciseId: widget.initial.exerciseId,
         // The field holds display units; storage stays canonical kilograms.
-        weight: kilogramsFromDisplay(context, displayed),
+        weight: weightEdited
+            ? kilogramsFromDisplay(context, displayed)
+            : widget.initial.weight,
         reps: reps,
         type: _warmup ? SetType.warmup : SetType.working,
         order: widget.initial.order,

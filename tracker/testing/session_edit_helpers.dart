@@ -8,6 +8,7 @@ import 'package:tracker/domain/models/exercise.dart';
 import 'package:tracker/domain/models/gym.dart';
 import 'package:tracker/domain/models/muscle.dart';
 import 'package:tracker/domain/models/workout_session.dart';
+import 'package:tracker/domain/models/weight_unit.dart';
 import 'package:tracker/domain/models/workout_set.dart';
 import 'package:tracker/main.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
@@ -46,7 +47,14 @@ WorkoutSession pastSession({int exerciseId = 1, int? gymId}) => WorkoutSession(
 ///
 /// No isar.close(): native close never completes inside the fake-async zone;
 /// the temp DB dies with the test process.
-Future<void> pumpPersistenceApp(WidgetTester tester, String dbName) async {
+///
+/// Returns the repository and the seeded session so tests can read the saved
+/// records back and assert what the UI actually persisted.
+Future<({TrackerRepository repo, WorkoutSession session})> pumpPersistenceApp(
+  WidgetTester tester,
+  String dbName, {
+  WeightUnit unit = WeightUnit.kilograms,
+}) async {
   late TrackerRepository repo;
   late WorkoutSession session;
   await tester.runAsync(() async {
@@ -77,7 +85,9 @@ Future<void> pumpPersistenceApp(WidgetTester tester, String dbName) async {
       child: MultiBlocProvider(
         providers: [
           BlocProvider<WorkoutCubit>.value(value: cubit),
-          BlocProvider<SettingsCubit>(create: (_) => SettingsCubit()),
+          BlocProvider<SettingsCubit>(
+            create: (_) => SettingsCubit()..setUnit(unit),
+          ),
         ],
         child: const MyApp(),
       ),
@@ -92,6 +102,25 @@ Future<void> pumpPersistenceApp(WidgetTester tester, String dbName) async {
     ),
   );
   await settleSessionFlow(tester);
+  return (repo: repo, session: session);
+}
+
+/// Waits for real Isar writes started from inside the fake-async zone to land.
+/// The page issues writes from the widget zone, so each round gives the real
+/// event loop time and then pumps so completions run. Returns once [done]
+/// reports true, or fails after a bounded number of rounds.
+Future<void> waitForRealIo(
+  WidgetTester tester,
+  Future<bool> Function() done,
+) async {
+  for (var round = 0; round < 50; round++) {
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
+    await tester.pump();
+    if (await tester.runAsync(done) ?? false) return;
+  }
+  fail('the repository write did not land within 5 seconds');
 }
 
 /// Advances past route/dialog animations with timed pumps. The shell's feed

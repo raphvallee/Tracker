@@ -85,9 +85,8 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
     final updated = await pushTo(context, SessionEditPage(session: _session));
     if (updated == null) return;
     setState(() => _session = updated);
+    if (repo != null) unawaited(_persist(repo, updated));
     await _resolveGymName();
-    if (repo == null) return;
-    unawaited(_persist(repo, updated));
   }
 
   Future<void> _persist(TrackerRepository repo, WorkoutSession updated) async {
@@ -161,13 +160,26 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
     // Let the dialog route finish leaving the navigator before popping this
     // page, so pop() lands on the detail route and not the dialog.
     await Future<void>.delayed(const Duration(milliseconds: 50));
-    if (mounted) Navigator.of(context).pop();
+    if (!mounted) return;
+    // This page's context is gone once it pops; the navigator's context lives
+    // under the app-level FToaster, so the failure toast can still show.
+    final navigator = Navigator.of(context);
+    navigator.pop();
     try {
-      await repo.sessions.delete(_session.id);
+      final deleted = await repo.sessions.delete(_session.id);
+      if (!deleted) throw StateError('session ${_session.id} was not found');
     } catch (error, stackTrace) {
-      // The user already left the page; the session simply stays in history.
       AppLog.error('history-delete', error, stackTrace);
+      _showDeleteFailure(navigator);
     }
+  }
+
+  static void _showDeleteFailure(NavigatorState navigator) {
+    showFToast(
+      context: navigator.context,
+      title: const Text('Could not delete the session.'),
+      duration: const Duration(seconds: 4),
+    );
   }
 
   @override

@@ -32,6 +32,7 @@ class _FeedPageState extends State<FeedPage> {
   List<Exercise> _exercises = const [];
   Map<int, double> _multipliers = const {};
   bool _didLoad = false;
+  bool _wasActive = true;
 
   SettingsCubit? get _settings => SettingsCubit.maybeOf(context);
 
@@ -142,6 +143,11 @@ class _FeedPageState extends State<FeedPage> {
       _loadGyms();
       _loadAnalyticsData();
     }
+    // Tabs stay mounted, so returning to Feed must re-read sessions and gyms
+    // that were edited or deleted on another tab.
+    final isActive = TabVisibilityScope.isActiveOf(context);
+    if (isActive && !_wasActive) _loadAnalyticsData();
+    _wasActive = isActive;
   }
 
   @override
@@ -229,6 +235,7 @@ class _FeedPageState extends State<FeedPage> {
                   gymName: sessions[index].gymId == null
                       ? null
                       : _gymNames[sessions[index].gymId],
+                  onReturn: _loadAnalyticsData,
                 ),
               ),
             ),
@@ -321,10 +328,15 @@ class _FeedMessage extends StatelessWidget {
 }
 
 class _ActivityCard extends StatelessWidget {
-  const _ActivityCard({required this.session, this.gymName});
+  const _ActivityCard({
+    required this.session,
+    required this.onReturn,
+    this.gymName,
+  });
 
   final WorkoutSession session;
   final String? gymName;
+  final Future<void> Function() onReturn;
 
   @override
   Widget build(BuildContext context) {
@@ -337,10 +349,13 @@ class _ActivityCard extends StatelessWidget {
         ? Duration.zero
         : session.endTime!.difference(session.startTime);
     return FItem.raw(
-      onPress: () => pushTo(
-        context,
-        SessionDetailPage(session: session, gymName: gymName),
-      ),
+      onPress: () async {
+        await pushTo(
+          context,
+          SessionDetailPage(session: session, gymName: gymName),
+        );
+        await onReturn();
+      },
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Row(

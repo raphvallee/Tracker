@@ -17,8 +17,10 @@ void main() {
   });
 
   group('SessionDetailPage persistence flows', () {
-    testWidgets('delete confirms, then pops back to the list', (tester) async {
-      await pumpPersistenceApp(tester, 'session_delete_persist');
+    testWidgets('delete confirms, pops back, and removes the record', (
+      tester,
+    ) async {
+      final seeded = await pumpPersistenceApp(tester, 'session_delete_persist');
 
       await tester.tap(find.text('Delete session'));
       await settleSessionFlow(tester);
@@ -28,11 +30,20 @@ void main() {
       await settleSessionFlow(tester);
       await settleSessionFlow(tester);
 
-      // The detail page popped back to the shell and the record deletion was
-      // issued in the background (verified at the repository layer in
-      // session_edit_delete_repo_test.dart).
+      // The detail page popped back to the shell.
       expect(find.text('Delete session'), findsNothing);
       expect(find.text('Delete session?'), findsNothing);
+
+      // The delete reached the repository: the record is gone from Isar.
+      final id = seeded.session.id;
+      await waitForRealIo(
+        tester,
+        () async => (await seeded.repo.sessions.getById(id)) == null,
+      );
+      final remaining = await tester.runAsync(
+        () => seeded.repo.sessions.getById(id),
+      );
+      expect(remaining, isNull);
     });
   });
 }
