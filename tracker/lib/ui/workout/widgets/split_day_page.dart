@@ -144,11 +144,33 @@ class _SplitDayPageState extends State<SplitDayPage> {
                 const SizedBox(height: 24),
                 // Reactive on the cubit so the button comes back the moment
                 // the active session ends (no dialog, no discard choice - the
-                // running session's logged sets must never be at risk).
+                // running session's logged sets must never be at risk). The
+                // blocked state is a single button that carries both the
+                // reason (title line) and the action (second line) - no
+                // separate message widget. Two lines because one combined
+                // line overflows at the 320px minimum window width.
                 BlocSelector<WorkoutCubit, WorkoutState, bool>(
                   selector: (state) => state.isInProgress,
                   builder: (context, isInProgress) => isInProgress
-                      ? const _ActiveSessionNotice()
+                      ? FButton(
+                          onPress: () => HomePageSingleton().changeTab(
+                            TabName.currentWorkout,
+                          ),
+                          prefix: const Icon(FLucideIcons.squareArrowRight),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: <Widget>[
+                              const Text('Finish current workout first'),
+                              // Inherits the button's foreground color (the
+                              // theme's body style would paint dark-on-dark).
+                              const Text(
+                                'Go to current workout',
+                                style: TextStyle(fontSize: 13),
+                              ),
+                            ],
+                          ),
+                        )
                       : FButton(
                           onPress: () => _startWorkout(context),
                           prefix: const Icon(FLucideIcons.play),
@@ -175,32 +197,5 @@ class _SplitDayPageState extends State<SplitDayPage> {
     if (item.targetSets != null) parts.add('${item.targetSets} sets');
     if (item.targetReps != null) parts.add('${item.targetReps} reps');
     return Text(parts.join(' × '));
-  }
-}
-
-/// Shown instead of the start button while a workout session is already in
-/// progress: explains why starting is blocked and offers a shortcut to the
-/// running session. No discard path - zero data-loss routes by design.
-class _ActiveSessionNotice extends StatelessWidget {
-  const _ActiveSessionNotice();
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        Text(
-          'Finish your current workout first',
-          textAlign: TextAlign.center,
-          style: context.theme.typography.body.sm,
-        ),
-        const SizedBox(height: 12),
-        FButton(
-          onPress: () => HomePageSingleton().changeTab(TabName.currentWorkout),
-          prefix: const Icon(FLucideIcons.squareArrowRight),
-          child: const Text('Go to current workout'),
-        ),
-      ],
-    );
   }
 }
