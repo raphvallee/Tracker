@@ -52,6 +52,10 @@ class _SplitDayPageState extends State<SplitDayPage> {
 
   Future<void> _startWorkout(BuildContext context) async {
     final cubit = context.read<WorkoutCubit>();
+    // Never clobber an active session (it would drop every logged set); the
+    // start button is hidden while one is in progress, this is the belt to
+    // that suspenders.
+    if (cubit.state.isInProgress) return;
     final repo = RepositoryScope.maybeOf(context);
     final gyms = (await repo?.gyms.getAll()) ?? const <Gym>[];
     if (!context.mounted) return;
@@ -138,10 +142,36 @@ class _SplitDayPageState extends State<SplitDayPage> {
                     ),
                 const SizedBox(height: 4),
                 const SizedBox(height: 24),
-                FButton(
-                  onPress: () => _startWorkout(context),
-                  prefix: const Icon(FLucideIcons.play),
-                  child: const Text('Start this workout'),
+                // Reactive on the cubit so the button comes back the moment
+                // the active session ends (no dialog, no discard choice - the
+                // running session's logged sets must never be at risk). The
+                // blocked state is a single button that carries both the
+                // reason (title line) and the action (second line) - no
+                // separate message widget. Two lines because one combined
+                // line overflows at the 320px minimum window width.
+                BlocSelector<WorkoutCubit, WorkoutState, bool>(
+                  selector: (state) => state.isInProgress,
+                  builder: (context, isInProgress) => isInProgress
+                      ? FButton(
+                          onPress: () => HomePageSingleton().changeTab(
+                            TabName.currentWorkout,
+                          ),
+                          prefix: const Icon(FLucideIcons.squareArrowRight),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: <Widget>[
+                              const Text('Finish current workout first'),
+                              // Inherits the button's foreground color (the
+                              // theme's body style would paint dark-on-dark).
+                            ],
+                          ),
+                        )
+                      : FButton(
+                          onPress: () => _startWorkout(context),
+                          prefix: const Icon(FLucideIcons.play),
+                          child: const Text('Start this workout'),
+                        ),
                 ),
               ],
             ),
