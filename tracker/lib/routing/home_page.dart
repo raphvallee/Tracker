@@ -25,6 +25,11 @@ class _HomePageState extends State<HomePage> {
     (index) => GlobalKey<NavigatorState>(),
   );
   final Set<int> _visited = {0};
+  final List<_TabPopObserver> _popObservers = List.generate(
+    5,
+    (index) => _TabPopObserver(),
+  );
+  bool _poppingActiveTab = false;
 
   Future<bool> _handlePop() async {
     final navigator = _navigatorKeys[_currentIndex].currentState;
@@ -32,11 +37,29 @@ class _HomePageState extends State<HomePage> {
     return false;
   }
 
-  void _selectTab(int index) {
+  Future<void> _selectTab(int index) async {
     if (index != _currentIndex) {
       _setCurrentIndex(index);
-    } else {
-      _navigatorKeys[index].currentState?.popUntil((route) => route.isFirst);
+      return;
+    }
+    // Re-tapping the active tab pops it back to its root. Use maybePop so
+    // PopScope guards (e.g. the editor's unsaved-changes dialog) can veto
+    // each pop instead of being bypassed by popUntil. maybePop reports true
+    // both when a pop happens and when a guard refuses one (leaving its
+    // dialog open), so actual pops are counted via the observer: the loop
+    // stops as soon as an iteration pops nothing.
+    if (_poppingActiveTab) return;
+    _poppingActiveTab = true;
+    try {
+      final navigator = _navigatorKeys[index].currentState;
+      final observer = _popObservers[index];
+      while (navigator != null && navigator.canPop()) {
+        final popsBefore = observer.popCount;
+        final popped = await navigator.maybePop();
+        if (!popped || observer.popCount == popsBefore) break;
+      }
+    } finally {
+      _poppingActiveTab = false;
     }
   }
 
@@ -57,6 +80,7 @@ class _HomePageState extends State<HomePage> {
         isActive: isActive,
         child: Navigator(
           key: _navigatorKeys[index],
+          observers: [_popObservers[index]],
           onGenerateRoute: (settings) =>
               MaterialPageRoute(builder: (context) => child),
         ),
@@ -161,5 +185,18 @@ class _HomePageState extends State<HomePage> {
         ),
       ),
     );
+  }
+}
+
+/// Counts actual route pops on a tab's nested navigator. Used by
+/// [_selectTab] to tell a successful maybePop apart from a PopScope guard
+/// refusing one (both report true), so the pop-to-root loop cannot spin
+/// forever while a guard dialog is open.
+class _TabPopObserver extends NavigatorObserver {
+  int popCount = 0;
+
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    popCount++;
   }
 }
