@@ -66,6 +66,128 @@ void main() {
     expect(await repo.exercises.getById(id), isNull);
   });
 
+  test(
+    'getByTitle detects duplicates case-insensitively, skipping self',
+    () async {
+      final id = await repo.exercises.put(
+        Exercise(
+          title: 'Bench Press',
+          primaryMuscle: [Muscle.chest],
+          equipment: [Equipment.barbell],
+          movementPattern: MovementPattern.push,
+        ),
+      );
+
+      expect((await repo.exercises.getByTitle('bench press'))!.id, id);
+      expect((await repo.exercises.getByTitle('BENCH PRESS'))!.id, id);
+      expect(await repo.exercises.getByTitle('Squat'), isNull);
+      // Renaming must not collide with the exercise's own current title.
+      expect(
+        await repo.exercises.getByTitle('Bench Press', excludeId: id),
+        isNull,
+      );
+    },
+  );
+
+  test('splits and sessions report exercise references', () async {
+    final benchId = await repo.exercises.put(
+      Exercise(
+        title: 'Bench Press',
+        primaryMuscle: [Muscle.chest],
+        equipment: [Equipment.barbell],
+        movementPattern: MovementPattern.push,
+      ),
+    );
+    final squatId = await repo.exercises.put(
+      Exercise(
+        title: 'Squat',
+        primaryMuscle: [Muscle.quadriceps],
+        equipment: [Equipment.barbell],
+        movementPattern: MovementPattern.legs,
+      ),
+    );
+
+    expect(await repo.splits.countReferencingSplits(benchId), 0);
+    expect(await repo.sessions.countLoggingSessions(benchId), 0);
+
+    await repo.splits.put(
+      WorkoutSplit(
+        title: 'PPL',
+        order: 0,
+        splitDays: [
+          WorkoutSplitDay(
+            title: 'Push',
+            order: 0,
+            exercises: [ExerciseItem(exerciseId: benchId, order: 0)],
+          ),
+        ],
+      ),
+    );
+    await repo.splits.put(
+      WorkoutSplit(
+        title: 'Upper',
+        order: 1,
+        splitDays: [
+          WorkoutSplitDay(
+            title: 'Upper',
+            order: 0,
+            exercises: [ExerciseItem(exerciseId: squatId, order: 0)],
+          ),
+        ],
+      ),
+    );
+    expect(await repo.splits.countReferencingSplits(benchId), 1);
+    expect(await repo.splits.countReferencingSplits(squatId), 1);
+    expect(await repo.splits.countReferencingSplits(squatId + 1000), 0);
+
+    final gymId = await repo.gyms.put(Gym(name: 'Home', isPrimary: true));
+    await repo.sessions.put(
+      WorkoutSession(
+        title: 'Squat day',
+        startTime: DateTime(2026, 1, 1, 9),
+        endTime: DateTime(2026, 1, 1, 10),
+        gymId: gymId,
+        sets: [
+          WorkoutSet(
+            exerciseId: squatId,
+            weight: 100,
+            reps: 5,
+            type: SetType.working,
+            order: 0,
+          ),
+        ],
+      ),
+    );
+    // A session with two sets of the same exercise still counts once.
+    await repo.sessions.put(
+      WorkoutSession(
+        title: 'Bench day',
+        startTime: DateTime(2026, 1, 2, 9),
+        endTime: DateTime(2026, 1, 2, 10),
+        gymId: gymId,
+        sets: [
+          WorkoutSet(
+            exerciseId: benchId,
+            weight: 60,
+            reps: 8,
+            type: SetType.warmup,
+            order: 0,
+          ),
+          WorkoutSet(
+            exerciseId: benchId,
+            weight: 80,
+            reps: 5,
+            type: SetType.working,
+            order: 1,
+          ),
+        ],
+      ),
+    );
+    expect(await repo.sessions.countLoggingSessions(benchId), 1);
+    expect(await repo.sessions.countLoggingSessions(squatId), 1);
+    expect(await repo.sessions.countLoggingSessions(squatId + 1000), 0);
+  });
+
   test('gym CRUD and primary lookup', () async {
     final gymId = await repo.gyms.put(Gym(name: 'Home', isPrimary: true));
     await repo.gyms.put(Gym(name: 'Commercial', isPrimary: false));

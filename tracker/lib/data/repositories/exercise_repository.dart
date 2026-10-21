@@ -13,6 +13,19 @@ class ExerciseRepository {
 
   Future<Exercise?> getById(int id) => _isar.exercises.get(id);
 
+  /// Finds an exercise whose title matches [title] ignoring case, skipping
+  /// [excludeId] (used when renaming). Returns null when the title is free.
+  Future<Exercise?> getByTitle(String title, {int? excludeId}) async {
+    final matches = await _isar.exercises
+        .filter()
+        .titleEqualTo(title, caseSensitive: false)
+        .findAll();
+    for (final exercise in matches) {
+      if (exercise.id != excludeId) return exercise;
+    }
+    return null;
+  }
+
   Future<int> put(Exercise exercise) =>
       _isar.writeTxn(() => _isar.exercises.put(exercise));
 
