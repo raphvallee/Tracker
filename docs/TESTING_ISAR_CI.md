@@ -141,11 +141,28 @@ Select-String -Path <log> -Pattern '❌|Test timed out|tests passed|tests failed
 - Check for `print` or `debugPrint` left in production code. The CI log shows
   them, but they do not cause the stall.
 
+### Read-backs after a UI-issued write need a bounded timeout
+
+Verifying a UI save or delete by reading the record back is the right thing to
+do, but it has its own trap. The page issues its write from the fake-async
+zone, and the completion lands only during a `tester.runAsync` window. A
+read-back issued through `runAsync` while that write is still pending can
+starve libisar's native worker pool on a 4-vCPU runner and hang forever
+(PRx 28: two 10-minute timeouts, while the same tests passed locally).
+
+Never issue an unbounded repository read inside `runAsync` in a widget test.
+Wrap each read in a real-zone timeout and retry in rounds until the expected
+state appears. The ready-made helper is `waitForRealIo` in
+`tracker/testing/session_edit_helpers.dart`; on the 4-vCPU `act` container the
+write lands within 2 to 4 rounds.
+
 ## Checklist for a new Isar-backed test
 
 - [ ] It is in its own `*_test.dart` file, unless it is widget-only.
 - [ ] Its file has a comment pointing to this doc.
 - [ ] Shared fixtures live in `tracker/testing/`.
 - [ ] Isar IO inside `testWidgets` goes through `tester.runAsync`.
+- [ ] Any read-back that verifies a UI-issued write uses `waitForRealIo` (or
+      another bounded read) - never a bare awaited repository call.
 - [ ] It passes under `act` with `--container-options "--cpus 4"`, not only
       locally.
