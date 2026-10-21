@@ -20,7 +20,7 @@ const WorkoutSetSchema = Schema(
     ),
     r'isWarmup': PropertySchema(id: 1, name: r'isWarmup', type: IsarType.bool),
     r'order': PropertySchema(id: 2, name: r'order', type: IsarType.long),
-    r'reps': PropertySchema(id: 3, name: r'reps', type: IsarType.long),
+    r'reps': PropertySchema(id: 3, name: r'reps', type: IsarType.double),
     r'type': PropertySchema(
       id: 4,
       name: r'type',
@@ -54,7 +54,7 @@ void _workoutSetSerialize(
   writer.writeLong(offsets[0], object.exerciseId);
   writer.writeBool(offsets[1], object.isWarmup);
   writer.writeLong(offsets[2], object.order);
-  writer.writeLong(offsets[3], object.reps);
+  writer.writeDouble(offsets[3], object.reps);
   writer.writeByte(offsets[4], object.type.index);
   writer.writeDouble(offsets[5], object.weight);
 }
@@ -68,7 +68,7 @@ WorkoutSet _workoutSetDeserialize(
   final object = WorkoutSet(
     exerciseId: reader.readLongOrNull(offsets[0]) ?? 0,
     order: reader.readLongOrNull(offsets[2]) ?? 0,
-    reps: reader.readLongOrNull(offsets[3]) ?? 0,
+    reps: reader.readDoubleOrNull(offsets[3]) ?? 0,
     type:
         _WorkoutSettypeValueEnumMap[reader.readByteOrNull(offsets[4])] ??
         SetType.working,
@@ -91,7 +91,7 @@ P _workoutSetDeserializeProp<P>(
     case 2:
       return (reader.readLongOrNull(offset) ?? 0) as P;
     case 3:
-      return (reader.readLongOrNull(offset) ?? 0) as P;
+      return (reader.readDoubleOrNull(offset) ?? 0) as P;
     case 4:
       return (_WorkoutSettypeValueEnumMap[reader.readByteOrNull(offset)] ??
               SetType.working)
@@ -233,18 +233,25 @@ extension WorkoutSetQueryFilter
   }
 
   QueryBuilder<WorkoutSet, WorkoutSet, QAfterFilterCondition> repsEqualTo(
-    int value,
-  ) {
+    double value, {
+    double epsilon = Query.epsilon,
+  }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(
-        FilterCondition.equalTo(property: r'reps', value: value),
+        FilterCondition.equalTo(
+          property: r'reps',
+          value: value,
+
+          epsilon: epsilon,
+        ),
       );
     });
   }
 
   QueryBuilder<WorkoutSet, WorkoutSet, QAfterFilterCondition> repsGreaterThan(
-    int value, {
+    double value, {
     bool include = false,
+    double epsilon = Query.epsilon,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(
@@ -252,14 +259,17 @@ extension WorkoutSetQueryFilter
           include: include,
           property: r'reps',
           value: value,
+
+          epsilon: epsilon,
         ),
       );
     });
   }
 
   QueryBuilder<WorkoutSet, WorkoutSet, QAfterFilterCondition> repsLessThan(
-    int value, {
+    double value, {
     bool include = false,
+    double epsilon = Query.epsilon,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(
@@ -267,16 +277,19 @@ extension WorkoutSetQueryFilter
           include: include,
           property: r'reps',
           value: value,
+
+          epsilon: epsilon,
         ),
       );
     });
   }
 
   QueryBuilder<WorkoutSet, WorkoutSet, QAfterFilterCondition> repsBetween(
-    int lower,
-    int upper, {
+    double lower,
+    double upper, {
     bool includeLower = true,
     bool includeUpper = true,
+    double epsilon = Query.epsilon,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(
@@ -286,6 +299,8 @@ extension WorkoutSetQueryFilter
           includeLower: includeLower,
           upper: upper,
           includeUpper: includeUpper,
+
+          epsilon: epsilon,
         ),
       );
     });

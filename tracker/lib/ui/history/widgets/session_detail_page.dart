@@ -204,7 +204,9 @@ class _SetRow extends StatelessWidget {
       child: FItem(
         prefix: _WarmupChip(isWarmup: set.isWarmup),
         title: Text(name),
-        subtitle: Text('${formatWeight(context, set.weight)} × ${set.reps}'),
+        subtitle: Text(
+          '${formatWeight(context, set.weight)} × ${formatReps(set.reps)}',
+        ),
       ),
     );
   }

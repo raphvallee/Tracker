@@ -21,6 +21,14 @@ String formatWeight(BuildContext context, double kilograms) {
   return '$formatted ${weightUnitOf(context).symbol}';
 }
 
+/// Formats performed reps for display: whole reps without a decimal point
+/// (`5`), fractional reps with exactly one (`3.5`).
+String formatReps(double reps) {
+  return reps == reps.roundToDouble()
+      ? reps.toStringAsFixed(0)
+      : reps.toStringAsFixed(1);
+}
+
 List<ProgressionPoint> displayProgressionPoints(
   BuildContext context,
   List<ProgressionPoint> points,

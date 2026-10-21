@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:forui/forui.dart';
 import 'package:tracker/domain/models/exercise.dart';
@@ -561,7 +562,9 @@ class _SetTile extends StatelessWidget {
     final theme = context.theme;
     return FItem(
       prefix: _WarmupBadge(isWarmup: set.isWarmup),
-      title: Text('${formatWeight(context, set.weight)} × ${set.reps}'),
+      title: Text(
+        '${formatWeight(context, set.weight)} × ${formatReps(set.reps)}',
+      ),
       subtitle: set.isWarmup
           ? Text(
               'Warm-up',
@@ -700,6 +703,7 @@ class _AddSetFormState extends State<_AddSetForm> {
                 keyboardType: const TextInputType.numberWithOptions(
                   decimal: true,
                 ),
+                inputFormatters: [_RepsInputFormatter()],
                 label: const Text('Reps'),
                 error: _repsError == null ? null : Text(_repsError!),
               ),
@@ -738,9 +742,10 @@ class _AddSetFormState extends State<_AddSetForm> {
   void _add() {
     final weightError = requiredDouble(_weight.text);
     final repsError = requiredDouble(_reps.text);
-    // Fractions are accepted ("3.5"); reps are rounded half-up when logged
-    // because ActiveSet/WorkoutSet store whole numbers (see logSet).
-    final reps = double.tryParse(_reps.text);
+    // Reps keep the exact typed value (no rounding): the live input formatter
+    // only allows one decimal place, and the parse below defensively truncates
+    // pasted or hand-set values to one decimal too ("3.55" → 3.5).
+    final reps = _parseReps(_reps.text);
     if (weightError != null || repsError != null || reps == null) {
       setState(() {
         _weightError = weightError;
@@ -748,12 +753,13 @@ class _AddSetFormState extends State<_AddSetForm> {
       });
       return;
     }
-    final loggedReps = reps.round();
-    if (loggedReps < 1) {
-      // A fraction under 0.5 rounds to zero reps - reject it with the same
-      // message as a whole-number parse failure instead of logging an empty
-      // set.
-      setState(() => _repsError = 'Must be at least 1');
+    if (reps < 1) {
+      // Below one rep is never a loggable set - surface an explicit error
+      // instead of silently doing nothing.
+      setState(() {
+        _weightError = null;
+        _repsError = 'Must be at least 1';
+      });
       return;
     }
     final id = _selectedId;
@@ -776,11 +782,53 @@ class _AddSetFormState extends State<_AddSetForm> {
       exerciseId: id,
       exerciseName: name,
       weight: weight,
-      reps: loggedReps,
+      reps: reps,
       type: _warmup ? SetType.warmup : SetType.working,
     );
     _reps.clear();
     _warmup = false;
     setState(() {});
+  }
+}
+
+/// Parses reps with defensive truncation to one decimal place: "3.55" → 3.5,
+/// "0.4" → 0.4 (never rounded). The longest valid prefix wins, so trailing
+/// garbage from a paste is dropped; null when nothing parses.
+double? _parseReps(String text) {
+  final match = _repsPrefix.firstMatch(text.trim());
+  if (match == null) return null;
+  return double.tryParse(match.group(0)!);
+}
+
+final _repsPrefix = RegExp(r'^\d+\.?\d{0,1}');
+
+/// Blocks input beyond one decimal place on the reps field: "3.55" can never
+/// be typed, a second decimal separator is ignored, and a pasted value is
+/// truncated to one decimal ("3.55" pastes as "3.5").
+class _RepsInputFormatter extends TextInputFormatter {
+  static final _oneDecimal = RegExp(r'^\d*\.?\d?$');
+  static final _validPrefix = RegExp(r'^\d*\.?\d?');
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    // Accept a typed ',' as a decimal separator too; the length is unchanged,
+    // so the existing selection stays valid.
+    final text = newValue.text.replaceAll(',', '.');
+    if (_oneDecimal.hasMatch(text)) {
+      return text == newValue.text
+          ? newValue
+          : newValue.copyWith(text: text, composing: TextRange.empty);
+    }
+    // Pasted (or otherwise hand-set) values: keep the longest valid prefix.
+    final prefix = _validPrefix.firstMatch(text)?.group(0) ?? '';
+    if (prefix == oldValue.text) return oldValue;
+    return TextEditingValue(
+      text: prefix,
+      selection: TextSelection.collapsed(offset: prefix.length),
+      composing: TextRange.empty,
+    );
   }
 }

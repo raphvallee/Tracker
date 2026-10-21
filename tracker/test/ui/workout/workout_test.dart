@@ -4,12 +4,16 @@
 //     plus hydration round-trips and the idle-guard.
 //  2. Widget: the CurrentWorkout page renders the plan and logs a set inline.
 
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forui/forui.dart';
 import 'package:hydrated_bloc/hydrated_bloc.dart';
 import 'package:isar_community/isar.dart';
+import 'package:tracker/data/services/db.dart';
 import 'package:tracker/data/repositories/tracker_repository.dart';
+import 'package:tracker/domain/models/exercise.dart';
 import 'package:tracker/domain/models/gym.dart';
 import 'package:tracker/domain/models/workout_session.dart';
 import 'package:tracker/domain/models/workout_set.dart';
@@ -57,6 +61,40 @@ void main() {
     expect(cubit.state.sets, isEmpty);
     // The discarded session must never reach the history.
     expect(await repo.sessions.getAll(), isEmpty);
+  });
+
+  group('reps storage widening (int → double)', () {
+    test('legacy data migrates through DbInstance with intact reps', () async {
+      // Fixture written by the pre-widening schema, where WorkoutSet.reps was
+      // an int (see test/fixtures/reps_int_v1/): two sets with reps 5 and 8.
+      final gz = File('test/fixtures/reps_int_v1/default.isar.gz')
+          .readAsBytesSync();
+      final dir = await Directory.systemTemp.createTemp('reps_migration');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      File('${dir.path}/default.isar').writeAsBytesSync(GZipCodec().decode(gz));
+
+      // DbInstance.getIsar uses path_provider for its directory; exercise the
+      // same migration logic against this fixture directory instead.
+      await DbInstance.migrateRepsToIntToDouble(dir.path);
+
+      final isar = await Isar.open(
+        [WorkoutSessionSchema, ExerciseSchema, GymSchema],
+        directory: dir.path,
+        name: 'default',
+      );
+      final repo = TrackerRepository(isar);
+
+      final sessions = await repo.sessions.getAll();
+      expect(sessions, hasLength(1));
+      expect(sessions.single.title, 'Old session');
+      // Whole-number int reps load as whole doubles - no zeroes, no rounding.
+      expect(sessions.single.sets.map((s) => s.reps).toList(), [5.0, 8.0]);
+      expect(sessions.single.sets.map((s) => s.weight).toList(), [100.0, 90.0]);
+      expect(sessions.single.sets.last.isWarmup, isTrue);
+      expect(sessions.single.sets.map((s) => s.order).toList(), [0, 1]);
+
+      await isar.close();
+    });
   });
 
   group('WorkoutCubit persistence', () {
@@ -118,6 +156,21 @@ void main() {
         reason: 'duration should be ~(now - start) for a quick test session',
       );
       expect(started.difference(session.startTime).inSeconds, lessThan(60));
+    });
+
+    test('fractional reps persist to Isar unchanged (no rounding)', () async {
+      cubit.startWorkout();
+      cubit.logSet(
+        exerciseId: 1,
+        exerciseName: 'Squat',
+        weight: 100,
+        reps: 3.5,
+      );
+      await cubit.endWorkout();
+
+      final session = (await repo.sessions.getAll()).single;
+      expect(session.sets.single.reps, 3.5);
+      expect(session.sets.single.reps, isNot(4));
     });
 
     test(
@@ -319,7 +372,7 @@ void main() {
       expect(tester.widget<EditableText>(repsField).controller.text, '8');
     });
 
-    testWidgets('fractional reps round half-up instead of a silent no-op', (
+    testWidgets('fractional reps log and persist exactly (one decimal)', (
       tester,
     ) async {
       final cubit = await pumpApp(tester);
@@ -348,27 +401,48 @@ void main() {
           )
           .first;
 
-      // "3.5" parses and logs (rounded half-up to 4) - never a silent no-op.
+      // "3.5" logs as 3.5 - no rounding anywhere.
       await tester.enterText(weightField, '100');
       await tester.enterText(repsField, '3.5');
       await tester.tap(find.text('Add set'));
       await tester.pumpAndSettle();
       expect(cubit.state.sets, hasLength(1));
-      expect(cubit.state.sets.single.reps, 4);
-      expect(find.text('100 kg × 4'), findsOneWidget);
+      expect(cubit.state.sets.single.reps, 3.5);
+      expect(find.text('100 kg × 3.5'), findsOneWidget);
 
-      // A fraction that rounds below one rep shows a validation error.
-      await tester.enterText(repsField, '0.4');
-      await tester.tap(find.text('Add set'));
+      // The live input formatter blocks a second decimal digit while typing.
+      await tester.enterText(repsField, '3.55');
+      expect(tester.widget<EditableText>(repsField).controller.text, '3.5');
+      // A second decimal separator is ignored as well.
+      await tester.enterText(repsField, '3.5.5');
+      expect(tester.widget<EditableText>(repsField).controller.text, '3.5');
+
+      // Hand-set values (bypassing the formatter, e.g. a paste through other
+      // means) are truncated defensively to one decimal - never rounded.
+      tester.widget<EditableText>(repsField).controller.text = '12.34';
+      // Once two set tiles render, the button can sit below the test viewport;
+      // press the FButton directly instead of hit-testing its label.
+      FButton addSetButton() => tester.widget<FButton>(
+        find.ancestor(of: find.text('Add set'), matching: find.byType(FButton)),
+      );
+      addSetButton().onPress!();
       await tester.pumpAndSettle();
-      expect(cubit.state.sets, hasLength(1));
+      expect(cubit.state.sets, hasLength(2));
+      expect(cubit.state.sets.last.reps, 12.3);
+      expect(find.text('100 kg × 12.3'), findsOneWidget);
+
+      // A fraction below one rep shows an explicit error, never a no-op.
+      await tester.enterText(repsField, '0.4');
+      addSetButton().onPress!();
+      await tester.pumpAndSettle();
+      expect(cubit.state.sets, hasLength(2));
       expect(find.text('Must be at least 1'), findsOneWidget);
 
-      // Genuinely invalid input still shows the standard validation error.
+      // Genuinely invalid input keeps the standard validation error.
       await tester.enterText(repsField, 'abc');
-      await tester.tap(find.text('Add set'));
+      addSetButton().onPress!();
       await tester.pumpAndSettle();
-      expect(cubit.state.sets, hasLength(1));
+      expect(cubit.state.sets, hasLength(2));
       expect(find.text('Must be greater than 0'), findsOneWidget);
     });
   });
