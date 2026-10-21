@@ -6,6 +6,7 @@ import 'package:tracker/domain/models/workout_session.dart';
 import 'package:tracker/domain/models/workout_set.dart';
 import 'package:tracker/ui/core/ui/custom_app_bar.dart';
 import 'package:tracker/ui/core/ui/keyboard_inset.dart';
+import 'package:tracker/ui/core/ui/reps_input_formatter.dart';
 import 'package:tracker/ui/core/ui/max_width.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
 import 'package:tracker/ui/core/ui/weight_format.dart';
@@ -278,7 +279,9 @@ class _EditSetRow extends StatelessWidget {
         onPress: onEdit,
         prefix: _TypeChip(isWarmup: set.isWarmup),
         title: Text(name),
-        subtitle: Text('${formatWeight(context, set.weight)} × ${set.reps}'),
+        subtitle: Text(
+          '${formatWeight(context, set.weight)} × ${formatReps(set.reps)}',
+        ),
         suffix: const Icon(FLucideIcons.chevronRight),
       ),
     );
@@ -447,7 +450,7 @@ class _EditSetDialogState extends State<_EditSetDialog> {
     _weight = TextEditingController(
       text: _weightText(displayWeightOf(context, widget.initial.weight)),
     );
-    _reps = TextEditingController(text: '${widget.initial.reps}');
+    _reps = TextEditingController(text: _weightText(widget.initial.reps));
     _warmup = widget.initial.isWarmup;
     _weight.addListener(() => setState(() => _weightError = null));
     _reps.addListener(() => setState(() => _repsError = null));
@@ -488,7 +491,10 @@ class _EditSetDialogState extends State<_EditSetDialog> {
                 Expanded(
                   child: FTextField(
                     control: FTextFieldControl.managed(controller: _reps),
-                    keyboardType: TextInputType.number,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    inputFormatters: [RepsInputFormatter()],
                     label: const Text('Reps'),
                     error: _repsError == null ? null : Text(_repsError!),
                   ),
@@ -523,13 +529,17 @@ class _EditSetDialogState extends State<_EditSetDialog> {
 
   void _save() {
     final displayed = double.tryParse(_weight.text.trim());
-    final reps = int.tryParse(_reps.text.trim());
+    final reps = double.tryParse(_reps.text.trim().replaceAll(',', '.'));
     final weightError = requiredDouble(_weight.text);
     if (weightError != null || displayed == null || reps == null) {
       setState(() {
         _weightError = weightError;
         _repsError = reps == null ? 'Must be at least 1' : null;
       });
+      return;
+    }
+    if (reps < 1) {
+      setState(() => _repsError = 'Must be at least 1');
       return;
     }
     Navigator.of(context).pop(
