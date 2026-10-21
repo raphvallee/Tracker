@@ -107,8 +107,11 @@ Future<({TrackerRepository repo, WorkoutSession session})> pumpPersistenceApp(
 
 /// Waits for real Isar writes started from inside the fake-async zone to land.
 /// The page issues writes from the widget zone, so each round gives the real
-/// event loop time and then pumps so completions run. Returns once [done]
-/// reports true, or fails after a bounded number of rounds.
+/// event loop time and then pumps so completions run. Every read-back carries
+/// a real-zone timeout: on low-CPU runners (4 vCPU CI), a read issued while a
+/// fake-zone write is still pending can starve libisar's native worker pool
+/// and hang forever, so instead of one long-blocking read we retry with
+/// bounded reads until [done] reports true.
 Future<void> waitForRealIo(
   WidgetTester tester,
   Future<bool> Function() done,
@@ -118,7 +121,13 @@ Future<void> waitForRealIo(
       () => Future<void>.delayed(const Duration(milliseconds: 100)),
     );
     await tester.pump();
-    if (await tester.runAsync(done) ?? false) return;
+    final ok = await tester.runAsync(() {
+      return done().timeout(
+        const Duration(milliseconds: 2000),
+        onTimeout: () => false,
+      );
+    });
+    if (ok ?? false) return;
   }
   fail('the repository write did not land within 5 seconds');
 }
