@@ -3,6 +3,7 @@ import 'package:forui/forui.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
 import 'package:tracker/domain/models/exercise.dart';
 import 'package:tracker/domain/models/muscle.dart';
+import 'package:tracker/ui/core/ui/app_dialog.dart';
 import 'package:tracker/ui/core/ui/custom_app_bar.dart';
 import 'package:tracker/ui/core/ui/keyboard_inset.dart';
 import 'package:tracker/utils/form_validators.dart';
@@ -124,46 +125,27 @@ class _NewExercisePageState extends State<NewExercisePage> {
     final referenced = splitCount + sessionCount > 0;
     final confirmed = await showFDialog<bool>(
       context: context,
-      builder: (dialogContext, _, _) => FDialog(
-        builder: (dialogContext, style) => Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              referenced ? 'Cannot delete exercise' : 'Delete exercise?',
-              style: style.titleTextStyle,
+      builder: (dialogContext, _, _) => AppDialog(
+        title: referenced ? 'Cannot delete exercise' : 'Delete exercise?',
+        message: referenced
+            ? '"${exercise.title}" is used by $splitCount '
+                  'split${splitCount == 1 ? '' : 's'} and $sessionCount '
+                  'logged session${sessionCount == 1 ? '' : 's'}. Remove '
+                  'it from those first.'
+            : 'Remove "${exercise.title}" from the library? '
+                  'This cannot be undone.',
+        actions: [
+          FButton(
+            variant: .outline,
+            onPress: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          if (!referenced)
+            FButton(
+              onPress: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Delete'),
             ),
-            const SizedBox(height: 8),
-            Text(
-              referenced
-                  ? '"${exercise.title}" is used by $splitCount '
-                        'split${splitCount == 1 ? '' : 's'} and $sessionCount '
-                        'logged session${sessionCount == 1 ? '' : 's'}. Remove '
-                        'it from those first.'
-                  : 'Remove "${exercise.title}" from the library? '
-                        'This cannot be undone.',
-              style: style.bodyTextStyle,
-            ),
-            const SizedBox(height: 24),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              alignment: WrapAlignment.end,
-              children: [
-                FButton(
-                  variant: .outline,
-                  onPress: () => Navigator.of(dialogContext).pop(false),
-                  child: const Text('Cancel'),
-                ),
-                if (!referenced)
-                  FButton(
-                    onPress: () => Navigator.of(dialogContext).pop(true),
-                    child: const Text('Delete'),
-                  ),
-              ],
-            ),
-          ],
-        ),
+        ],
       ),
     );
     if (confirmed == true) {
