@@ -157,8 +157,6 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
         ),
       ),
     );
-    // ignore: avoid_print
-    print('DEBUG confirmed=$confirmed mounted=$mounted');
     if (confirmed != true) return;
     // Let the dialog route finish leaving the navigator before popping this
     // page, so pop() lands on the detail route and not the dialog.
