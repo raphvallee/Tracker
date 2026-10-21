@@ -6,6 +6,7 @@ import 'package:tracker/domain/models/workout_session.dart';
 import 'package:tracker/domain/models/workout_set.dart';
 import 'package:tracker/ui/core/ui/custom_app_bar.dart';
 import 'package:tracker/ui/core/ui/keyboard_inset.dart';
+import 'package:tracker/ui/core/ui/max_width.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
 import 'package:tracker/ui/core/ui/weight_format.dart';
 import 'package:tracker/utils/form_validators.dart';
@@ -135,50 +136,52 @@ class _SessionEditPageState extends State<SessionEditPage> {
           actionButton: (title: 'Save', onPressed: _save),
         ),
         SliverToBoxAdapter(
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(
-              16,
-              16,
-              16,
-              32 + keyboardInsetOf(context),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: <Widget>[
-                _SessionFieldsCard(
-                  title: _title,
-                  gym: _gym,
-                  start: _start,
-                  onPickGym: _pickGym,
-                  onPickStart: _pickStart,
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'Sets',
-                  style: theme.typography.body.md.copyWith(
-                    fontWeight: FontWeight.w600,
+          child: MaxWidth(
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(
+                16,
+                16,
+                16,
+                32 + keyboardInsetOf(context),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  _SessionFieldsCard(
+                    title: _title,
+                    gym: _gym,
+                    start: _start,
+                    onPickGym: _pickGym,
+                    onPickStart: _pickStart,
                   ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Tap a set to edit its weight, reps or type.',
-                  style: theme.typography.body.xs.copyWith(
-                    color: theme.colors.mutedForeground,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                if (_sets.isEmpty)
-                  const Text('No sets were logged in this session.')
-                else
-                  for (var i = 0; i < _sets.length; i++)
-                    _EditSetRow(
-                      name:
-                          _exerciseNames[_sets[i].exerciseId] ??
-                          'Exercise ${_sets[i].exerciseId}',
-                      set: _sets[i],
-                      onEdit: () => _editSet(i),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Sets',
+                    style: theme.typography.body.md.copyWith(
+                      fontWeight: FontWeight.w600,
                     ),
-              ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Tap a set to edit its weight, reps or type.',
+                    style: theme.typography.body.xs.copyWith(
+                      color: theme.colors.mutedForeground,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  if (_sets.isEmpty)
+                    const Text('No sets were logged in this session.')
+                  else
+                    for (var i = 0; i < _sets.length; i++)
+                      _EditSetRow(
+                        name:
+                            _exerciseNames[_sets[i].exerciseId] ??
+                            'Exercise ${_sets[i].exerciseId}',
+                        set: _sets[i],
+                        onEdit: () => _editSet(i),
+                      ),
+                ],
+              ),
             ),
           ),
         ),
@@ -204,45 +207,51 @@ class _SessionFieldsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = context.theme;
     final d = start.toLocal();
-    return FCard(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: <Widget>[
-            FTextField(
-              control: FTextFieldControl.managed(controller: title),
-              label: const Text('Title'),
+    // The hint lives under the card (not inside it): inside, it sat flush
+    // against the card's bottom edge and read as a clipped divider line.
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        FCard(
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                FTextField(
+                  control: FTextFieldControl.managed(controller: title),
+                  label: const Text('Title'),
+                ),
+                const SizedBox(height: 8),
+                FItem(
+                  prefix: const Icon(FLucideIcons.dumbbell),
+                  title: const Text('Gym'),
+                  subtitle: Text(gym?.name ?? 'No gym'),
+                  suffix: const Icon(FLucideIcons.chevronRight),
+                  onPress: onPickGym,
+                ),
+                FItem(
+                  prefix: const Icon(FLucideIcons.calendar),
+                  title: const Text('Started'),
+                  subtitle: Text(
+                    '${d.year}-${_p(d.month)}-${_p(d.day)} ${_p(d.hour)}:${_p(d.minute)}',
+                  ),
+                  suffix: const Icon(FLucideIcons.chevronRight),
+                  onPress: onPickStart,
+                ),
+              ],
             ),
-            const SizedBox(height: 8),
-            FItem(
-              prefix: const Icon(FLucideIcons.dumbbell),
-              title: const Text('Gym'),
-              subtitle: Text(gym?.name ?? 'No gym'),
-              suffix: const Icon(FLucideIcons.chevronRight),
-              onPress: onPickGym,
-            ),
-            FItem(
-              prefix: const Icon(FLucideIcons.calendar),
-              title: const Text('Started'),
-              subtitle: Text(
-                '${d.year}-${_p(d.month)}-${_p(d.day)} ${_p(d.hour)}:${_p(d.minute)}',
-              ),
-              suffix: const Icon(FLucideIcons.chevronRight),
-              onPress: onPickStart,
-            ),
-            // Hint for the unchanged duration shown in the detail header.
-            Text(
-              'Editing the start time keeps the session duration.',
-              style: theme.typography.body.xs.copyWith(
-                color: theme.colors.mutedForeground,
-              ),
-            ),
-          ],
+          ),
         ),
-      ),
+        const SizedBox(height: 6),
+        Text(
+          'Editing the start time keeps the session duration.',
+          style: context.theme.typography.body.xs.copyWith(
+            color: context.theme.colors.mutedForeground,
+          ),
+        ),
+      ],
     );
   }
 
@@ -453,57 +462,61 @@ class _EditSetDialogState extends State<_EditSetDialog> {
 
   @override
   Widget build(BuildContext context) {
+    // Scrollable like the app's reference EditGymDialog: weight/reps errors
+    // push content taller and the keyboard must not clip the actions.
     return FDialog(
-      builder: (context, style) => Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text('Edit set', style: style.titleTextStyle),
-          const SizedBox(height: 16),
-          Row(
-            children: <Widget>[
-              Expanded(
-                child: FTextField(
-                  control: FTextFieldControl.managed(controller: _weight),
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
+      builder: (context, style) => SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('Edit set', style: style.titleTextStyle),
+            const SizedBox(height: 16),
+            Row(
+              children: <Widget>[
+                Expanded(
+                  child: FTextField(
+                    control: FTextFieldControl.managed(controller: _weight),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    label: Text('Weight (${weightUnitOf(context).symbol})'),
+                    error: _weightError == null ? null : Text(_weightError!),
                   ),
-                  label: Text('Weight (${weightUnitOf(context).symbol})'),
-                  error: _weightError == null ? null : Text(_weightError!),
                 ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: FTextField(
-                  control: FTextFieldControl.managed(controller: _reps),
-                  keyboardType: TextInputType.number,
-                  label: const Text('Reps'),
-                  error: _repsError == null ? null : Text(_repsError!),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: FTextField(
+                    control: FTextFieldControl.managed(controller: _reps),
+                    keyboardType: TextInputType.number,
+                    label: const Text('Reps'),
+                    error: _repsError == null ? null : Text(_repsError!),
+                  ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          FCheckbox(
-            label: const Text('Warm-up'),
-            value: _warmup,
-            onChange: (v) => setState(() => _warmup = v),
-          ),
-          const SizedBox(height: 24),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            alignment: WrapAlignment.end,
-            children: [
-              FButton(
-                variant: .outline,
-                onPress: () => Navigator.of(context).pop(),
-                child: const Text('Cancel'),
-              ),
-              FButton(onPress: _save, child: const Text('Save')),
-            ],
-          ),
-        ],
+              ],
+            ),
+            const SizedBox(height: 8),
+            FCheckbox(
+              label: const Text('Warm-up'),
+              value: _warmup,
+              onChange: (v) => setState(() => _warmup = v),
+            ),
+            const SizedBox(height: 24),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              alignment: WrapAlignment.end,
+              children: [
+                FButton(
+                  variant: .outline,
+                  onPress: () => Navigator.of(context).pop(),
+                  child: const Text('Cancel'),
+                ),
+                FButton(onPress: _save, child: const Text('Save')),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

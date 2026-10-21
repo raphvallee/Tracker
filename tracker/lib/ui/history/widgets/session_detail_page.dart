@@ -8,6 +8,8 @@ import 'package:tracker/domain/models/workout_session.dart';
 import 'package:tracker/domain/models/workout_set.dart';
 import 'package:tracker/ui/core/ui/custom_app_bar.dart';
 import 'package:tracker/ui/core/ui/custom_route.dart';
+import 'package:tracker/ui/core/ui/keyboard_inset.dart';
+import 'package:tracker/ui/core/ui/max_width.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
 import 'package:tracker/ui/core/ui/weight_format.dart';
 import 'package:tracker/ui/history/widgets/session_edit_page.dart';
@@ -145,6 +147,7 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
                   child: const Text('Cancel'),
                 ),
                 FButton(
+                  variant: .destructive,
                   onPress: () => Navigator.of(dialogContext).pop(true),
                   child: const Text('Delete'),
                 ),
@@ -187,56 +190,60 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
           actionButton: (title: 'Edit', onPressed: _edit),
         ),
         SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: <Widget>[
-                _HeaderCard(session: session, gymName: _gymName),
-                const SizedBox(height: 12),
-                IntrinsicHeight(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: <Widget>[
-                      _Stat(label: 'Sets', value: '${session.sets.length}'),
-                      const SizedBox(width: 12),
-                      _Stat(
-                        label: 'Working volume',
-                        value: formatWeight(context, workingVolume),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'Sets',
-                  style: theme.typography.body.md.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                if (session.sets.isEmpty)
-                  const Text('No sets were logged in this session.')
-                else
-                  for (final set in session.sets)
-                    _SetRow(
-                      name:
-                          _exerciseNames[set.exerciseId] ??
-                          'Exercise ${set.exerciseId}',
-                      set: set,
+          child: MaxWidth(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  _HeaderCard(session: session, gymName: _gymName),
+                  const SizedBox(height: 12),
+                  IntrinsicHeight(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: <Widget>[
+                        _Stat(label: 'Sets', value: '${session.sets.length}'),
+                        const SizedBox(width: 12),
+                        _Stat(
+                          label: 'Working volume',
+                          value: formatWeight(context, workingVolume),
+                        ),
+                      ],
                     ),
-                const SizedBox(height: 24),
-                FilledButton.icon(
-                  onPressed: _delete,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: theme.colors.error,
-                    foregroundColor: theme.colors.errorForeground,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
                   ),
-                  icon: const Icon(FLucideIcons.trash2),
-                  label: const Text('Delete session'),
-                ),
-              ],
+                  const SizedBox(height: 16),
+                  Text(
+                    'Sets',
+                    style: theme.typography.body.md.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  if (session.sets.isEmpty)
+                    const Text('No sets were logged in this session.')
+                  else
+                    for (final set in session.sets)
+                      _SetRow(
+                        name:
+                            _exerciseNames[set.exerciseId] ??
+                            'Exercise ${set.exerciseId}',
+                        set: set,
+                      ),
+                  // Bottom padding grows by the keyboard height so the delete
+                  // action can scroll above the keyboard (see keyboard_inset).
+                  const SizedBox(height: 24),
+                  Padding(
+                    padding: EdgeInsets.only(bottom: keyboardInsetOf(context)),
+                    child: FButton(
+                      variant: .destructive,
+                      size: .lg,
+                      onPress: _delete,
+                      prefix: const Icon(FLucideIcons.trash2),
+                      child: const Text('Delete session'),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

@@ -127,6 +127,23 @@ Future<void> main() async {
     );
     await tester.pumpAndSettle();
     await pause(1000);
+
+    // Before saving, park on the editor for one screenshot, then open the
+    // date/time picker dialog for another.
+    final dateRow = find.text('Started');
+    if (dateRow.evaluate().isNotEmpty) {
+      await tester.tap(dateRow);
+      await tester.pumpAndSettle();
+      await pause(2500); // Start time dialog with wheels
+      await tester.tap(
+        find.descendant(
+          of: find.byType(FDialog),
+          matching: find.text('Cancel'),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
     await tester.tap(find.text('Save')); // editor app-bar action
     await tester.pumpAndSettle();
     await pause(2500); // detail page shows 90 kg × 6
