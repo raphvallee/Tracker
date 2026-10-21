@@ -4,7 +4,7 @@
 // (session_edit_persist_test.dart, session_delete_persist_test.dart,
 // session_edit_delete_repo_test.dart): libisar's native worker pool is sized to
 // the CPU count, so one process per Isar-heavy case keeps CI's 4-vCPU runners
-// from wedging.
+// from wedging. See docs/TESTING_ISAR_CI.md.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';

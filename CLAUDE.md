@@ -96,6 +96,8 @@ The README records intended refactors/features, not current behavior; several ar
 
 ## Running GitHub Actions locally (repo root)
 
+Before writing a test that opens a real Isar database, read `docs/TESTING_ISAR_CI.md`. Isar-backed cases must each get their own `*_test.dart` file, or they hang on the 4-vCPU CI runner. To reproduce, pass `--container-options "--cpus 4" --bind` to `act`.
+
 `run-github-actions-locally.ps1` is a cross-platform (Windows/macOS/Linux) PowerShell script that ensures an Internet connection, then installs (if needed) the `act` CLI (nektos/act) and Docker, starts Docker Desktop/systemctl, then runs the GitHub Actions workflow locally. It self-elevates via `sudo`/RunAs. macOS support is partial and untested. Run as: `pwsh run-github-actions-locally.ps1`.
 
 ## Capturing screenshots/videos of the app (fixed procedure)
