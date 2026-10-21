@@ -35,6 +35,7 @@ import 'package:tracker/ui/exercises/widgets/exercise_detail_page.dart';
 import 'package:tracker/ui/exercises/widgets/new_exercise_page.dart';
 import 'package:tracker/ui/feed/widgets/feed_page.dart';
 import 'package:tracker/ui/history/widgets/session_detail_page.dart';
+import 'package:tracker/ui/history/widgets/session_edit_page.dart';
 import 'package:tracker/ui/settings/view_models/settings_cubit.dart';
 import 'package:tracker/ui/settings/widgets/gyms_page.dart';
 import 'package:tracker/ui/settings/widgets/settings_page.dart';
@@ -314,6 +315,11 @@ void main() {
         SessionDetailPage(session: fixtures.session, gymName: 'Iron Temple'),
         // Set rows fall back to "Exercise <id>" until the async name map
         // resolves; gate on the real exercise name.
+        dataReady: () => tester.any(find.text('Bench Press')),
+      );
+      await visit(
+        'Session edit page',
+        SessionEditPage(session: fixtures.session),
         dataReady: () => tester.any(find.text('Bench Press')),
       );
       await visit('Split editor (new)', const SplitEditorPage());

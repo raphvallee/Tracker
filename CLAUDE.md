@@ -94,6 +94,10 @@ Tests live under `tracker/test/`, mirroring `lib/`: `test/domain/` (analytics, s
 
 The README records intended refactors/features, not current behavior; several are now done: **Settings is a child page of Feed** (via the Feed app-bar action -> `pushTo(SettingsPage)`) and the **Current Workout** destination exists as tab 2. The intended bottom-bar layout (Home, History, CurrentWorkout, WorkoutsEditor, Exercices) is implemented.
 
+## Writing tests (read first)
+
+**Before writing any test that opens a real Isar database, read `docs/TESTING_ISAR_CI.md`.** Isar-backed cases must each get their own `*_test.dart` file, or they hang on the 4-vCPU CI runner while passing locally.
+
 ## Running GitHub Actions locally (repo root)
 
 `run-github-actions-locally.ps1` is a cross-platform (Windows/macOS/Linux) PowerShell script that ensures an Internet connection, then installs (if needed) the `act` CLI (nektos/act) and Docker, starts Docker Desktop/systemctl, then runs the GitHub Actions workflow locally. It self-elevates via `sudo`/RunAs. macOS support is partial and untested. Run as: `pwsh run-github-actions-locally.ps1`.
