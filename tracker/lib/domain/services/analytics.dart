@@ -120,7 +120,7 @@ Map<int, double> flattenExerciseMultipliers(
   Map<int, double> values,
 ) => {for (final entry in values.entries) entry.key: entry.value};
 
-double epley1rm({required double weight, required int reps}) =>
+double epley1rm({required double weight, required double reps}) =>
     reps <= 1 ? weight : weight * (1 + reps / 30);
 
 class ProgressionPoint {

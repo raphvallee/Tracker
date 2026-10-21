@@ -8,7 +8,7 @@ import 'package:tracker/domain/models/workout_session.dart';
 import 'package:tracker/domain/models/workout_set.dart';
 import 'package:tracker/domain/services/analytics.dart';
 
-WorkoutSet _set(int exerciseId, double weight, int reps, SetType type) =>
+WorkoutSet _set(int exerciseId, double weight, double reps, SetType type) =>
     WorkoutSet(exerciseId: exerciseId, weight: weight, reps: reps, type: type);
 
 WorkoutSession _session(DateTime start, int gymId, List<WorkoutSet> sets) =>

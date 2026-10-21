@@ -11,6 +11,11 @@ enum SetType { warmup, working }
 /// A single performed set within a [WorkoutSession]. Embedded inline, so it has
 /// no `Id` of its own; [order] preserves sequence and [exerciseId] links back to
 /// the [Exercise] performed.
+///
+/// [reps] is a double: fractional reps (one decimal place, e.g. 3.5) are
+/// supported. Older databases stored whole-number int reps; Isar's automatic
+/// migration loads them as whole doubles (verified by the fixture-backed
+/// migration test in test/ui/workout/).
 @embedded
 class WorkoutSet {
   WorkoutSet({
@@ -23,7 +28,7 @@ class WorkoutSet {
 
   int exerciseId;
   double weight;
-  int reps;
+  double reps;
   @enumerated
   SetType type;
   int order;

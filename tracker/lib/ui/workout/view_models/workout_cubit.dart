@@ -31,7 +31,7 @@ class ActiveSet {
         ? json['exerciseName'] as String
         : '',
     weight: _doubleValue(json['weight']),
-    reps: _intValue(json['reps']),
+    reps: _doubleValue(json['reps']),
     type: SetType.values.asNameMap()[json['type']] ?? SetType.working,
     order: _intValue(json['order']),
   );
@@ -52,7 +52,7 @@ class ActiveSet {
   final int exerciseId;
   final String exerciseName;
   final double weight;
-  final int reps;
+  final double reps;
   final SetType type;
   final int order;
 
@@ -410,12 +410,14 @@ class WorkoutCubit extends HydratedCubit<WorkoutState> {
     emit(state.copyWith(gymId: gym.id, gymName: gym.name));
   }
 
-  /// Log one performed set, appending it in sequence.
+  /// Log one performed set, appending it in sequence. Reps may be fractional
+  /// (one decimal place); callers are expected to pass an already-truncated
+  /// value.
   void logSet({
     required int exerciseId,
     required String exerciseName,
     required double weight,
-    required int reps,
+    required double reps,
     SetType type = SetType.working,
   }) {
     final sets = [
