@@ -26,10 +26,36 @@ class _HomePageState extends State<HomePage> {
   );
   final Set<int> _visited = {0};
 
+  /// One tracker per tab navigator: counts the modal routes (dialogs, bottom
+  /// sheets) currently on that tab's stack.
+  final List<_TabModalTracker> _modalTrackers = List.generate(
+    5,
+    (index) => _TabModalTracker(),
+  );
+
+  /// True while a back press is still being handed to the active tab
+  /// navigator's [Navigator.maybePop].
+  bool _interceptInFlight = false;
+
   Future<bool> _handlePop() async {
     final navigator = _navigatorKeys[_currentIndex].currentState;
-    if (navigator != null && await navigator.maybePop()) return true;
-    return false;
+    if (navigator == null) return false;
+    // Dialog-aware exit guard: while a pop-intercept dialog (e.g. the split
+    // editor's "Discard changes?" prompt) is still on the active tab's stack,
+    // or while a previous back press is still resolving, swallow the press
+    // instead of letting it pop the pending dialog or fall through to
+    // SystemNavigator.pop(), which would kill the whole app while the user
+    // has not answered the dialog yet. Plain page routes are deliberately not
+    // counted (see [_TabModalTracker]): subpages must stay poppable by back.
+    if (_interceptInFlight || _modalTrackers[_currentIndex].modalDepth > 0) {
+      return true;
+    }
+    _interceptInFlight = true;
+    try {
+      return await navigator.maybePop();
+    } finally {
+      _interceptInFlight = false;
+    }
   }
 
   void _selectTab(int index) {
@@ -57,6 +83,7 @@ class _HomePageState extends State<HomePage> {
         isActive: isActive,
         child: Navigator(
           key: _navigatorKeys[index],
+          observers: [_modalTrackers[index]],
           onGenerateRoute: (settings) =>
               MaterialPageRoute(builder: (context) => child),
         ),
@@ -161,5 +188,38 @@ class _HomePageState extends State<HomePage> {
         ),
       ),
     );
+  }
+}
+
+/// Counts the modal routes (dialog and bottom-sheet routes, i.e.
+/// [PopupRoute] subclasses) on one tab navigator's stack. The shell's
+/// dialog-aware exit guard uses the count to swallow system-back presses
+/// while a modal the user has not answered yet is up, instead of popping the
+/// dialog behind the user's back or exiting the app. Plain page routes are
+/// ignored on purpose: subpages must stay poppable by back.
+class _TabModalTracker extends NavigatorObserver {
+  int _modalDepth = 0;
+
+  int get modalDepth => _modalDepth;
+
+  @override
+  void didPush(Route route, Route? previousRoute) {
+    if (route is PopupRoute) _modalDepth++;
+  }
+
+  @override
+  void didPop(Route route, Route? previousRoute) {
+    if (route is PopupRoute) _modalDepth--;
+  }
+
+  @override
+  void didRemove(Route route, Route? previousRoute) {
+    if (route is PopupRoute) _modalDepth--;
+  }
+
+  @override
+  void didReplace({Route? newRoute, Route? oldRoute}) {
+    if (oldRoute is PopupRoute) _modalDepth--;
+    if (newRoute is PopupRoute) _modalDepth++;
   }
 }
