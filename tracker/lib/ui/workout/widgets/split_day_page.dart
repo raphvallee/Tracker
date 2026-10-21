@@ -164,10 +164,6 @@ class _SplitDayPageState extends State<SplitDayPage> {
                               const Text('Finish current workout first'),
                               // Inherits the button's foreground color (the
                               // theme's body style would paint dark-on-dark).
-                              const Text(
-                                'Go to current workout',
-                                style: TextStyle(fontSize: 13),
-                              ),
                             ],
                           ),
                         )
