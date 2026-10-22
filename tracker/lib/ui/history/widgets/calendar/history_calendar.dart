@@ -79,11 +79,8 @@ class _HistoryCalendarState extends State<HistoryCalendar> {
     // Pre-calculate days with workouts in an O(1) Set for the grid cells
     final days = <int>{};
     for (final dayVal in _grid.days) {
-      if (dayVal != null) {
-        final date = DateTime(_year, _month, dayVal);
-        if (_dateIndex.sessionsOn(date).isNotEmpty) {
-          days.add(dayVal);
-        }
+      if (dayVal != null && _dateIndex.hasWorkoutOn(_year, _month, dayVal)) {
+        days.add(dayVal);
       }
     }
     _daysWithWorkouts = days;
@@ -281,35 +278,49 @@ class _DayGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const double cellSpacing = 4;
-    return GridView.builder(
+    final rowCount = grid.days.length ~/ 7;
+    return Padding(
       padding: const EdgeInsets.only(top: 4),
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 7,
-        mainAxisExtent: cellHeight,
-        mainAxisSpacing: cellSpacing,
-        crossAxisSpacing: cellSpacing,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          for (var row = 0; row < rowCount; row++) ...[
+            if (row > 0) const SizedBox(height: cellSpacing),
+            Row(
+              children: <Widget>[
+                for (var column = 0; column < 7; column++) ...[
+                  if (column > 0) const SizedBox(width: cellSpacing),
+                  Expanded(
+                    child: SizedBox(
+                      height: cellHeight,
+                      child: _cellAt(row * 7 + column),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ],
+        ],
       ),
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: grid.days.length,
-      itemBuilder: (context, index) {
-        final dayVal = grid.days[index];
-        if (dayVal == null) return const SizedBox.shrink();
+    );
+  }
 
-        final isSelected =
-            selectedDay != null &&
-            selectedDay!.year == grid.year &&
-            selectedDay!.month == grid.month &&
-            selectedDay!.day == dayVal;
+  Widget _cellAt(int index) {
+    final dayVal = grid.days[index];
+    if (dayVal == null) return const SizedBox.shrink();
 
-        return _DayCell(
-          dayVal: dayVal,
-          theme: theme,
-          isSelected: isSelected,
-          hasWorkout: daysWithWorkouts.contains(dayVal),
-          onTap: () => onSelectDay(DateTime(grid.year, grid.month, dayVal)),
-        );
-      },
+    final isSelected =
+        selectedDay != null &&
+        selectedDay!.year == grid.year &&
+        selectedDay!.month == grid.month &&
+        selectedDay!.day == dayVal;
+
+    return _DayCell(
+      dayVal: dayVal,
+      theme: theme,
+      isSelected: isSelected,
+      hasWorkout: daysWithWorkouts.contains(dayVal),
+      onTap: () => onSelectDay(DateTime(grid.year, grid.month, dayVal)),
     );
   }
 }
