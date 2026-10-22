@@ -13,6 +13,14 @@ import 'package:tracker/ui/history/widgets/calendar/history_calendar.dart';
 
 const List<int> sessionCounts = [500, 2000];
 
+/// Finds an icon-only [FButton] by its semantics tooltip (AppIconButton).
+///
+/// Material's `find.byTooltip` matched the old `Tooltip` widgets; since the
+/// Forui swap the tooltip lives on `FButton.semanticsTooltip` instead.
+Finder fButtonByTooltip(String tooltip) => find.byWidgetPredicate(
+  (w) => w is FButton && w.semanticsTooltip == tooltip,
+);
+
 /// Frame budget the device harness enforces (p95 of UI-thread frame build).
 /// Overridable with --dart-define=CAL_BUDGET_MS when profiling on a throttled
 /// or slow device, where the 7ms gate for normal hardware does not apply.

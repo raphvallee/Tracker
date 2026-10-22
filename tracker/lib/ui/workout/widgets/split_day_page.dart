@@ -110,7 +110,7 @@ class _SplitDayPageState extends State<SplitDayPage> {
                 if (_loading)
                   const Padding(
                     padding: EdgeInsets.symmetric(vertical: 24),
-                    child: Center(child: CircularProgressIndicator()),
+                    child: Center(child: FCircularProgress()),
                   )
                 else if (items.isEmpty)
                   const Text('No exercises in this day yet.')

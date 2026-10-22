@@ -5,6 +5,7 @@ import 'package:tracker/domain/models/workout_session.dart';
 import 'package:tracker/domain/services/analytics.dart';
 import 'package:tracker/ui/core/ui/app_dialog.dart';
 import 'package:tracker/ui/core/ui/custom_app_bar.dart';
+import 'package:tracker/ui/core/ui/icon_button.dart';
 import 'package:tracker/ui/core/ui/max_width.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
 import 'package:tracker/utils/form_validators.dart';
@@ -465,10 +466,10 @@ class _GymTile extends StatelessWidget {
                 ],
               ),
             ],
-            builder: (_, controller, _) => IconButton(
-              icon: const Icon(FLucideIcons.ellipsisVertical),
+            builder: (_, controller, _) => AppIconButton(
+              icon: FLucideIcons.ellipsisVertical,
               tooltip: 'Gym actions',
-              onPressed: controller.toggle,
+              onPress: controller.toggle,
             ),
           ),
         ),

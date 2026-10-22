@@ -9,6 +9,7 @@ import 'package:tracker/domain/models/workout_split.dart';
 import 'package:tracker/ui/core/ui/app_dialog.dart';
 import 'package:tracker/ui/core/ui/custom_app_bar.dart';
 import 'package:tracker/ui/core/ui/decimal_input_formatter.dart';
+import 'package:tracker/ui/core/ui/icon_button.dart';
 import 'package:tracker/ui/core/ui/keyboard_inset.dart';
 import 'package:tracker/ui/core/ui/max_width.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
@@ -145,19 +146,15 @@ class _InProgressView extends StatelessWidget {
                     exerciseName: entry.exercise.name,
                   ),
               const SizedBox(height: 24),
-              FilledButton.icon(
-                onPressed: () => _confirmEnd(
+              FButton(
+                variant: .destructive,
+                onPress: () => _confirmEnd(
                   context,
                   presentation.setCount,
                   onDiscard: onDiscard,
                 ),
-                style: FilledButton.styleFrom(
-                  backgroundColor: context.theme.colors.error,
-                  foregroundColor: context.theme.colors.errorForeground,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                ),
-                icon: const Icon(FLucideIcons.squareStop),
-                label: const Text('End Workout'),
+                prefix: const Icon(FLucideIcons.squareStop),
+                child: const Text('End Workout'),
               ),
             ],
           ),
@@ -214,11 +211,11 @@ class _InProgressView extends StatelessWidget {
             titleTrailing: Semantics(
               label: 'Discard workout',
               button: true,
-              child: IconButton(
-                icon: const Icon(FLucideIcons.trash2),
-                color: dialogContext.theme.colors.error,
+              child: AppIconButton(
+                icon: FLucideIcons.trash2,
                 tooltip: 'Discard workout',
-                onPressed: () =>
+                color: dialogContext.theme.colors.error,
+                onPress: () =>
                     Navigator.pop(dialogContext, _WorkoutAction.discard),
               ),
             ),
@@ -522,10 +519,10 @@ class _SetTile extends StatelessWidget {
               ),
             )
           : null,
-      suffix: IconButton(
-        icon: const Icon(FLucideIcons.trash2, size: 20),
+      suffix: AppIconButton(
+        icon: FLucideIcons.trash2,
         tooltip: 'Remove set',
-        onPressed: () => context.read<WorkoutCubit>().removeSet(set.order),
+        onPress: () => context.read<WorkoutCubit>().removeSet(set.order),
       ),
     );
   }
