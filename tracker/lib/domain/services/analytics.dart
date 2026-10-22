@@ -20,6 +20,7 @@ DateTime? graphRangeStart(GraphTimeframe timeframe, DateTime newest) {
     case GraphTimeframe.lastYear:
       return newest.subtract(const Duration(days: 365));
   }
+  return null;
 }
 
 String graphMetricLabel(GraphMetric metric) {
