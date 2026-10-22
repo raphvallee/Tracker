@@ -135,11 +135,24 @@ class _GymsPageState extends State<GymsPage> {
   Future<void> _deleteGym(Gym gym) async {
     final repo = RepositoryScope.maybeOf(context);
     if (repo == null) return;
+    // The primary gym is the multiplier baseline (×1.0). While other gyms
+    // exist, deleting it would leave them without a baseline, so require the
+    // user to promote another gym first. Deleting the only gym is allowed and
+    // legitimately resets to the empty state.
+    final othersExist = (await repo.gyms.getAll()).any((g) => g.id != gym.id);
+    if (gym.isPrimary && othersExist) {
+      _snack('Set another gym as primary first.');
+      return;
+    }
+    if (!mounted) return;
     final confirmed = await showConfirmDialog(
       context,
       title: 'Delete gym?',
-      message: 'Remove "${gym.name}"? Past sessions keep their record.',
+      message:
+          'Remove "${gym.name}"? Past sessions keep their logged '
+          'weights and reps. Their per-gym multiplier is removed.',
       confirmLabel: 'Delete',
+      destructive: true,
     );
     if (confirmed) {
       await repo.gyms.delete(gym.id);
