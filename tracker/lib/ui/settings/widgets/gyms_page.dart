@@ -3,6 +3,7 @@ import 'package:forui/forui.dart';
 import 'package:tracker/domain/models/gym.dart';
 import 'package:tracker/domain/models/workout_session.dart';
 import 'package:tracker/domain/services/analytics.dart';
+import 'package:tracker/ui/core/ui/app_dialog.dart';
 import 'package:tracker/ui/core/ui/custom_app_bar.dart';
 import 'package:tracker/ui/core/ui/max_width.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
@@ -133,41 +134,13 @@ class _GymsPageState extends State<GymsPage> {
   Future<void> _deleteGym(Gym gym) async {
     final repo = RepositoryScope.maybeOf(context);
     if (repo == null) return;
-    final confirmed = await showFDialog<bool>(
-      context: context,
-      builder: (dialogContext, _, _) => FDialog(
-        builder: (context, style) => Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text('Delete gym?', style: style.titleTextStyle),
-            const SizedBox(height: 8),
-            Text(
-              'Remove "${gym.name}"? Past sessions keep their record.',
-              style: style.bodyTextStyle,
-            ),
-            const SizedBox(height: 24),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              alignment: WrapAlignment.end,
-              children: [
-                FButton(
-                  variant: .outline,
-                  onPress: () => Navigator.of(context).pop(false),
-                  child: const Text('Cancel'),
-                ),
-                FButton(
-                  onPress: () => Navigator.of(context).pop(true),
-                  child: const Text('Delete'),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
+    final confirmed = await showConfirmDialog(
+      context,
+      title: 'Delete gym?',
+      message: 'Remove "${gym.name}"? Past sessions keep their record.',
+      confirmLabel: 'Delete',
     );
-    if (confirmed == true) {
+    if (confirmed) {
       await repo.gyms.delete(gym.id);
     }
   }
@@ -309,124 +282,111 @@ class _EditGymDialogState extends State<EditGymDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return FDialog(
-      builder: (context, style) => SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: <Widget>[
-            Text(widget.title, style: style.titleTextStyle),
-            const SizedBox(height: 16),
-            FTextField(
-              control: FTextFieldControl.managed(
-                controller: _name,
-                onChange: (_) => setState(() {}),
-              ),
-              label: const Text('Gym name'),
-              error: _gymNameError(_name.text) == null
-                  ? null
-                  : Text(_gymNameError(_name.text)!),
+    return AppDialog(
+      title: widget.title,
+      headerGap: 16,
+      scrollable: true,
+      actions: [
+        FButton(
+          variant: .outline,
+          onPress: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FButton(
+          onPress: () async {
+            final nameText = _name.text.trim();
+            final multiplierError = _gymMultiplierError(
+              _multiplier.text,
+              isPrimary: widget.initial.isPrimary,
+            );
+            if (_gymNameError(nameText) != null || multiplierError != null) {
+              setState(() {});
+              return;
+            }
+            final candidate = Gym(
+              name: nameText,
+              description: _description.text.trim(),
+              isPrimary: widget.initial.isPrimary,
+              order: widget.initial.order,
+              multiplier: widget.initial.isPrimary
+                  ? 1.0
+                  : double.tryParse(_multiplier.text.trim()) ?? 1.0,
+            )..id = widget.initial.id;
+
+            final existing =
+                await widget.getExistingGyms?.call() ?? const <Gym>[];
+            if (existing.any(
+              (gym) =>
+                  gym.id != widget.initial.id && sameGymName(gym, candidate),
+            )) {
+              if (context.mounted) {
+                showFToast(
+                  context: context,
+                  title: const Text('A gym with this name already exists'),
+                );
+              }
+              return;
+            }
+            if (context.mounted) Navigator.of(context).pop(candidate);
+          },
+          child: const Text('Save'),
+        ),
+      ],
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          FTextField(
+            control: FTextFieldControl.managed(
+              controller: _name,
+              onChange: (_) => setState(() {}),
             ),
-            const SizedBox(height: 12),
-            FTextField(
-              control: FTextFieldControl.managed(controller: _description),
-              label: const Text('Description (optional)'),
-              minLines: 1,
-              maxLines: null,
-              keyboardType: TextInputType.multiline,
+            label: const Text('Gym name'),
+            error: _gymNameError(_name.text) == null
+                ? null
+                : Text(_gymNameError(_name.text)!),
+          ),
+          const SizedBox(height: 12),
+          FTextField(
+            control: FTextFieldControl.managed(controller: _description),
+            label: const Text('Description (optional)'),
+            minLines: 1,
+            maxLines: null,
+            keyboardType: TextInputType.multiline,
+          ),
+          const SizedBox(height: 12),
+          FTextField(
+            control: FTextFieldControl.managed(
+              controller: _multiplier,
+              onChange: (_) => setState(() {}),
             ),
-            const SizedBox(height: 12),
-            FTextField(
-              control: FTextFieldControl.managed(
-                controller: _multiplier,
-                onChange: (_) => setState(() {}),
-              ),
-              enabled: !widget.initial.isPrimary,
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
-              label: Text(
-                widget.initial.isPrimary
-                    ? 'Multiplier (primary = ×1.0)'
-                    : 'Weight multiplier',
-              ),
-              description: Text(
-                widget.initial.isPrimary
-                    ? 'The primary gym is the fixed baseline.'
-                    : 'Scales logged weights to the primary gym.',
-              ),
-              error:
-                  _gymMultiplierError(
-                        _multiplier.text,
-                        isPrimary: widget.initial.isPrimary,
-                      ) ==
-                      null
-                  ? null
-                  : Text(
-                      _gymMultiplierError(
-                        _multiplier.text,
-                        isPrimary: widget.initial.isPrimary,
-                      )!,
-                    ),
+            enabled: !widget.initial.isPrimary,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            label: Text(
+              widget.initial.isPrimary
+                  ? 'Multiplier (primary = ×1.0)'
+                  : 'Weight multiplier',
             ),
-            const SizedBox(height: 24),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              alignment: WrapAlignment.end,
-              children: [
-                FButton(
-                  variant: .outline,
-                  onPress: () => Navigator.of(context).pop(),
-                  child: const Text('Cancel'),
-                ),
-                FButton(
-                  onPress: () async {
-                    final nameText = _name.text.trim();
-                    final multiplierError = _gymMultiplierError(
+            description: Text(
+              widget.initial.isPrimary
+                  ? 'The primary gym is the fixed baseline.'
+                  : 'Scales logged weights to the primary gym.',
+            ),
+            error:
+                _gymMultiplierError(
                       _multiplier.text,
                       isPrimary: widget.initial.isPrimary,
-                    );
-                    if (_gymNameError(nameText) != null ||
-                        multiplierError != null) {
-                      setState(() {});
-                      return;
-                    }
-                    final candidate = Gym(
-                      name: nameText,
-                      description: _description.text.trim(),
+                    ) ==
+                    null
+                ? null
+                : Text(
+                    _gymMultiplierError(
+                      _multiplier.text,
                       isPrimary: widget.initial.isPrimary,
-                      order: widget.initial.order,
-                      multiplier: widget.initial.isPrimary
-                          ? 1.0
-                          : double.tryParse(_multiplier.text.trim()) ?? 1.0,
-                    )..id = widget.initial.id;
-
-                    final existing =
-                        await widget.getExistingGyms?.call() ?? const <Gym>[];
-                    if (existing.any(
-                      (gym) =>
-                          gym.id != widget.initial.id &&
-                          sameGymName(gym, candidate),
-                    )) {
-                      if (context.mounted) {
-                        showFToast(
-                          context: context,
-                          title: const Text(
-                            'A gym with this name already exists',
-                          ),
-                        );
-                      }
-                      return;
-                    }
-                    if (context.mounted) Navigator.of(context).pop(candidate);
-                  },
-                  child: const Text('Save'),
-                ),
-              ],
-            ),
-          ],
-        ),
+                    )!,
+                  ),
+          ),
+        ],
       ),
     );
   }

@@ -4,6 +4,7 @@ import 'package:tracker/domain/models/gym.dart';
 import 'package:tracker/domain/models/weight_unit.dart';
 import 'package:tracker/domain/models/workout_session.dart';
 import 'package:tracker/domain/models/workout_set.dart';
+import 'package:tracker/ui/core/ui/app_dialog.dart';
 import 'package:tracker/ui/core/ui/custom_app_bar.dart';
 import 'package:tracker/ui/core/ui/keyboard_inset.dart';
 import 'package:tracker/ui/core/ui/reps_input_formatter.dart';
@@ -373,41 +374,29 @@ Future<DateTime?> _pickStartDateTime(BuildContext context, DateTime initial) {
   var picked = initial;
   return showFDialog<DateTime>(
     context: context,
-    builder: (dialogContext, _, _) => FDialog(
-      builder: (context, style) => SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text('Start time', style: style.titleTextStyle),
-            const SizedBox(height: 12),
-            SizedBox(
-              height: 200,
-              child: FDateTimePicker(
-                control: .managed(
-                  initial: initial,
-                  onChange: (value) => picked = value,
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              alignment: WrapAlignment.end,
-              children: [
-                FButton(
-                  variant: .outline,
-                  onPress: () => Navigator.pop(dialogContext),
-                  child: const Text('Cancel'),
-                ),
-                FButton(
-                  onPress: () => Navigator.pop(dialogContext, picked),
-                  child: const Text('Save'),
-                ),
-              ],
-            ),
-          ],
+    builder: (dialogContext, _, _) => AppDialog(
+      title: 'Start time',
+      headerGap: 12,
+      actionsGap: 16,
+      scrollable: true,
+      actions: [
+        FButton(
+          variant: .outline,
+          onPress: () => Navigator.pop(dialogContext),
+          child: const Text('Cancel'),
+        ),
+        FButton(
+          onPress: () => Navigator.pop(dialogContext, picked),
+          child: const Text('Save'),
+        ),
+      ],
+      child: SizedBox(
+        height: 200,
+        child: FDateTimePicker(
+          control: .managed(
+            initial: initial,
+            onChange: (value) => picked = value,
+          ),
         ),
       ),
     ),
@@ -469,62 +458,55 @@ class _EditSetDialogState extends State<_EditSetDialog> {
   Widget build(BuildContext context) {
     // Scrollable like the app's reference EditGymDialog: weight/reps errors
     // push content taller and the keyboard must not clip the actions.
-    return FDialog(
-      builder: (context, style) => SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text('Edit set', style: style.titleTextStyle),
-            const SizedBox(height: 16),
-            Row(
-              children: <Widget>[
-                Expanded(
-                  child: FTextField(
-                    control: FTextFieldControl.managed(controller: _weight),
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                    label: Text('Weight (${weightUnitOf(context).symbol})'),
-                    error: _weightError == null ? null : Text(_weightError!),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: FTextField(
-                    control: FTextFieldControl.managed(controller: _reps),
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                    inputFormatters: [RepsInputFormatter()],
-                    label: const Text('Reps'),
-                    error: _repsError == null ? null : Text(_repsError!),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            FCheckbox(
-              label: const Text('Warm-up'),
-              value: _warmup,
-              onChange: (v) => setState(() => _warmup = v),
-            ),
-            const SizedBox(height: 24),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              alignment: WrapAlignment.end,
-              children: [
-                FButton(
-                  variant: .outline,
-                  onPress: () => Navigator.of(context).pop(),
-                  child: const Text('Cancel'),
-                ),
-                FButton(onPress: _save, child: const Text('Save')),
-              ],
-            ),
-          ],
+    return AppDialog(
+      title: 'Edit set',
+      headerGap: 16,
+      scrollable: true,
+      actions: [
+        FButton(
+          variant: .outline,
+          onPress: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
         ),
+        FButton(onPress: _save, child: const Text('Save')),
+      ],
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: FTextField(
+                  control: FTextFieldControl.managed(controller: _weight),
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  label: Text('Weight (${weightUnitOf(context).symbol})'),
+                  error: _weightError == null ? null : Text(_weightError!),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: FTextField(
+                  control: FTextFieldControl.managed(controller: _reps),
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  inputFormatters: [RepsInputFormatter()],
+                  label: const Text('Reps'),
+                  error: _repsError == null ? null : Text(_repsError!),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          FCheckbox(
+            label: const Text('Warm-up'),
+            value: _warmup,
+            onChange: (v) => setState(() => _warmup = v),
+          ),
+        ],
       ),
     );
   }

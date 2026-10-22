@@ -6,6 +6,7 @@ import 'package:tracker/data/repositories/tracker_repository.dart';
 import 'package:tracker/data/services/app_log.dart';
 import 'package:tracker/domain/models/workout_session.dart';
 import 'package:tracker/domain/models/workout_set.dart';
+import 'package:tracker/ui/core/ui/app_dialog.dart';
 import 'package:tracker/ui/core/ui/custom_app_bar.dart';
 import 'package:tracker/ui/core/ui/custom_route.dart';
 import 'package:tracker/ui/core/ui/keyboard_inset.dart';
@@ -120,43 +121,16 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
   Future<void> _delete() async {
     final repo = RepositoryScope.maybeOf(context);
     if (repo == null) return;
-    final confirmed = await showFDialog<bool>(
-      context: context,
-      builder: (dialogContext, _, _) => FDialog(
-        builder: (context, style) => Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text('Delete session?', style: style.titleTextStyle),
-            const SizedBox(height: 8),
-            Text(
-              'This permanently removes "${_session.title}" and all its sets '
-              'from history.',
-              style: style.bodyTextStyle,
-            ),
-            const SizedBox(height: 24),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              alignment: WrapAlignment.end,
-              children: [
-                FButton(
-                  variant: .outline,
-                  onPress: () => Navigator.of(dialogContext).pop(false),
-                  child: const Text('Cancel'),
-                ),
-                FButton(
-                  variant: .destructive,
-                  onPress: () => Navigator.of(dialogContext).pop(true),
-                  child: const Text('Delete'),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
+    final confirmed = await showConfirmDialog(
+      context,
+      title: 'Delete session?',
+      message:
+          'This permanently removes "${_session.title}" and all its sets '
+          'from history.',
+      confirmLabel: 'Delete',
+      destructive: true,
     );
-    if (confirmed != true) return;
+    if (!confirmed) return;
     // Let the dialog route finish leaving the navigator before popping this
     // page, so pop() lands on the detail route and not the dialog.
     await Future<void>.delayed(const Duration(milliseconds: 50));

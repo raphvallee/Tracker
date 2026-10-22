@@ -6,6 +6,7 @@ import 'package:tracker/domain/models/gym.dart';
 import 'package:tracker/domain/models/weight_unit.dart';
 import 'package:tracker/domain/models/workout_set.dart';
 import 'package:tracker/domain/models/workout_split.dart';
+import 'package:tracker/ui/core/ui/app_dialog.dart';
 import 'package:tracker/ui/core/ui/custom_app_bar.dart';
 import 'package:tracker/ui/core/ui/keyboard_inset.dart';
 import 'package:tracker/ui/core/ui/reps_input_formatter.dart';
@@ -202,64 +203,38 @@ class _InProgressView extends StatelessWidget {
   ) async {
     return await showFDialog<_WorkoutAction>(
           context: context,
-          builder: (dialogContext, _, _) => FDialog(
-            builder: (context, style) => Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Discard sits top-right, vertically centered with the title
-                // (Row's default crossAxisAlignment is center).
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text('End workout?', style: style.titleTextStyle),
-                    ),
-                    // The tooltip covers visual hover text; Semantics makes
-                    // the bare icon announce itself to screen readers too.
-                    Semantics(
-                      label: 'Discard workout',
-                      button: true,
-                      child: IconButton(
-                        icon: const Icon(FLucideIcons.trash2),
-                        color: dialogContext.theme.colors.error,
-                        tooltip: 'Discard workout',
-                        onPressed: () => Navigator.pop(
-                          dialogContext,
-                          _WorkoutAction.discard,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Log ${plural('set', setCount)} and save this workout to history.',
-                  style: style.bodyTextStyle,
-                ),
-                const SizedBox(height: 16),
-                // Wrap (not Row + Spacer): the dialog is only ~240px wide at
-                // the minimum desktop window size, and a fixed row overflows.
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  alignment: WrapAlignment.end,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    FButton(
-                      variant: .outline,
-                      onPress: () =>
-                          Navigator.pop(dialogContext, _WorkoutAction.cancel),
-                      child: const Text('Keep going'),
-                    ),
-                    FButton(
-                      onPress: () =>
-                          Navigator.pop(dialogContext, _WorkoutAction.save),
-                      child: const Text('End & save'),
-                    ),
-                  ],
-                ),
-              ],
+          builder: (dialogContext, _, _) => AppDialog(
+            title: 'End workout?',
+            // Discard sits top-right, vertically centered with the title.
+            // The tooltip covers visual hover text; Semantics makes the bare
+            // icon announce itself to screen readers too.
+            titleTrailing: Semantics(
+              label: 'Discard workout',
+              button: true,
+              child: IconButton(
+                icon: const Icon(FLucideIcons.trash2),
+                color: dialogContext.theme.colors.error,
+                tooltip: 'Discard workout',
+                onPressed: () =>
+                    Navigator.pop(dialogContext, _WorkoutAction.discard),
+              ),
             ),
+            message:
+                'Log ${plural('set', setCount)} and save this workout to history.',
+            actionsGap: 16,
+            actions: [
+              FButton(
+                variant: .outline,
+                onPress: () =>
+                    Navigator.pop(dialogContext, _WorkoutAction.cancel),
+                child: const Text('Keep going'),
+              ),
+              FButton(
+                onPress: () =>
+                    Navigator.pop(dialogContext, _WorkoutAction.save),
+                child: const Text('End & save'),
+              ),
+            ],
           ),
         ) ??
         _WorkoutAction.cancel;
@@ -268,44 +243,15 @@ class _InProgressView extends StatelessWidget {
   Future<bool> _showDiscardConfirmation(
     BuildContext context, {
     bool noSets = false,
-  }) async {
-    return await showFDialog<bool>(
-          context: context,
-          builder: (dialogContext, _, _) => FDialog(
-            builder: (context, style) => Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text('Discard workout?', style: style.titleTextStyle),
-                const SizedBox(height: 8),
-                Text(
-                  noSets
-                      ? 'No sets have been logged. Do you want to discard this session?'
-                      : 'This will delete all progress for this session.',
-                  style: style.bodyTextStyle,
-                ),
-                const SizedBox(height: 24),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  alignment: WrapAlignment.end,
-                  children: [
-                    FButton(
-                      variant: .outline,
-                      onPress: () => Navigator.pop(dialogContext, false),
-                      child: const Text('Cancel'),
-                    ),
-                    FButton(
-                      onPress: () => Navigator.pop(dialogContext, true),
-                      child: const Text('Discard'),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ) ??
-        false;
+  }) {
+    return showConfirmDialog(
+      context,
+      title: 'Discard workout?',
+      message: noSets
+          ? 'No sets have been logged. Do you want to discard this session?'
+          : 'This will delete all progress for this session.',
+      confirmLabel: 'Discard',
+    );
   }
 }
 
