@@ -72,7 +72,12 @@ class AppDialog extends StatelessWidget {
             ),
           ],
         );
-        return scrollable ? SingleChildScrollView(child: body) : body;
+        // FDialog paints no internal padding: the builder's child IS the
+        // dialog surface (style.insetPadding only spaces the surface from the
+        // screen edges), so the body must pad itself or the title and actions
+        // render flush against the surface border.
+        final content = Padding(padding: const EdgeInsets.all(24), child: body);
+        return scrollable ? SingleChildScrollView(child: content) : content;
       },
     );
   }
