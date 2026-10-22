@@ -96,46 +96,51 @@ class _HeavyWeightDialogState extends State<_HeavyWeightDialog> {
   Widget build(BuildContext context) {
     final symbol = widget.unit.symbol;
     return FDialog(
-      builder: (dialogContext, style) => Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text("That's a lot of weight", style: style.titleTextStyle),
-          const SizedBox(height: 8),
-          Text(
-            '${formatDecimal(widget.displayed)} $symbol is above '
-            '${formatDecimal(widget.unit.heavyWeightThreshold)} $symbol. '
-            'Confirm if you are really that strong.',
-            style: style.bodyTextStyle,
-          ),
-          const SizedBox(height: 16),
-          if (widget.offerDontShowAgain)
-            FCheckbox(
-              label: const Text("Don't show this again"),
-              value: _dontShowAgain,
-              onChange: (value) => setState(() => _dontShowAgain = value),
+      // FDialog paints no internal padding (the builder's child is the
+      // surface), so the body pads itself.
+      builder: (dialogContext, style) => Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text("That's a lot of weight", style: style.titleTextStyle),
+            const SizedBox(height: 8),
+            Text(
+              '${formatDecimal(widget.displayed)} $symbol is above '
+              '${formatDecimal(widget.unit.heavyWeightThreshold)} $symbol. '
+              'Confirm if you are really that strong.',
+              style: style.bodyTextStyle,
             ),
-          const SizedBox(height: 24),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            alignment: WrapAlignment.end,
-            children: [
-              FButton(
-                variant: .outline,
-                onPress: () => Navigator.pop(dialogContext),
-                child: const Text('Go back'),
+            const SizedBox(height: 16),
+            if (widget.offerDontShowAgain)
+              FCheckbox(
+                label: const Text("Don't show this again"),
+                value: _dontShowAgain,
+                onChange: (value) => setState(() => _dontShowAgain = value),
               ),
-              FButton(
-                onPress: () => Navigator.pop(dialogContext, (
-                  use: true,
-                  dontShowAgain: _dontShowAgain,
-                )),
-                child: const Text('Use this weight'),
-              ),
-            ],
-          ),
-        ],
+            const SizedBox(height: 24),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              alignment: WrapAlignment.end,
+              children: [
+                FButton(
+                  variant: .outline,
+                  onPress: () => Navigator.pop(dialogContext),
+                  child: const Text('Go back'),
+                ),
+                FButton(
+                  onPress: () => Navigator.pop(dialogContext, (
+                    use: true,
+                    dontShowAgain: _dontShowAgain,
+                  )),
+                  child: const Text('Use this weight'),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
