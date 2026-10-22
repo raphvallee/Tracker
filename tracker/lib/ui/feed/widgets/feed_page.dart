@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:forui/forui.dart';
+import 'package:tracker/data/services/app_log.dart';
+import 'package:tracker/ui/core/ui/app_dialog.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
 import 'package:tracker/routing/tab_navigation.dart';
 import 'package:tracker/domain/models/exercise.dart';
@@ -33,27 +35,36 @@ class _FeedPageState extends State<FeedPage> {
   Map<int, double> _multipliers = const {};
   bool _didLoad = false;
   bool _wasActive = true;
+  Object? _analyticsError;
 
   SettingsCubit? get _settings => SettingsCubit.maybeOf(context);
 
   Future<void> _loadAnalyticsData() async {
     final repo = RepositoryScope.maybeOf(context);
     if (repo == null) return;
-    final results = await Future.wait([
-      repo.sessions.getAll(),
-      repo.exercises.getAll(),
-      repo.gyms.getAll(),
-    ]);
-    if (!mounted) return;
-    setState(() {
-      _allSessions = results[0] as List<WorkoutSession>;
-      _exercises = results[1] as List<Exercise>;
-      final gyms = results[2] as List<dynamic>;
-      _multipliers = {
-        for (final gym in gyms) gym.id as int: gym.multiplier as double,
-      };
-      _gymNames = {for (final gym in gyms) gym.id as int: gym.name as String};
-    });
+    try {
+      final results = await Future.wait([
+        repo.sessions.getAll(),
+        repo.exercises.getAll(),
+        repo.gyms.getAll(),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _allSessions = results[0] as List<WorkoutSession>;
+        _exercises = results[1] as List<Exercise>;
+        final gyms = results[2] as List<dynamic>;
+        _multipliers = {
+          for (final gym in gyms) gym.id as int: gym.multiplier as double,
+        };
+        _gymNames = {for (final gym in gyms) gym.id as int: gym.name as String};
+        _analyticsError = null;
+      });
+    } catch (error, stackTrace) {
+      AppLog.error('feed-analytics', error, stackTrace);
+      if (!mounted) return;
+      // Without this the graph cards silently render as "No data yet".
+      setState(() => _analyticsError = error);
+    }
   }
 
   Future<void> _editGraph({int? index}) async {
@@ -70,6 +81,22 @@ class _FeedPageState extends State<FeedPage> {
     } else {
       settings.updateGraph(index, result);
     }
+  }
+
+  Future<void> _deleteGraph(int index) async {
+    final settings = _settings;
+    if (settings == null) return;
+    final confirmed = await showConfirmDialog(
+      context,
+      title: 'Delete graph?',
+      message:
+          'Remove "${settings.state.graphs[index].title}" from your '
+          'analytics? You can recreate it with "Add graph".',
+      confirmLabel: 'Delete',
+      destructive: true,
+    );
+    if (!mounted || !confirmed) return;
+    settings.removeGraph(index);
   }
 
   Widget _analyticsSection(BuildContext context) {
@@ -111,21 +138,34 @@ class _FeedPageState extends State<FeedPage> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             header,
-            for (var i = 0; i < state.graphs.length; i++)
-              FeedGraphCard(
-                config: state.graphs[i],
-                sessions: _allSessions,
-                multipliers: _multipliers,
-                exerciseName: state.graphs[i].exerciseId == null
-                    ? 'All exercises'
-                    : _exercises
-                              .where((e) => e.id == state.graphs[i].exerciseId)
-                              .map((e) => e.title)
-                              .firstOrNull ??
-                          'Exercise',
-                onEdit: () => _editGraph(index: i),
-                onDelete: () => settings.removeGraph(i),
-              ),
+            if (_analyticsError != null)
+              _FeedMessage(
+                icon: FLucideIcons.circleAlert,
+                message: 'Could not load analytics.',
+                action: FButton(
+                  variant: .ghost,
+                  onPress: _loadAnalyticsData,
+                  child: const Text('Retry'),
+                ),
+              )
+            else
+              for (var i = 0; i < state.graphs.length; i++)
+                FeedGraphCard(
+                  config: state.graphs[i],
+                  sessions: _allSessions,
+                  multipliers: _multipliers,
+                  exerciseName: state.graphs[i].exerciseId == null
+                      ? 'All exercises'
+                      : _exercises
+                                .where(
+                                  (e) => e.id == state.graphs[i].exerciseId,
+                                )
+                                .map((e) => e.title)
+                                .firstOrNull ??
+                            'Exercise',
+                  onEdit: () => _editGraph(index: i),
+                  onDelete: () => _deleteGraph(i),
+                ),
           ],
         ),
       ),
