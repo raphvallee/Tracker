@@ -4,6 +4,7 @@ import 'package:tracker/domain/models/rep_mode.dart';
 import 'package:tracker/domain/models/workout_split.dart';
 import 'package:tracker/ui/core/ui/custom_app_bar.dart';
 import 'package:tracker/ui/core/ui/custom_route.dart';
+import 'package:tracker/ui/core/ui/icon_button.dart';
 import 'package:tracker/ui/core/ui/keyboard_inset.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
 import 'package:tracker/ui/core/ui/unsaved_changes_dialog.dart';
@@ -323,10 +324,11 @@ class _SplitDayEditorPageState extends State<SplitDayEditorPage> {
                         style: context.theme.typography.body.md,
                       ),
                       const Spacer(),
-                      OutlinedButton.icon(
-                        onPressed: _addExercise,
-                        icon: const Icon(FLucideIcons.plus, size: 18),
-                        label: const Text('Add'),
+                      FButton(
+                        variant: .outline,
+                        onPress: _addExercise,
+                        prefix: const Icon(FLucideIcons.plus, size: 18),
+                        child: const Text('Add'),
                       ),
                     ],
                   ),
@@ -484,12 +486,12 @@ Widget _gridIconButton({
   required String tooltip,
   VoidCallback? onPressed,
 }) {
-  return IconButton(
-    padding: EdgeInsets.zero,
-    iconSize: 18,
+  return AppIconButton(
+    icon: icon,
     tooltip: tooltip,
-    onPressed: onPressed,
-    icon: Icon(icon),
+    onPress: onPressed,
+    size: .sm,
+    compact: true,
   );
 }
 

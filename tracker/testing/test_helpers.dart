@@ -11,6 +11,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:forui/forui.dart';
 import 'package:hydrated_bloc/hydrated_bloc.dart';
 import 'package:isar_community/isar.dart';
 import 'package:tracker/domain/models/weight_unit.dart';
@@ -48,6 +49,14 @@ Future<Isar> openTestIsar(
   final dir = Directory.systemTemp.createTempSync(name);
   return Isar.open(schemas, directory: dir.path, name: name);
 }
+
+/// Finds an icon-only [FButton] by its semantics tooltip (AppIconButton).
+///
+/// Material's `find.byTooltip` matched the old `Tooltip` widgets; since the
+/// Forui swap the tooltip lives on `FButton.semanticsTooltip` instead.
+Finder fButtonByTooltip(String tooltip) => find.byWidgetPredicate(
+  (w) => w is FButton && w.semanticsTooltip == tooltip,
+);
 
 /// Pump the app shell ([MyApp]) with a fresh [WorkoutCubit]; returns the cubit.
 /// [unit] sets the display unit of the app's [SettingsCubit].

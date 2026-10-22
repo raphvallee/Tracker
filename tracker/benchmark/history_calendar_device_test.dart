@@ -47,7 +47,7 @@ void main() {
         ) async {
           for (var i = 0; i < iterations; i++) {
             final label = i.isEven ? 'Next month' : 'Previous month';
-            await tapAndRender(tester, find.byTooltip(label));
+            await tapAndRender(tester, fButtonByTooltip(label));
             final current = monthHeader(tester);
             expect(current, isNot(previous), reason: 'tap "$label" dropped');
             previous = current;

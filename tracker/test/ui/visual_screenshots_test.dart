@@ -194,7 +194,7 @@ void main() {
       }
 
       // No on-stage loading spinner left (finders skip Offstage tabs).
-      bool dataLoaded() => !tester.any(find.byType(CircularProgressIndicator));
+      bool dataLoaded() => !tester.any(find.byType(FCircularProgress));
 
       void switchTab(int index) {
         tester

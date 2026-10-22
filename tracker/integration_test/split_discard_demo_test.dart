@@ -207,7 +207,7 @@ void main() {
     await tester.tap(pushRow.first);
     await _settle(tester);
     await pause(800);
-    await tester.tap(find.byTooltip('Add set'));
+    await tester.tap(fButtonByTooltip('Add set'));
     await _settle(tester);
     await pause(800);
 

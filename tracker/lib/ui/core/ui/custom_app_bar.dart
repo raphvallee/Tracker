@@ -14,34 +14,69 @@ class CustomAppBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SliverAppBar(
+    final style = context.theme.headerStyles.nested;
+    final topInset = MediaQuery.paddingOf(context).top;
+    return SliverPersistentHeader(
       pinned: true,
-      snap: false,
-      floating: false,
-      toolbarHeight: 48,
-      automaticallyImplyLeading: false,
-      titleSpacing: 16,
-      title: Row(
-        children: [
-          if (ModalRoute.isFirstOf(context) == false) ...[
-            FButton(
-              variant: .ghost,
-              onPress: () => Navigator.maybePop(context),
-              child: const Icon(FLucideIcons.chevronLeft),
-            ),
-            const SizedBox(width: 4),
+      delegate: _PinnedHeaderDelegate(
+        // FHeader is a plain widget, so it needs a pinned sliver wrapper to
+        // keep the old SliverAppBar's pin-while-scrolling behavior. The extra
+        // extent covers the status-bar inset that FHeader's internal SafeArea
+        // consumes.
+        extent: style.constraints.minHeight + topInset,
+        background: context.theme.colors.background,
+        child: FHeader.nested(
+          titleAlignment: .centerLeft,
+          title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
+          prefixes: [
+            if (ModalRoute.isFirstOf(context) == false)
+              FButton(
+                variant: .ghost,
+                onPress: () => Navigator.maybePop(context),
+                child: const Icon(FLucideIcons.chevronLeft),
+              ),
           ],
-          Expanded(
-            child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
-          ),
-          if (actionButton != null)
-            FButton(
-              variant: .ghost,
-              onPress: actionButton!.onPressed,
-              child: Text(actionButton!.title),
-            ),
-        ],
+          suffixes: [
+            if (actionButton != null)
+              FButton(
+                variant: .ghost,
+                onPress: actionButton!.onPressed,
+                child: Text(actionButton!.title),
+              ),
+          ],
+        ),
       ),
     );
   }
+}
+
+class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
+  const _PinnedHeaderDelegate({
+    required this.extent,
+    required this.background,
+    required this.child,
+  });
+
+  final double extent;
+  final Color background;
+  final Widget child;
+
+  @override
+  double get minExtent => extent;
+
+  @override
+  double get maxExtent => extent;
+
+  @override
+  Widget build(
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) => ColoredBox(color: background, child: child);
+
+  @override
+  bool shouldRebuild(_PinnedHeaderDelegate old) =>
+      extent != old.extent ||
+      background != old.background ||
+      child != old.child;
 }
