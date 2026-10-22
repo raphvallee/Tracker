@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
+import 'package:tracker/data/services/app_log.dart';
 import 'package:tracker/domain/models/workout_split.dart';
 import 'package:tracker/domain/models/workout_split_templates.dart';
 import 'package:tracker/ui/core/ui/app_dialog.dart';
@@ -160,6 +161,20 @@ class _SplitEditorPageState extends State<SplitEditorPage> {
       },
     );
     if (template != null && mounted) {
+      // Applying a template overwrites the typed title and the configured
+      // days; confirm first when the draft already has unsaved changes.
+      if (_hasUnsavedChanges) {
+        final confirmed = await showConfirmDialog(
+          context,
+          title: 'Replace with template?',
+          message:
+              'Applying this template replaces the split name and the days '
+              'you have configured.',
+          confirmLabel: 'Replace',
+          destructive: true,
+        );
+        if (!confirmed || !mounted) return;
+      }
       setState(() {
         _title.text = template.title;
         _days = template.createDays();
@@ -192,31 +207,46 @@ class _SplitEditorPageState extends State<SplitEditorPage> {
     setState(() => _saving = true);
     final repo = RepositoryScope.maybeOf(context);
 
-    final split = WorkoutSplit(
-      title: _title.text.trim(),
-      description: _description.text.trim(),
-      splitDays: [
-        for (var i = 0; i < _days.length; i++) _dayWithOrder(_days[i], i),
-      ],
-      order: widget.split?.order ?? -1,
-    );
-    if (widget.split != null) {
-      split.id = widget.split!.id;
-      split.order = widget.split!.order;
-    } else if (repo != null) {
-      var nextOrder = 0;
-      final all = await repo.splits.getAll();
-      if (all.isNotEmpty) {
-        nextOrder = all.map((s) => s.order).reduce((a, b) => a > b ? a : b) + 1;
+    // Error-surfacing contract for writes (mirrors session_detail_page): a
+    // failed save keeps the editor open with the Save button restored, and
+    // the failure is toasted once.
+    try {
+      final split = WorkoutSplit(
+        title: _title.text.trim(),
+        description: _description.text.trim(),
+        splitDays: [
+          for (var i = 0; i < _days.length; i++) _dayWithOrder(_days[i], i),
+        ],
+        order: widget.split?.order ?? -1,
+      );
+      if (widget.split != null) {
+        split.id = widget.split!.id;
+        split.order = widget.split!.order;
+      } else if (repo != null) {
+        var nextOrder = 0;
+        final all = await repo.splits.getAll();
+        if (all.isNotEmpty) {
+          nextOrder =
+              all.map((s) => s.order).reduce((a, b) => a > b ? a : b) + 1;
+        }
+        split.order = nextOrder;
       }
-      split.order = nextOrder;
-    }
 
-    if (repo != null) {
-      await repo.splits.put(split);
+      if (repo != null) {
+        await repo.splits.put(split);
+      }
+      if (!mounted) return;
+      Navigator.of(context).pop(split);
+    } catch (error, stackTrace) {
+      AppLog.error('split-editor', error, stackTrace);
+      if (!mounted) return;
+      setState(() => _saving = false);
+      showFToast(
+        context: context,
+        title: const Text('Could not save the changes.'),
+        duration: const Duration(seconds: 4),
+      );
     }
-    if (!mounted) return;
-    Navigator.of(context).pop(split);
   }
 
   @override
