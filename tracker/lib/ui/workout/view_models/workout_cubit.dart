@@ -167,8 +167,121 @@ Map<int, List<ActiveSet>> _groupSets(List<ActiveSet> sets) {
   return grouped;
 }
 
+/// Shared defensive parsing for hydrated plan payloads (tolerates malformed
+/// entries from older or corrupted snapshots).
+List<PlanExercise> _parsePlan(Object? raw) => raw is List
+    ? raw
+          .whereType<Map>()
+          .map((entry) {
+            try {
+              return PlanExercise.fromJson(Map<String, dynamic>.from(entry));
+            } catch (_) {
+              return null;
+            }
+          })
+          .whereType<PlanExercise>()
+          .toList(growable: false)
+    : const [];
+
+/// Shared defensive parsing for hydrated set payloads.
+List<ActiveSet> _parseSets(Object? raw) => raw is List
+    ? raw
+          .whereType<Map>()
+          .map((entry) {
+            try {
+              return ActiveSet.fromJson(Map<String, dynamic>.from(entry));
+            } catch (_) {
+              return null;
+            }
+          })
+          .whereType<ActiveSet>()
+          .toList(growable: false)
+    : const [];
+
 final _setsByExerciseCache = Expando<Map<int, List<ActiveSet>>>();
 final _workingVolumeCache = Expando<double>();
+
+/// An immutable snapshot of a finished workout (just saved or just discarded),
+/// captured so the workout tab can offer to restore it as the in-progress
+/// session.
+///
+/// It carries the same payload as the hydrated [WorkoutState] minus the
+/// in-progress flag and transient error: restoring replays it verbatim,
+/// original start time included.
+class WorkoutSnapshot {
+  const WorkoutSnapshot({
+    required this.startTime,
+    this.gymId,
+    this.gymName,
+    this.planTitle,
+    this.plan = const [],
+    this.sets = const [],
+  });
+
+  factory WorkoutSnapshot.fromState(WorkoutState state) => WorkoutSnapshot(
+    startTime: state.startTime ?? DateTime.now(),
+    gymId: state.gymId,
+    gymName: state.gymName,
+    planTitle: state.planTitle,
+    plan: state.plan,
+    sets: state.sets,
+  );
+
+  factory WorkoutSnapshot.fromJson(Map<String, dynamic> json) {
+    return WorkoutSnapshot(
+      startTime: json['startTime'] is String
+          ? (DateTime.tryParse(json['startTime'] as String) ?? DateTime.now())
+          : DateTime.now(),
+      gymId: WorkoutState._nullableInt(json['gymId']),
+      gymName: json['gymName'] is String ? json['gymName'] as String : null,
+      planTitle: json['planTitle'] is String
+          ? json['planTitle'] as String
+          : null,
+      plan: _parsePlan(json['plan']),
+      sets: _parseSets(json['sets']),
+    );
+  }
+
+  final DateTime startTime;
+
+  /// Foreign key + display snapshot of the gym this session was logged at.
+  final int? gymId;
+  final String? gymName;
+
+  /// Title + ordered exercise plan if this session follows a split day.
+  final String? planTitle;
+  final List<PlanExercise> plan;
+  final List<ActiveSet> sets;
+
+  Map<String, dynamic> toJson() => {
+    'startTime': startTime.toIso8601String(),
+    'gymId': gymId,
+    'gymName': gymName,
+    'planTitle': planTitle,
+    'plan': plan.map((e) => e.toJson()).toList(),
+    'sets': sets.map((s) => s.toJson()).toList(),
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is WorkoutSnapshot &&
+      startTime == other.startTime &&
+      gymId == other.gymId &&
+      gymName == other.gymName &&
+      planTitle == other.planTitle &&
+      WorkoutState._listEquals(plan, other.plan) &&
+      WorkoutState._listEquals(sets, other.sets);
+
+  @override
+  int get hashCode => Object.hash(
+    startTime,
+    gymId,
+    gymName,
+    planTitle,
+    Object.hashAll(plan),
+    Object.hashAll(sets),
+  );
+}
 
 class WorkoutState {
   WorkoutState({
@@ -178,6 +291,10 @@ class WorkoutState {
     this.gymName,
     this.planTitle,
     this.saveError,
+    this.savedSnapshot,
+    this.savedSessionId,
+    this.discardedSnapshot,
+    this.discardedAt,
     List<PlanExercise> plan = const [],
     List<ActiveSet> sets = const [],
   }) : _plan = List.unmodifiable(plan),
@@ -185,20 +302,28 @@ class WorkoutState {
 
   factory WorkoutState.fromJson(Map<String, dynamic> json) {
     // Hydrated-state schema versioning (PRODUCTION_READINESS.md Phase 1).
-    // v1 = the original shape; payloads written before versioning have no
-    // 'v' key and read as v1. Unknown future versions fall back to a clean
-    // idle state instead of crashing.
+    // v1 = the original shape; v2 adds the restorable last-saved snapshot.
+    // Payloads written before versioning have no 'v' key and read as v1.
+    // Unknown future versions fall back to a clean idle state instead of
+    // crashing.
     switch (json['v'] as int? ?? 1) {
       case 1:
         return _fromV1(json);
+      case 2:
+        final base = _fromV1(json);
+        final rawSaved = json['saved'];
+        return base.copyWith(
+          savedSnapshot: rawSaved is Map
+              ? WorkoutSnapshot.fromJson(Map<String, dynamic>.from(rawSaved))
+              : null,
+          savedSessionId: _nullableInt(json['savedSessionId']),
+        );
       default:
         return WorkoutState.initial();
     }
   }
 
   static WorkoutState _fromV1(Map<String, dynamic> json) {
-    final rawPlan = json['plan'];
-    final rawSets = json['sets'];
     return WorkoutState(
       isInProgress: json['isInProgress'] is bool
           ? json['isInProgress'] as bool
@@ -211,34 +336,8 @@ class WorkoutState {
       planTitle: json['planTitle'] is String
           ? json['planTitle'] as String
           : null,
-      plan: rawPlan is List
-          ? rawPlan
-                .whereType<Map>()
-                .map((entry) {
-                  try {
-                    return PlanExercise.fromJson(
-                      Map<String, dynamic>.from(entry),
-                    );
-                  } catch (_) {
-                    return null;
-                  }
-                })
-                .whereType<PlanExercise>()
-                .toList(growable: false)
-          : const [],
-      sets: rawSets is List
-          ? rawSets
-                .whereType<Map>()
-                .map((entry) {
-                  try {
-                    return ActiveSet.fromJson(Map<String, dynamic>.from(entry));
-                  } catch (_) {
-                    return null;
-                  }
-                })
-                .whereType<ActiveSet>()
-                .toList(growable: false)
-          : const [],
+      plan: _parsePlan(json['plan']),
+      sets: _parseSets(json['sets']),
     );
   }
 
@@ -271,6 +370,40 @@ class WorkoutState {
   /// restarted app never boots into a stale error banner.
   final String? saveError;
 
+  /// Snapshot of the last workout saved to history, so the workout tab can
+  /// always offer to restore it as the ongoing session (restoring takes the
+  /// session back out of history). [savedSessionId] is the Isar id of that
+  /// saved session. Serialized with hydration (schema v2) so it survives an
+  /// app restart.
+  final WorkoutSnapshot? savedSnapshot;
+  final int? savedSessionId;
+
+  /// Snapshot of the last discarded workout and when it was discarded. Purely
+  /// in-memory - like web sessionStorage, deliberately excluded from hydration
+  /// JSON so it never survives an app restart. Restorable only within
+  /// [discardRestoreWindow] of [discardedAt].
+  final WorkoutSnapshot? discardedSnapshot;
+  final DateTime? discardedAt;
+
+  /// How long a discarded workout stays restorable from the workout tab.
+  static const Duration discardRestoreWindow = Duration(minutes: 15);
+
+  /// The last saved workout can always be restored, as long as no session is
+  /// in progress.
+  bool get canRestoreSaved => !isInProgress && savedSnapshot != null;
+
+  /// The last discarded workout is restorable only within
+  /// [discardRestoreWindow] of the discard, and only within this app run (the
+  /// snapshot is never hydrated). [now] defaults to the real wall clock; the
+  /// cubit passes its injectable clock.
+  bool canRestoreDiscarded({DateTime? now}) {
+    if (isInProgress || discardedSnapshot == null || discardedAt == null) {
+      return false;
+    }
+    final at = now ?? DateTime.now();
+    return at.difference(discardedAt!) < discardRestoreWindow;
+  }
+
   /// Sets logged so far this session, in [ActiveSet.order] sequence.
 
   /// Lazily groups the active sets for the presentation layer.
@@ -293,6 +426,10 @@ class WorkoutState {
       gymName == other.gymName &&
       planTitle == other.planTitle &&
       saveError == other.saveError &&
+      savedSnapshot == other.savedSnapshot &&
+      savedSessionId == other.savedSessionId &&
+      discardedSnapshot == other.discardedSnapshot &&
+      discardedAt == other.discardedAt &&
       _listEquals(plan, other.plan) &&
       _listEquals(sets, other.sets);
 
@@ -304,6 +441,10 @@ class WorkoutState {
     gymName,
     planTitle,
     saveError,
+    savedSnapshot,
+    savedSessionId,
+    discardedSnapshot,
+    discardedAt,
     Object.hashAll(plan),
     Object.hashAll(sets),
   );
@@ -326,7 +467,7 @@ class WorkoutState {
 
   Map<String, dynamic> toJson() => {
     // Hydrated-state schema version; see the comment on fromJson.
-    'v': 1,
+    'v': 2,
     'isInProgress': isInProgress,
     'startTime': startTime?.toIso8601String(),
     'gymId': gymId,
@@ -334,6 +475,10 @@ class WorkoutState {
     'planTitle': planTitle,
     'plan': plan.map((e) => e.toJson()).toList(),
     'sets': sets.map((s) => s.toJson()).toList(),
+    // Restorable last-saved workout (v2). The discarded snapshot is
+    // deliberately omitted: it is in-memory only, like web sessionStorage.
+    'saved': savedSnapshot?.toJson(),
+    'savedSessionId': savedSessionId,
   };
 
   WorkoutState copyWith({
@@ -343,6 +488,10 @@ class WorkoutState {
     Object? gymName = _unset,
     Object? planTitle = _unset,
     Object? saveError = _unset,
+    Object? savedSnapshot = _unset,
+    Object? savedSessionId = _unset,
+    Object? discardedSnapshot = _unset,
+    Object? discardedAt = _unset,
     List<PlanExercise>? plan,
     List<ActiveSet>? sets,
   }) {
@@ -359,6 +508,18 @@ class WorkoutState {
       saveError: identical(saveError, _unset)
           ? this.saveError
           : saveError as String?,
+      savedSnapshot: identical(savedSnapshot, _unset)
+          ? this.savedSnapshot
+          : savedSnapshot as WorkoutSnapshot?,
+      savedSessionId: identical(savedSessionId, _unset)
+          ? this.savedSessionId
+          : savedSessionId as int?,
+      discardedSnapshot: identical(discardedSnapshot, _unset)
+          ? this.discardedSnapshot
+          : discardedSnapshot as WorkoutSnapshot?,
+      discardedAt: identical(discardedAt, _unset)
+          ? this.discardedAt
+          : discardedAt as DateTime?,
       plan: plan ?? this.plan,
       sets: sets ?? this.sets,
     );
@@ -368,21 +529,34 @@ class WorkoutState {
 }
 
 class WorkoutCubit extends HydratedCubit<WorkoutState> {
-  WorkoutCubit({this.repository}) : super(WorkoutState.initial());
+  WorkoutCubit({this.repository, DateTime Function()? now})
+    : _now = now ?? DateTime.now,
+      super(WorkoutState.initial());
 
   /// Reference for the workout flow; `endWorkout` persists a real
   /// [WorkoutSession] (with sets + gym + duration) to Isar instead of doing its
   /// own DB work. The cubit never opens a connection itself.
   final TrackerRepository? repository;
 
+  /// Injectable wall clock for the discard-restore window (tests). Other
+  /// timestamps keep [DateTime.now].
+  final DateTime Function() _now;
+
   /// Begin a free-form workout (no split plan) at [startTime] now.
+  ///
+  /// Restore slots (last saved / last discarded) are carried over: starting a
+  /// new session must not lose the ability to restore the previous one.
   void startWorkout({Gym? gym}) {
     emit(
-      WorkoutState(
+      state.copyWith(
         isInProgress: true,
         startTime: DateTime.now(),
         gymId: gym?.id,
         gymName: gym?.name,
+        planTitle: null,
+        saveError: null,
+        plan: const [],
+        sets: const [],
       ),
     );
   }
@@ -394,13 +568,15 @@ class WorkoutCubit extends HydratedCubit<WorkoutState> {
     Gym? gym,
   }) {
     emit(
-      WorkoutState(
+      state.copyWith(
         isInProgress: true,
         startTime: DateTime.now(),
         gymId: gym?.id,
         gymName: gym?.name,
         planTitle: title,
+        saveError: null,
         plan: exercises,
+        sets: const [],
       ),
     );
   }
@@ -452,19 +628,38 @@ class WorkoutCubit extends HydratedCubit<WorkoutState> {
   }
 
   /// Abandon the workout without persisting anything. Nothing was saved to
-  /// Isar yet, so clearing the hydrated state is all that is needed.
+  /// Isar yet, so clearing the hydrated state is all that is needed - but the
+  /// session is first snapshotted into in-memory-only state so the workout tab
+  /// can offer to restore it for a short window (never across app restarts).
   Future<void> discardWorkout() async {
-    if (!state.isInProgress) return;
-    emit(WorkoutState.initial());
+    final s = state;
+    if (!s.isInProgress) return;
+    emit(
+      s.copyWith(
+        isInProgress: false,
+        startTime: null,
+        gymId: null,
+        gymName: null,
+        planTitle: null,
+        saveError: null,
+        plan: const [],
+        sets: const [],
+        discardedSnapshot: WorkoutSnapshot.fromState(s),
+        discardedAt: _now(),
+      ),
+    );
   }
 
   /// Finish the workout: writes a [WorkoutSession] to Isar (duration = now -
-  /// start) and resets to the idle state. When no repository is wired (tests),
-  /// it only resets state.
+  /// start) and resets to the idle state, keeping a snapshot of the saved
+  /// workout so it can always be restored from the workout tab (restoring
+  /// takes the session back out of history). When no repository is wired
+  /// (tests), it only resets state; the snapshot then has no history id.
   Future<void> endWorkout() async {
     final s = state;
     if (!s.isInProgress) return;
 
+    int? sessionId;
     final repo = repository;
     if (repo != null) {
       // Clear any previous save failure up-front so a repeated failure still
@@ -496,7 +691,7 @@ class WorkoutCubit extends HydratedCubit<WorkoutState> {
       // from HydratedStorage. Surface the failure and keep the session alive
       // so the user can retry.
       try {
-        await repo.sessions.put(completed);
+        sessionId = await repo.sessions.put(completed);
       } catch (error, stackTrace) {
         AppLog.error('workout', error, stackTrace);
         emit(
@@ -546,7 +741,89 @@ class WorkoutCubit extends HydratedCubit<WorkoutState> {
       }
     }
 
-    emit(WorkoutState.initial());
+    emit(
+      s.copyWith(
+        isInProgress: false,
+        startTime: null,
+        gymId: null,
+        gymName: null,
+        planTitle: null,
+        saveError: null,
+        plan: const [],
+        sets: const [],
+        savedSnapshot: WorkoutSnapshot.fromState(s),
+        savedSessionId: sessionId,
+      ),
+    );
+  }
+
+  /// Restore the last saved workout as the in-progress session. The saved
+  /// session is taken back out of history (it becomes ongoing again), so
+  /// re-saving cannot duplicate it. If that delete fails, the restore is
+  /// aborted rather than risking a duplicate history entry.
+  Future<void> restoreSavedWorkout() async {
+    final s = state;
+    final snapshot = s.savedSnapshot;
+    if (snapshot == null || s.isInProgress) return;
+
+    final sessionId = s.savedSessionId;
+    final repo = repository;
+    if (sessionId != null && repo != null) {
+      try {
+        await repo.sessions.delete(sessionId);
+      } catch (error, stackTrace) {
+        AppLog.error('workout-restore', error, stackTrace);
+        emit(
+          s.copyWith(saveError: 'Could not restore the workout. Try again.'),
+        );
+        return;
+      }
+    }
+
+    emit(
+      s.copyWith(
+        isInProgress: true,
+        startTime: snapshot.startTime,
+        gymId: snapshot.gymId,
+        gymName: snapshot.gymName,
+        planTitle: snapshot.planTitle,
+        saveError: null,
+        plan: snapshot.plan,
+        sets: snapshot.sets,
+        savedSnapshot: null,
+        savedSessionId: null,
+      ),
+    );
+  }
+
+  /// Restore the last discarded workout as the in-progress session. The
+  /// snapshot only lives in memory, so this is a no-op after an app restart.
+  /// When the [WorkoutState.discardRestoreWindow] has lapsed the stale
+  /// snapshot is dropped and nothing is restored.
+  void restoreDiscardedWorkout() {
+    final s = state;
+    final snapshot = s.discardedSnapshot;
+    if (snapshot == null) return;
+
+    if (!s.canRestoreDiscarded(now: _now())) {
+      emit(s.copyWith(discardedSnapshot: null, discardedAt: null));
+      return;
+    }
+
+    emit(
+      s.copyWith(
+        isInProgress: true,
+        startTime: snapshot.startTime,
+        gymId: snapshot.gymId,
+        gymName: snapshot.gymName,
+        planTitle: snapshot.planTitle,
+        saveError: null,
+        plan: snapshot.plan,
+        sets: snapshot.sets,
+        discardedSnapshot: null,
+        discardedAt: null,
+      ),
+    );
   }
 
   @override

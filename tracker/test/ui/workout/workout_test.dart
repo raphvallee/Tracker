@@ -245,6 +245,108 @@ void main() {
       expect(cubit.state.sets.last.exerciseName, 'C');
     });
 
+    test('saved workout can always be restored (leaving history)', () async {
+      cubit.startWorkout();
+      final originalStart = cubit.state.startTime;
+      cubit.logSet(exerciseId: 1, exerciseName: 'Squat', weight: 100, reps: 5);
+      await cubit.endWorkout();
+
+      expect(cubit.state.isInProgress, isFalse);
+      expect(cubit.state.canRestoreSaved, isTrue);
+      expect(cubit.state.savedSessionId, isNotNull);
+
+      await cubit.restoreSavedWorkout();
+
+      // The saved session left history and is ongoing again, verbatim.
+      expect(cubit.state.isInProgress, isTrue);
+      expect(cubit.state.sets.single.weight, 100);
+      expect(cubit.state.sets.single.reps, 5);
+      expect(cubit.state.canRestoreSaved, isFalse);
+      expect(await repo.sessions.getAll(), isEmpty);
+
+      // Re-saving the restored session works and becomes the new restore
+      // target - no duplicate entries from the restore round-trip, and the
+      // original start time is replayed verbatim (not the restore time).
+      await cubit.endWorkout();
+      expect(cubit.state.isInProgress, isFalse);
+      expect(cubit.state.canRestoreSaved, isTrue);
+      final sessions = await repo.sessions.getAll();
+      expect(sessions, hasLength(1));
+      expect(sessions.single.sets, hasLength(1));
+      expect(sessions.single.startTime, originalStart);
+    });
+
+    test('restored saved workout replays the split plan verbatim', () async {
+      cubit.startPlanWorkout(
+        title: 'PPL · Push',
+        exercises: const [
+          PlanExercise(exerciseId: 1, name: 'Bench Press', order: 0),
+        ],
+      );
+      cubit.logSet(
+        exerciseId: 1,
+        exerciseName: 'Bench Press',
+        weight: 80,
+        reps: 6,
+      );
+      await cubit.endWorkout();
+
+      await cubit.restoreSavedWorkout();
+
+      expect(cubit.state.planTitle, 'PPL · Push');
+      expect(cubit.state.plan.single.name, 'Bench Press');
+      expect(cubit.state.plan.single.sets, isEmpty);
+      expect(cubit.state.sets.single.exerciseName, 'Bench Press');
+    });
+
+    test('discarded workout is restorable only within 15 minutes', () async {
+      var now = DateTime(2026, 9, 3, 10);
+      final timed = WorkoutCubit(repository: repo, now: () => now);
+      addTearDown(timed.close);
+
+      timed.startWorkout();
+      timed.logSet(exerciseId: 1, exerciseName: 'Squat', weight: 100, reps: 5);
+      await timed.discardWorkout();
+
+      // Never persisted, but held in memory for the window.
+      expect(timed.state.isInProgress, isFalse);
+      expect(timed.state.canRestoreDiscarded(now: now), isTrue);
+      expect(timed.state.savedSnapshot, isNull);
+      expect(await repo.sessions.getAll(), isEmpty);
+
+      timed.restoreDiscardedWorkout();
+      expect(timed.state.isInProgress, isTrue);
+      expect(timed.state.sets.single.weight, 100);
+      expect(timed.state.canRestoreDiscarded(now: now), isFalse);
+
+      // Discard again and let the window lapse: restore becomes a no-op and
+      // drops the stale snapshot.
+      await timed.discardWorkout();
+      now = now.add(const Duration(minutes: 16));
+      expect(timed.state.canRestoreDiscarded(now: now), isFalse);
+      timed.restoreDiscardedWorkout();
+      expect(timed.state.isInProgress, isFalse);
+      expect(timed.state.discardedSnapshot, isNull);
+      expect(timed.state.discardedAt, isNull);
+    });
+
+    test('restore slots survive starting a later workout', () async {
+      cubit.startWorkout();
+      cubit.logSet(exerciseId: 1, exerciseName: 'A', weight: 10, reps: 5);
+      await cubit.discardWorkout();
+      final discarded = cubit.state.discardedSnapshot;
+
+      cubit.startWorkout();
+      expect(cubit.state.discardedSnapshot, discarded);
+      // Restoring is blocked while the new session is in progress...
+      expect(cubit.state.canRestoreDiscarded(), isFalse);
+
+      // ...and offered again once it ends.
+      await cubit.endWorkout();
+      expect(cubit.state.isInProgress, isFalse);
+      expect(cubit.state.canRestoreDiscarded(), isTrue);
+    });
+
     test('hydration round-trips plan + sets through JSON', () {
       cubit.startPlanWorkout(
         title: 'PPL · Pull',
@@ -452,6 +554,64 @@ void main() {
       await tester.pumpAndSettle();
       expect(cubit.state.sets, hasLength(2));
       expect(find.text('Must be greater than 0'), findsOneWidget);
+    });
+  });
+
+  group('CurrentWorkout restore buttons', () {
+    Future<void> openWorkoutTab(WidgetTester tester) async {
+      tester
+          .widget<FBottomNavigationBar>(find.byType(FBottomNavigationBar))
+          .onChange!(2);
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('the last saved workout offers a restore button', (
+      tester,
+    ) async {
+      final cubit = await pumpApp(tester);
+      await openWorkoutTab(tester);
+
+      // Nothing was saved yet - no restore offer.
+      expect(find.text('Restore last workout'), findsNothing);
+
+      cubit.startWorkout();
+      cubit.logSet(exerciseId: 1, exerciseName: 'Squat', weight: 100, reps: 5);
+      await cubit.endWorkout();
+      await tester.pumpAndSettle();
+
+      expect(find.text('Restore last workout'), findsOneWidget);
+
+      // Restoring puts the session back in progress.
+      await tester.tap(find.text('Restore last workout'));
+      await tester.pumpAndSettle();
+      expect(cubit.state.isInProgress, isTrue);
+      expect(cubit.state.sets.single.weight, 100);
+      expect(find.text('End Workout'), findsOneWidget);
+      expect(find.text('Restore last workout'), findsNothing);
+    });
+
+    testWidgets('the last discarded workout offers a restore button', (
+      tester,
+    ) async {
+      final cubit = await pumpApp(tester);
+      await openWorkoutTab(tester);
+
+      cubit.startWorkout();
+      cubit.logSet(exerciseId: 1, exerciseName: 'Squat', weight: 100, reps: 5);
+      await cubit.discardWorkout();
+      // pump (not pumpAndSettle): the discarded-restore window ticker runs
+      // every 30 s and would never let the fake clock settle.
+      await tester.pump();
+
+      expect(find.text('Restore discarded workout'), findsOneWidget);
+      expect(find.text('Restore last workout'), findsNothing);
+
+      // Restoring brings the discarded session back in progress.
+      await tester.tap(find.text('Restore discarded workout'));
+      await tester.pumpAndSettle();
+      expect(cubit.state.isInProgress, isTrue);
+      expect(cubit.state.sets.single.weight, 100);
+      expect(find.text('End Workout'), findsOneWidget);
     });
   });
 }

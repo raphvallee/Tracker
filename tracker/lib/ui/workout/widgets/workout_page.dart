@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:forui/forui.dart';
@@ -23,7 +25,8 @@ import 'gym_picker.dart';
 
 /// The "Current Workout" tab: drives the active session from [WorkoutCubit].
 ///
-/// Idle → a Start button (with gym selection). In progress → the session's
+/// Idle → a Start button (with gym selection), plus restore buttons for the
+/// last saved / last discarded workout. In progress → the session's
 /// exercises (from the split plan, or free-form) with inline weight/reps set
 /// logging, warmup flags, and an End button that writes a [WorkoutSession].
 class WorkoutPage extends StatelessWidget {
@@ -31,26 +34,55 @@ class WorkoutPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return CustomScrollView(
-      slivers: <Widget>[
-        CustomAppBar(context, title: 'Current Workout'),
-        SliverToBoxAdapter(
-          child: MaxWidth(
-            child: BlocSelector<WorkoutCubit, WorkoutState, bool>(
-              selector: (state) => state.isInProgress,
-              builder: (context, isInProgress) {
-                final cubit = context.read<WorkoutCubit>();
-                return isInProgress
-                    ? _InProgressView(
-                        onEnd: cubit.endWorkout,
-                        onDiscard: cubit.discardWorkout,
-                      )
-                    : _IdleView(onStart: () => _startWorkout(context));
-              },
+    final cubit = context.read<WorkoutCubit>();
+    return BlocListener<WorkoutCubit, WorkoutState>(
+      // Error-surfacing contract for writes: a failed end-workout save keeps
+      // the session in progress; toast it once per fresh failure. Listened at
+      // page level so restore failures raised from the idle view toast too.
+      listenWhen: (previous, current) =>
+          current.saveError != null && current.saveError != previous.saveError,
+      listener: (context, state) => showFToast(
+        context: context,
+        title: Text(state.saveError!),
+        duration: const Duration(seconds: 4),
+      ),
+      child: CustomScrollView(
+        slivers: <Widget>[
+          CustomAppBar(context, title: 'Current Workout'),
+          SliverToBoxAdapter(
+            child: MaxWidth(
+              child:
+                  BlocSelector<
+                    WorkoutCubit,
+                    WorkoutState,
+                    ({
+                      bool canRestoreDiscarded,
+                      bool canRestoreSaved,
+                      bool isInProgress,
+                    })
+                  >(
+                    selector: (state) => (
+                      isInProgress: state.isInProgress,
+                      canRestoreSaved: state.canRestoreSaved,
+                      canRestoreDiscarded: state.canRestoreDiscarded(),
+                    ),
+                    builder: (context, view) {
+                      return view.isInProgress
+                          ? _InProgressView(
+                              onEnd: cubit.endWorkout,
+                              onDiscard: cubit.discardWorkout,
+                            )
+                          : _IdleView(
+                              onStart: () => _startWorkout(context),
+                              onRestoreSaved: cubit.restoreSavedWorkout,
+                              onRestoreDiscarded: cubit.restoreDiscardedWorkout,
+                            );
+                    },
+                  ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -64,13 +96,44 @@ class WorkoutPage extends StatelessWidget {
   }
 }
 
-class _IdleView extends StatelessWidget {
-  const _IdleView({required this.onStart});
+class _IdleView extends StatefulWidget {
+  const _IdleView({
+    required this.onStart,
+    required this.onRestoreSaved,
+    required this.onRestoreDiscarded,
+  });
 
   final VoidCallback onStart;
+  final Future<void> Function() onRestoreSaved;
+  final VoidCallback onRestoreDiscarded;
+
+  @override
+  State<_IdleView> createState() => _IdleViewState();
+}
+
+class _IdleViewState extends State<_IdleView> {
+  Timer? _windowTicker;
+
+  @override
+  void dispose() {
+    _windowTicker?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
+    final state = context.read<WorkoutCubit>().state;
+    // The discarded-restore window lapses with wall-clock time, which no cubit
+    // state change announces. While the window is live, tick periodically so
+    // the restore button disappears on time (and stays away afterwards).
+    final windowLive = state.canRestoreDiscarded();
+    _windowTicker?.cancel();
+    _windowTicker = windowLive
+        ? Timer.periodic(const Duration(seconds: 30), (_) {
+            if (mounted) setState(() {});
+          })
+        : null;
+
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -83,10 +146,33 @@ class _IdleView extends StatelessWidget {
           const SizedBox(height: 16),
           FButton(
             mainAxisSize: MainAxisSize.min,
-            onPress: onStart,
+            onPress: widget.onStart,
             prefix: const Icon(FLucideIcons.play),
             child: const Text('Start Workout'),
           ),
+          // Leaving a workout is never destructive: the last SAVED workout
+          // stays in history but can always be pulled back out of it, and the
+          // last DISCARDED one is held in memory for a short window.
+          if (state.canRestoreSaved) ...[
+            const SizedBox(height: 12),
+            FButton(
+              variant: .outline,
+              mainAxisSize: MainAxisSize.min,
+              onPress: () => widget.onRestoreSaved(),
+              prefix: const Icon(FLucideIcons.rotateCcw),
+              child: const Text('Restore last workout'),
+            ),
+          ],
+          if (state.canRestoreDiscarded()) ...[
+            const SizedBox(height: 12),
+            FButton(
+              variant: .outline,
+              mainAxisSize: MainAxisSize.min,
+              onPress: () => widget.onRestoreDiscarded(),
+              prefix: const Icon(FLucideIcons.undo2),
+              child: const Text('Restore discarded workout'),
+            ),
+          ],
         ],
       ),
     );
@@ -103,64 +189,48 @@ class _InProgressView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BlocListener<WorkoutCubit, WorkoutState>(
-      // Error-surfacing contract for writes: a failed end-workout save keeps
-      // the session in progress; toast it once per fresh failure.
-      listenWhen: (previous, current) =>
-          current.saveError != null && current.saveError != previous.saveError,
-      listener: (context, state) => showFToast(
-        context: context,
-        title: Text(state.saveError!),
-        duration: const Duration(seconds: 4),
-      ),
-      child: BlocSelector<WorkoutCubit, WorkoutState, _WorkoutPresentation>(
-        selector: _WorkoutPresentation.fromState,
-        builder: (context, presentation) => Padding(
-          // The bottom padding grows by the keyboard height so the inline
-          // add-set form and the End Workout action can scroll above the
-          // keyboard instead of being clipped by it (the shell Scaffold no
-          // longer resizes for the keyboard).
-          padding: EdgeInsets.fromLTRB(
-            16,
-            16,
-            16,
-            32 + keyboardInsetOf(context),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: <Widget>[
-              _WorkoutHeader(presentation: presentation.header),
-              const SizedBox(height: 16),
-              if (presentation.plan.isEmpty)
-                const _FreeFormPanel()
-              else
-                for (final entry in presentation.plan)
-                  _ExerciseLogCard(
-                    key: ValueKey('plan-${entry.exercise.order}'),
-                    orderNumber: entry.exercise.order,
-                    title: entry.exercise.name,
-                    sets: entry.sets,
-                    plannedSets: entry.exercise.sets,
-                    exerciseId: entry.exercise.exerciseId,
-                    exerciseName: entry.exercise.name,
-                  ),
-              const SizedBox(height: 24),
-              FilledButton.icon(
-                onPressed: () => _confirmEnd(
-                  context,
-                  presentation.setCount,
-                  onDiscard: onDiscard,
+    return BlocSelector<WorkoutCubit, WorkoutState, _WorkoutPresentation>(
+      selector: _WorkoutPresentation.fromState,
+      builder: (context, presentation) => Padding(
+        // The bottom padding grows by the keyboard height so the inline
+        // add-set form and the End Workout action can scroll above the
+        // keyboard instead of being clipped by it (the shell Scaffold no
+        // longer resizes for the keyboard).
+        padding: EdgeInsets.fromLTRB(16, 16, 16, 32 + keyboardInsetOf(context)),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            _WorkoutHeader(presentation: presentation.header),
+            const SizedBox(height: 16),
+            if (presentation.plan.isEmpty)
+              const _FreeFormPanel()
+            else
+              for (final entry in presentation.plan)
+                _ExerciseLogCard(
+                  key: ValueKey('plan-${entry.exercise.order}'),
+                  orderNumber: entry.exercise.order,
+                  title: entry.exercise.name,
+                  sets: entry.sets,
+                  plannedSets: entry.exercise.sets,
+                  exerciseId: entry.exercise.exerciseId,
+                  exerciseName: entry.exercise.name,
                 ),
-                style: FilledButton.styleFrom(
-                  backgroundColor: context.theme.colors.error,
-                  foregroundColor: context.theme.colors.errorForeground,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                ),
-                icon: const Icon(FLucideIcons.squareStop),
-                label: const Text('End Workout'),
+            const SizedBox(height: 24),
+            FilledButton.icon(
+              onPressed: () => _confirmEnd(
+                context,
+                presentation.setCount,
+                onDiscard: onDiscard,
               ),
-            ],
-          ),
+              style: FilledButton.styleFrom(
+                backgroundColor: context.theme.colors.error,
+                foregroundColor: context.theme.colors.errorForeground,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+              ),
+              icon: const Icon(FLucideIcons.squareStop),
+              label: const Text('End Workout'),
+            ),
+          ],
         ),
       ),
     );
