@@ -11,6 +11,7 @@ import 'package:tracker/ui/core/ui/keyboard_inset.dart';
 import 'package:tracker/ui/core/ui/max_width.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
 import 'package:tracker/ui/core/ui/set_type_chip.dart';
+import 'package:tracker/ui/core/ui/unsaved_changes_dialog.dart';
 import 'package:tracker/ui/core/ui/weight_confirmation.dart';
 import 'package:tracker/ui/core/ui/weight_format.dart';
 import 'package:tracker/utils/decimal_input.dart';
@@ -47,6 +48,10 @@ class _SessionEditPageState extends State<SessionEditPage> {
   Map<int, String> _exerciseNames = const {};
   bool _didLoad = false;
 
+  /// Snapshot of the session as loaded; compared against the live draft to
+  /// detect unsaved changes when the user tries to leave without saving.
+  _SessionDraftSnapshot? _initial;
+
   @override
   void initState() {
     super.initState();
@@ -56,6 +61,9 @@ class _SessionEditPageState extends State<SessionEditPage> {
     _end = widget.session.endTime;
     _gymId = widget.session.gymId;
     _sets = List.of(widget.session.sets);
+    // Rebuild on edits so the PopScope discard guard tracks changes.
+    _title.addListener(() => setState(() {}));
+    _initial = _snapshot(gymId: widget.session.gymId);
   }
 
   void _clearTitleError() {
@@ -85,6 +93,52 @@ class _SessionEditPageState extends State<SessionEditPage> {
     _title.dispose();
     super.dispose();
   }
+
+  /// A normalized copy of the current draft, used as the dirty-check
+  /// baseline. Normalization mirrors [_save] (trimmed title) so only
+  /// content differences read as unsaved changes.
+  ///
+  /// The draft's gym id comes from [_gym], which resolves asynchronously;
+  /// the baseline is therefore taken with the session's own [gymId].
+  _SessionDraftSnapshot _snapshot({int? gymId}) => _SessionDraftSnapshot(
+    title: _title.text.trim(),
+    start: _start,
+    end: _end,
+    gymId: gymId ?? _gym?.id,
+    sets: [
+      for (final s in _sets)
+        WorkoutSet(
+          exerciseId: s.exerciseId,
+          weight: s.weight,
+          reps: s.reps,
+          type: s.type,
+          order: s.order,
+        ),
+    ],
+  );
+
+  /// True when the draft differs from what was loaded (see [_initial]):
+  /// title, start/end times, gym, or any set's fields.
+  bool get _hasUnsavedChanges {
+    final initial = _initial;
+    if (initial == null) return false;
+    if (initial.title != _title.text.trim()) return true;
+    if (initial.start != _start) return true;
+    if (initial.end != _end) return true;
+    if (initial.gymId != _gym?.id) return true;
+    if (initial.sets.length != _sets.length) return true;
+    for (var i = 0; i < _sets.length; i++) {
+      if (_setDiffers(initial.sets[i], _sets[i])) return true;
+    }
+    return false;
+  }
+
+  bool _setDiffers(WorkoutSet a, WorkoutSet b) =>
+      a.exerciseId != b.exerciseId ||
+      a.weight != b.weight ||
+      a.reps != b.reps ||
+      a.type != b.type ||
+      a.order != b.order;
 
   Future<void> _loadGym() async {
     final gymId = _gymId;
@@ -164,65 +218,78 @@ class _SessionEditPageState extends State<SessionEditPage> {
   @override
   Widget build(BuildContext context) {
     final theme = context.theme;
-    return CustomScrollView(
-      slivers: <Widget>[
-        CustomAppBar(
-          context,
-          title: 'Edit session',
-          actionButton: (title: 'Save', onPressed: _save),
-        ),
-        SliverToBoxAdapter(
-          child: MaxWidth(
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(
-                16,
-                16,
-                16,
-                32 + keyboardInsetOf(context),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: <Widget>[
-                  _SessionFieldsCard(
-                    title: _title,
-                    titleError: _titleError,
-                    gymLabel: _gymLabel,
-                    start: _start,
-                    onPickGym: _pickGym,
-                    onPickStart: _pickStart,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Sets',
-                    style: theme.typography.body.md.copyWith(
-                      fontWeight: FontWeight.w600,
+    return PopScope(
+      // Guard back navigation (app-bar chevron and system back) so an edit
+      // with unsaved changes asks before being thrown away. Save pops with a
+      // result through _save, which is not intercepted.
+      canPop: !_hasUnsavedChanges,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        final navigator = Navigator.of(context);
+        if (await confirmDiscardUnsavedChanges(context) && mounted) {
+          navigator.pop();
+        }
+      },
+      child: CustomScrollView(
+        slivers: <Widget>[
+          CustomAppBar(
+            context,
+            title: 'Edit session',
+            actionButton: (title: 'Save', onPressed: _save),
+          ),
+          SliverToBoxAdapter(
+            child: MaxWidth(
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(
+                  16,
+                  16,
+                  16,
+                  32 + keyboardInsetOf(context),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: <Widget>[
+                    _SessionFieldsCard(
+                      title: _title,
+                      titleError: _titleError,
+                      start: _start,
+                      onPickGym: _pickGym,
+                      onPickStart: _pickStart,
+                      gymLabel: _gymLabel,
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Tap a set to edit its weight, reps or type.',
-                    style: theme.typography.body.xs.copyWith(
-                      color: theme.colors.mutedForeground,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  if (_sets.isEmpty)
-                    const Text('No sets were logged in this session.')
-                  else
-                    for (var i = 0; i < _sets.length; i++)
-                      _EditSetRow(
-                        name:
-                            _exerciseNames[_sets[i].exerciseId] ??
-                            'Exercise ${_sets[i].exerciseId}',
-                        set: _sets[i],
-                        onEdit: () => _editSet(i),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Sets',
+                      style: theme.typography.body.md.copyWith(
+                        fontWeight: FontWeight.w600,
                       ),
-                ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Tap a set to edit its weight, reps or type.',
+                      style: theme.typography.body.xs.copyWith(
+                        color: theme.colors.mutedForeground,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    if (_sets.isEmpty)
+                      const Text('No sets were logged in this session.')
+                    else
+                      for (var i = 0; i < _sets.length; i++)
+                        _EditSetRow(
+                          name:
+                              _exerciseNames[_sets[i].exerciseId] ??
+                              'Exercise ${_sets[i].exerciseId}',
+                          set: _sets[i],
+                          onEdit: () => _editSet(i),
+                        ),
+                  ],
+                ),
               ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -331,6 +398,25 @@ class _EditSetRow extends StatelessWidget {
 /// (a bare `null` pop means the sheet was dismissed without a choice).
 class _NoGym {
   const _NoGym();
+}
+
+/// Immutable snapshot of the editor's draft, used as the dirty-check
+/// baseline (mirrors new_split_page.dart). Sets are deep copies so later
+/// edits cannot mutate the snapshot.
+final class _SessionDraftSnapshot {
+  const _SessionDraftSnapshot({
+    required this.title,
+    required this.start,
+    required this.end,
+    required this.gymId,
+    required this.sets,
+  });
+
+  final String title;
+  final DateTime start;
+  final DateTime? end;
+  final int? gymId;
+  final List<WorkoutSet> sets;
 }
 
 /// Bottom sheet over the gyms plus an explicit "No gym" entry; returns the
