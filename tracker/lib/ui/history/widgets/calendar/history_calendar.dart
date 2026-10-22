@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
 import 'package:tracker/domain/models/workout_session.dart';
 import 'package:tracker/ui/core/ui/custom_route.dart';
+import 'package:tracker/ui/core/ui/icon_button.dart';
 import 'package:tracker/ui/core/ui/weight_format.dart';
 
 import '../session_detail_page.dart';
@@ -396,10 +397,10 @@ class _BuildMonthHeader extends StatelessWidget {
     final theme = context.theme;
     return Row(
       children: <Widget>[
-        IconButton(
-          icon: const Icon(FLucideIcons.chevronLeft),
-          onPressed: onPrev,
+        AppIconButton(
+          icon: FLucideIcons.chevronLeft,
           tooltip: 'Previous month',
+          onPress: onPrev,
         ),
         Expanded(
           child: Text(
@@ -410,10 +411,10 @@ class _BuildMonthHeader extends StatelessWidget {
             ),
           ),
         ),
-        IconButton(
-          icon: const Icon(FLucideIcons.chevronRight),
-          onPressed: onNext,
+        AppIconButton(
+          icon: FLucideIcons.chevronRight,
           tooltip: 'Next month',
+          onPress: onNext,
         ),
       ],
     );

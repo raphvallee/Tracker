@@ -5,6 +5,7 @@ import 'package:tracker/domain/models/workout_split_templates.dart';
 import 'package:tracker/ui/core/ui/app_dialog.dart';
 import 'package:tracker/ui/core/ui/custom_app_bar.dart';
 import 'package:tracker/ui/core/ui/custom_route.dart';
+import 'package:tracker/ui/core/ui/icon_button.dart';
 import 'package:tracker/ui/core/ui/keyboard_inset.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
 import 'package:tracker/ui/core/ui/unsaved_changes_dialog.dart';
@@ -262,10 +263,11 @@ class _SplitEditorPageState extends State<SplitEditorPage> {
                     error: _titleError == null ? null : Text(_titleError!),
                   ),
                   const SizedBox(height: 8),
-                  OutlinedButton.icon(
-                    onPressed: _chooseTemplate,
-                    icon: const Icon(FLucideIcons.sparkles),
-                    label: const Text('Use a template'),
+                  FButton(
+                    variant: .outline,
+                    onPress: _chooseTemplate,
+                    prefix: const Icon(FLucideIcons.sparkles),
+                    child: const Text('Use a template'),
                   ),
                   const SizedBox(height: 16),
                   FTextField(
@@ -291,18 +293,19 @@ class _SplitEditorPageState extends State<SplitEditorPage> {
                         subtitle: Text(
                           plural('exercise', _days[i].exercises.length),
                         ),
-                        suffix: IconButton(
-                          icon: const Icon(FLucideIcons.trash2),
+                        suffix: AppIconButton(
+                          icon: FLucideIcons.trash2,
                           tooltip: 'Remove day',
-                          onPressed: () => setState(() => _days.removeAt(i)),
+                          onPress: () => setState(() => _days.removeAt(i)),
                         ),
                         onPress: () => _openDayEditor(i),
                       ),
                   const SizedBox(height: 12),
-                  OutlinedButton.icon(
-                    onPressed: _addDay,
-                    icon: const Icon(FLucideIcons.plus),
-                    label: const Text('Add day'),
+                  FButton(
+                    variant: .outline,
+                    onPress: _addDay,
+                    prefix: const Icon(FLucideIcons.plus),
+                    child: const Text('Add day'),
                   ),
                   const SizedBox(height: 16),
                   if (!_isNew)

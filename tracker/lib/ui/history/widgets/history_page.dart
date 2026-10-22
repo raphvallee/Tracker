@@ -74,7 +74,7 @@ class _HistoryPageState extends State<HistoryPage> {
       slivers.add(
         const SliverFillRemaining(
           hasScrollBody: false,
-          child: Center(child: CircularProgressIndicator()),
+          child: Center(child: FCircularProgress()),
         ),
       );
     } else if ((snapshot.data ?? const <WorkoutSession>[]).isEmpty) {

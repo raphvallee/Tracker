@@ -84,10 +84,11 @@ class _FeedPageState extends State<FeedPage> {
             ),
           ),
         ),
-        TextButton.icon(
-          onPressed: _editGraph,
-          icon: const Icon(FLucideIcons.plus),
-          label: const Text('Add graph'),
+        FButton(
+          variant: .ghost,
+          onPress: _editGraph,
+          prefix: const Icon(FLucideIcons.plus),
+          child: const Text('Add graph'),
         ),
       ],
     );
@@ -206,8 +207,9 @@ class _FeedPageState extends State<FeedPage> {
             child: _FeedMessage(
               icon: FLucideIcons.circleAlert,
               message: 'Could not load recent activity.',
-              action: TextButton(
-                onPressed: () => _cubit?.retry(),
+              action: FButton(
+                variant: .ghost,
+                onPress: () => _cubit?.retry(),
                 child: const Text('Retry'),
               ),
             ),
@@ -217,7 +219,7 @@ class _FeedPageState extends State<FeedPage> {
         slivers.add(
           const SliverFillRemaining(
             hasScrollBody: false,
-            child: Center(child: CircularProgressIndicator()),
+            child: Center(child: FCircularProgress()),
           ),
         );
       case FeedStatus.ready:

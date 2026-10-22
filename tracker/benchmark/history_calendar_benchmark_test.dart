@@ -50,13 +50,16 @@ void main() {
         for (var i = 0; i < _warmup + _iterations; i++) {
           final label = i.isEven ? 'Next month' : 'Previous month';
           final watch = Stopwatch()..start();
-          await tapAndRender(tester, find.byTooltip(label));
+          await tapAndRender(tester, fButtonByTooltip(label));
           watch.stop();
           final current = monthHeader(tester);
           expect(current, isNot(previous), reason: 'tap "$label" was dropped');
           previous = current;
           if (i >= _warmup) micros.add(watch.elapsedMicroseconds);
         }
+        // Drain FTappable's 100ms press timer created by the last tap;
+        // flutter_test fails the test if timers are still pending at the end.
+        await tester.pump(const Duration(milliseconds: 150));
         print(BenchStats(micros).line('month change (next/prev)', count));
       });
 

@@ -59,12 +59,12 @@ void main() {
       )
       .controller;
 
-  IconButton buttonIn(WidgetTester tester, Finder scope, String tooltip) =>
-      tester.widget<IconButton>(
+  FButton buttonIn(WidgetTester tester, Finder scope, String tooltip) =>
+      tester.widget<FButton>(
         find.descendant(
           of: scope,
           matching: find.byWidgetPredicate(
-            (w) => w is IconButton && w.tooltip == tooltip,
+            (w) => w is FButton && w.semanticsTooltip == tooltip,
           ),
         ),
       );
@@ -121,22 +121,22 @@ void main() {
     await tester.pumpAndSettle();
 
     // Mandatory sets: the only remaining set cannot be removed.
-    expect(buttonIn(tester, setRow(0, 0), 'Remove set').onPressed, isNull);
+    expect(buttonIn(tester, setRow(0, 0), 'Remove set').onPress, isNull);
 
     // Set 2 infers the rep range from set 1.
-    await tester.tap(find.byTooltip('Add set'));
+    await tester.tap(fButtonByTooltip('Add set'));
     await tester.pumpAndSettle();
     expect(fieldOf(tester, 0, 1).text, '8');
     expect(fieldOf(tester, 0, 1, index: 1).text, '12');
 
     // With two sets, removal is enabled again.
-    expect(buttonIn(tester, setRow(0, 1), 'Remove set').onPressed, isNotNull);
+    expect(buttonIn(tester, setRow(0, 1), 'Remove set').onPress, isNotNull);
 
     // Switch set 2 to fixed reps (keeps the min).
     await tester.tap(
       find.descendant(
         of: setRow(0, 1),
-        matching: find.byTooltip('Use fixed reps'),
+        matching: fButtonByTooltip('Use fixed reps'),
       ),
     );
     await tester.pumpAndSettle();
@@ -147,7 +147,7 @@ void main() {
     expect(fieldOf(tester, 0, 1).text, '8');
 
     // Set 3 infers fixed reps from set 2.
-    await tester.tap(find.byTooltip('Add set'));
+    await tester.tap(fButtonByTooltip('Add set'));
     await tester.pumpAndSettle();
     expect(
       find.descendant(of: setRow(0, 2), matching: find.byType(EditableText)),
@@ -249,7 +249,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byTooltip('Use rep range'));
+    await tester.tap(fButtonByTooltip('Use rep range'));
     await tester.pumpAndSettle();
 
     // Range mode: two fields, max pre-filled from the Settings default.
@@ -290,7 +290,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byTooltip('Use rep range'));
+    await tester.tap(fButtonByTooltip('Use rep range'));
     await tester.pumpAndSettle();
 
     final fields = find.descendant(

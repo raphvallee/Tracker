@@ -92,10 +92,7 @@ class _ProgressionPageState extends State<ProgressionPage> {
   Widget _content(BuildContext context) {
     if (_loading && _sessions.isEmpty) {
       return const Center(
-        child: Padding(
-          padding: EdgeInsets.all(32),
-          child: CircularProgressIndicator(),
-        ),
+        child: Padding(padding: EdgeInsets.all(32), child: FCircularProgress()),
       );
     }
     if (_loadError != null && _sessions.isEmpty) {
