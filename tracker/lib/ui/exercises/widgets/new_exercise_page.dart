@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
+import 'package:tracker/data/services/app_log.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
 import 'package:tracker/domain/models/exercise.dart';
 import 'package:tracker/domain/models/muscle.dart';
@@ -103,12 +104,27 @@ class _NewExercisePageState extends State<NewExercisePage> {
           ? [Equipment.bodyweight]
           : _equipment.toList()
       ..movementPattern = _movement;
-    if (repo != null) {
-      final id = await repo.exercises.put(exercise);
-      exercise.id = id;
+    // Error-surfacing contract for writes (mirrors session_detail_page): a
+    // failed save keeps the form open with the Save button restored, and the
+    // failure is toasted once. Without this the _saving flag would never
+    // reset and the form would be stuck.
+    try {
+      if (repo != null) {
+        final id = await repo.exercises.put(exercise);
+        exercise.id = id;
+      }
+      if (!mounted) return;
+      Navigator.of(context).pop(exercise);
+    } catch (error, stackTrace) {
+      AppLog.error('exercise-editor', error, stackTrace);
+      if (!mounted) return;
+      setState(() => _saving = false);
+      showFToast(
+        context: context,
+        title: const Text('Could not save the changes.'),
+        duration: const Duration(seconds: 4),
+      );
     }
-    if (!mounted) return;
-    Navigator.of(context).pop(exercise);
   }
 
   /// Deletes the edited exercise. Deletion is blocked while split templates or
