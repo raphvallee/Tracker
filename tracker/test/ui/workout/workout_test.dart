@@ -372,7 +372,7 @@ void main() {
       expect(tester.widget<EditableText>(repsField).controller.text, '8');
     });
 
-    testWidgets('fractional reps log and persist exactly (one decimal)', (
+    testWidgets('fractional reps log and persist exactly (two decimals)', (
       tester,
     ) async {
       final cubit = await pumpApp(tester);
@@ -401,25 +401,25 @@ void main() {
           )
           .first;
 
-      // "3.5" logs as 3.5 - no rounding anywhere.
+      // "3.25" logs as 3.25 - no rounding anywhere.
       await tester.enterText(weightField, '100');
-      await tester.enterText(repsField, '3.5');
+      await tester.enterText(repsField, '3.25');
       await tester.tap(find.text('Add set'));
       await tester.pumpAndSettle();
       expect(cubit.state.sets, hasLength(1));
-      expect(cubit.state.sets.single.reps, 3.5);
-      expect(find.text('100 kg × 3.5'), findsOneWidget);
+      expect(cubit.state.sets.single.reps, 3.25);
+      expect(find.text('100 kg × 3.25'), findsOneWidget);
 
-      // The live input formatter blocks a second decimal digit while typing.
-      await tester.enterText(repsField, '3.55');
-      expect(tester.widget<EditableText>(repsField).controller.text, '3.5');
+      // The live input formatter blocks a third decimal digit while typing.
+      await tester.enterText(repsField, '3.255');
+      expect(tester.widget<EditableText>(repsField).controller.text, '3.25');
       // A second decimal separator is ignored as well.
-      await tester.enterText(repsField, '3.5.5');
-      expect(tester.widget<EditableText>(repsField).controller.text, '3.5');
+      await tester.enterText(repsField, '3.25.5');
+      expect(tester.widget<EditableText>(repsField).controller.text, '3.25');
 
       // Hand-set values (bypassing the formatter, e.g. a paste through other
-      // means) are truncated defensively to one decimal - never rounded.
-      tester.widget<EditableText>(repsField).controller.text = '12.34';
+      // means) are truncated defensively to two decimals - never rounded.
+      tester.widget<EditableText>(repsField).controller.text = '12.345';
       // Once two set tiles render, the button can sit below the test viewport;
       // press the FButton directly instead of hit-testing its label.
       FButton addSetButton() => tester.widget<FButton>(
@@ -428,11 +428,19 @@ void main() {
       addSetButton().onPress!();
       await tester.pumpAndSettle();
       expect(cubit.state.sets, hasLength(2));
-      expect(cubit.state.sets.last.reps, 12.3);
-      expect(find.text('100 kg × 12.3'), findsOneWidget);
+      expect(cubit.state.sets.last.reps, 12.34);
+      expect(find.text('100 kg × 12.34'), findsOneWidget);
 
       // A fraction below one rep shows an explicit error, never a no-op.
       await tester.enterText(repsField, '0.4');
+      addSetButton().onPress!();
+      await tester.pumpAndSettle();
+      expect(cubit.state.sets, hasLength(2));
+      expect(find.text('Must be at least 1'), findsOneWidget);
+
+      // A leading-decimal value is a fraction too, so it gets the same error
+      // rather than being dropped without a message.
+      await tester.enterText(repsField, '.5');
       addSetButton().onPress!();
       await tester.pumpAndSettle();
       expect(cubit.state.sets, hasLength(2));

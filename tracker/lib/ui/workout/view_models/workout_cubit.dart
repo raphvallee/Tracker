@@ -411,8 +411,8 @@ class WorkoutCubit extends HydratedCubit<WorkoutState> {
   }
 
   /// Log one performed set, appending it in sequence. Reps may be fractional
-  /// (one decimal place); callers are expected to pass an already-truncated
-  /// value.
+  /// (up to two decimal places); callers should pass a value already truncated
+  /// to that precision.
   void logSet({
     required int exerciseId,
     required String exerciseName,

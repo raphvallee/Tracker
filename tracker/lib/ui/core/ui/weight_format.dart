@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 import 'package:tracker/domain/services/analytics.dart';
 import 'package:tracker/domain/models/weight_unit.dart';
 import 'package:tracker/ui/settings/view_models/settings_cubit.dart';
+import 'package:tracker/utils/decimal_input.dart';
 
 WeightUnit weightUnitOf(BuildContext context) {
   return SettingsCubit.maybeOf(context)?.state.unit ?? WeightUnit.kilograms;
@@ -15,18 +16,20 @@ double kilogramsFromDisplay(BuildContext context, double displayed) =>
 
 String formatWeight(BuildContext context, double kilograms) {
   final value = displayWeightOf(context, kilograms);
-  final formatted = value == value.roundToDouble()
-      ? value.toStringAsFixed(0)
-      : value.toStringAsFixed(1);
-  return '$formatted ${weightUnitOf(context).symbol}';
+  return '${formatDecimal(value)} ${weightUnitOf(context).symbol}';
 }
 
 /// Formats performed reps for display: whole reps without a decimal point
-/// (`5`), fractional reps with exactly one (`3.5`).
-String formatReps(double reps) {
-  return reps == reps.roundToDouble()
-      ? reps.toStringAsFixed(0)
-      : reps.toStringAsFixed(1);
+/// (`5`), fractional reps with up to two (`3.5`, `3.25`).
+String formatReps(double reps) => formatDecimal(reps);
+
+/// Formats a number with at most [maxDecimalPlaces] places and no trailing
+/// zeros: `80` → "80", `82.5` → "82.5", `3.25` → "3.25".
+String formatDecimal(double value) {
+  if (value == value.roundToDouble()) return value.toStringAsFixed(0);
+  return value
+      .toStringAsFixed(maxDecimalPlaces)
+      .replaceFirst(RegExp(r'\.?0+$'), '');
 }
 
 List<ProgressionPoint> displayProgressionPoints(

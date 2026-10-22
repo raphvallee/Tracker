@@ -6,11 +6,14 @@ import 'package:tracker/domain/models/workout_session.dart';
 import 'package:tracker/domain/models/workout_set.dart';
 import 'package:tracker/ui/core/ui/app_dialog.dart';
 import 'package:tracker/ui/core/ui/custom_app_bar.dart';
+import 'package:tracker/ui/core/ui/decimal_input_formatter.dart';
 import 'package:tracker/ui/core/ui/keyboard_inset.dart';
-import 'package:tracker/ui/core/ui/reps_input_formatter.dart';
 import 'package:tracker/ui/core/ui/max_width.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
+import 'package:tracker/ui/core/ui/set_type_chip.dart';
+import 'package:tracker/ui/core/ui/weight_confirmation.dart';
 import 'package:tracker/ui/core/ui/weight_format.dart';
+import 'package:tracker/utils/decimal_input.dart';
 import 'package:tracker/utils/form_validators.dart';
 
 /// Editor for a completed past [WorkoutSession], reached from the session
@@ -35,17 +38,35 @@ class _SessionEditPageState extends State<SessionEditPage> {
   late DateTime? _end;
   late List<WorkoutSet> _sets;
 
+  /// The gym saved with the session. Seeded from the session itself, so saving
+  /// before [_gym] resolves keeps the original gym; only the picker changes it.
+  int? _gymId;
   Gym? _gym;
+  bool _gymLoaded = false;
+  String? _titleError;
   Map<int, String> _exerciseNames = const {};
   bool _didLoad = false;
 
   @override
   void initState() {
     super.initState();
-    _title = TextEditingController(text: widget.session.title);
+    _title = TextEditingController(text: widget.session.title)
+      ..addListener(_clearTitleError);
     _start = widget.session.startTime;
     _end = widget.session.endTime;
+    _gymId = widget.session.gymId;
     _sets = List.of(widget.session.sets);
+  }
+
+  void _clearTitleError() {
+    if (_titleError != null) setState(() => _titleError = null);
+  }
+
+  String get _gymLabel {
+    final gym = _gym;
+    if (gym != null) return gym.name;
+    if (_gymId == null) return 'No gym';
+    return _gymLoaded ? 'Unknown gym' : 'Loading...';
   }
 
   @override
@@ -66,11 +87,15 @@ class _SessionEditPageState extends State<SessionEditPage> {
   }
 
   Future<void> _loadGym() async {
-    final gymId = widget.session.gymId;
+    final gymId = _gymId;
     if (gymId == null) return;
     final gym = await RepositoryScope.maybeOf(context)?.gyms.getById(gymId);
-    if (!mounted || gym == null) return;
-    setState(() => _gym = gym);
+    // A gym picked while the lookup was in flight wins over the stored one.
+    if (!mounted || _gymLoaded) return;
+    setState(() {
+      _gym = gym;
+      _gymLoaded = true;
+    });
   }
 
   Future<void> _loadExerciseNames() async {
@@ -107,7 +132,11 @@ class _SessionEditPageState extends State<SessionEditPage> {
     if (!mounted) return;
     final picked = await _pickGymSheet(context, gyms);
     if (!mounted || picked == null) return;
-    setState(() => _gym = picked is Gym ? picked : null);
+    setState(() {
+      _gymLoaded = true;
+      _gym = picked is Gym ? picked : null;
+      _gymId = picked is Gym ? picked.id : null;
+    });
   }
 
   Future<void> _editSet(int index) async {
@@ -117,11 +146,16 @@ class _SessionEditPageState extends State<SessionEditPage> {
   }
 
   void _save() {
+    final titleError = requiredText(_title.text);
+    if (titleError != null) {
+      setState(() => _titleError = titleError);
+      return;
+    }
     final session = WorkoutSession(
       title: _title.text.trim(),
       startTime: _start,
       endTime: _end,
-      gymId: _gym?.id,
+      gymId: _gymId,
       sets: List.of(_sets),
     )..id = widget.session.id;
     Navigator.of(context).pop(session);
@@ -151,7 +185,8 @@ class _SessionEditPageState extends State<SessionEditPage> {
                 children: <Widget>[
                   _SessionFieldsCard(
                     title: _title,
-                    gym: _gym,
+                    titleError: _titleError,
+                    gymLabel: _gymLabel,
                     start: _start,
                     onPickGym: _pickGym,
                     onPickStart: _pickStart,
@@ -195,14 +230,16 @@ class _SessionEditPageState extends State<SessionEditPage> {
 class _SessionFieldsCard extends StatelessWidget {
   const _SessionFieldsCard({
     required this.title,
-    required this.gym,
+    required this.titleError,
+    required this.gymLabel,
     required this.start,
     required this.onPickGym,
     required this.onPickStart,
   });
 
   final TextEditingController title;
-  final Gym? gym;
+  final String? titleError;
+  final String gymLabel;
   final DateTime start;
   final VoidCallback onPickGym;
   final VoidCallback onPickStart;
@@ -224,12 +261,13 @@ class _SessionFieldsCard extends StatelessWidget {
                 FTextField(
                   control: FTextFieldControl.managed(controller: title),
                   label: const Text('Title'),
+                  error: titleError == null ? null : Text(titleError!),
                 ),
                 const SizedBox(height: 8),
                 FItem(
                   prefix: const Icon(FLucideIcons.dumbbell),
                   title: const Text('Gym'),
-                  subtitle: Text(gym?.name ?? 'No gym'),
+                  subtitle: Text(gymLabel),
                   suffix: const Icon(FLucideIcons.chevronRight),
                   onPress: onPickGym,
                 ),
@@ -278,41 +316,12 @@ class _EditSetRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: FItem(
         onPress: onEdit,
-        prefix: _TypeChip(isWarmup: set.isWarmup),
+        prefix: SetTypeChip(isWarmup: set.isWarmup),
         title: Text(name),
         subtitle: Text(
           '${formatWeight(context, set.weight)} × ${formatReps(set.reps)}',
         ),
         suffix: const Icon(FLucideIcons.chevronRight),
-      ),
-    );
-  }
-}
-
-/// W / S chip mirroring the detail page's indicator.
-class _TypeChip extends StatelessWidget {
-  const _TypeChip({required this.isWarmup});
-
-  final bool isWarmup;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = context.theme;
-    final fill = isWarmup ? theme.colors.muted : theme.colors.primary;
-    final textColor = isWarmup
-        ? theme.colors.mutedForeground
-        : theme.colors.primary;
-    return Container(
-      width: 28,
-      height: 28,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: isWarmup ? fill : fill.withValues(alpha: 0.15),
-      ),
-      child: Text(
-        isWarmup ? 'W' : 'S',
-        style: TextStyle(color: textColor, fontWeight: FontWeight.bold),
       ),
     );
   }
@@ -437,11 +446,11 @@ class _EditSetDialogState extends State<_EditSetDialog> {
     super.initState();
     // context.read inside SettingsCubit.maybeOf works here, so the display-unit
     // conversion is safe before the first frame.
-    _prefilledWeight = _weightText(
+    _prefilledWeight = formatDecimal(
       displayWeightOf(context, widget.initial.weight),
     );
     _weight = TextEditingController(text: _prefilledWeight);
-    _reps = TextEditingController(text: _weightText(widget.initial.reps));
+    _reps = TextEditingController(text: formatReps(widget.initial.reps));
     _warmup = widget.initial.isWarmup;
     _weight.addListener(() => setState(() => _weightError = null));
     _reps.addListener(() => setState(() => _repsError = null));
@@ -481,7 +490,9 @@ class _EditSetDialogState extends State<_EditSetDialog> {
                   control: FTextFieldControl.managed(controller: _weight),
                   keyboardType: const TextInputType.numberWithOptions(
                     decimal: true,
+                    signed: true,
                   ),
+                  inputFormatters: [DecimalInputFormatter(allowNegative: true)],
                   label: Text('Weight (${weightUnitOf(context).symbol})'),
                   error: _weightError == null ? null : Text(_weightError!),
                 ),
@@ -493,7 +504,7 @@ class _EditSetDialogState extends State<_EditSetDialog> {
                   keyboardType: const TextInputType.numberWithOptions(
                     decimal: true,
                   ),
-                  inputFormatters: [RepsInputFormatter()],
+                  inputFormatters: [DecimalInputFormatter()],
                   label: const Text('Reps'),
                   error: _repsError == null ? null : Text(_repsError!),
                 ),
@@ -511,21 +522,19 @@ class _EditSetDialogState extends State<_EditSetDialog> {
     );
   }
 
-  void _save() {
-    final displayed = double.tryParse(_weight.text.trim());
-    final reps = double.tryParse(_reps.text.trim().replaceAll(',', '.'));
-    final weightError = requiredDouble(_weight.text);
-    if (weightError != null || displayed == null || reps == null) {
+  Future<void> _save() async {
+    final weightError = requiredWeight(_weight.text);
+    final displayed = parseDecimal(_weight.text, allowNegative: true);
+    final reps = parseDecimal(_reps.text);
+    if (weightError != null || displayed == null || reps == null || reps < 1) {
       setState(() {
         _weightError = weightError;
-        _repsError = reps == null ? 'Must be at least 1' : null;
+        _repsError = reps == null || reps < 1 ? 'Must be at least 1' : null;
       });
       return;
     }
-    if (reps < 1) {
-      setState(() => _repsError = 'Must be at least 1');
-      return;
-    }
+    final confirmed = await confirmWeightEntry(context, displayed);
+    if (!mounted || !confirmed) return;
     // The prefilled text is the rounded display value, so converting it back
     // would drift the stored weight. Keep the original unless the user edited it.
     final weightEdited = _weight.text.trim() != _prefilledWeight;
@@ -542,8 +551,4 @@ class _EditSetDialogState extends State<_EditSetDialog> {
       ),
     );
   }
-
-  String _weightText(double value) => value == value.roundToDouble()
-      ? value.toStringAsFixed(0)
-      : value.toStringAsFixed(1);
 }
