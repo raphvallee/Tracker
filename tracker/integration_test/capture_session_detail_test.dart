@@ -7,7 +7,6 @@
 //
 //   pwsh ./capture-app-media.ps1 -Mode screenshot -Settle 8 \
 //     -Test tracker/integration_test/capture_session_detail_test.dart
-// ignore_for_file: avoid_print
 import 'dart:io';
 
 import 'package:flutter_bloc/flutter_bloc.dart';

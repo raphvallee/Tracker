@@ -13,6 +13,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hydrated_bloc/hydrated_bloc.dart';
 import 'package:isar_community/isar.dart';
+import 'package:tracker/domain/models/weight_unit.dart';
 import 'package:tracker/main.dart';
 import 'package:tracker/ui/settings/view_models/settings_cubit.dart';
 import 'package:tracker/ui/workout/view_models/workout_cubit.dart';
@@ -49,7 +50,11 @@ Future<Isar> openTestIsar(
 }
 
 /// Pump the app shell ([MyApp]) with a fresh [WorkoutCubit]; returns the cubit.
-Future<WorkoutCubit> pumpApp(WidgetTester tester) async {
+/// [unit] sets the display unit of the app's [SettingsCubit].
+Future<WorkoutCubit> pumpApp(
+  WidgetTester tester, {
+  WeightUnit unit = WeightUnit.kilograms,
+}) async {
   // Every pumped HydratedCubit (WorkoutCubit/SettingsCubit) reads storage at
   // construction; ensure it is initialized even when the caller's file doesn't.
   HydratedBloc.storage = InMemoryStorage();
@@ -59,7 +64,7 @@ Future<WorkoutCubit> pumpApp(WidgetTester tester) async {
       providers: [
         BlocProvider<WorkoutCubit>(create: (_) => cubit, lazy: false),
         BlocProvider<SettingsCubit>(
-          create: (_) => SettingsCubit(),
+          create: (_) => SettingsCubit()..setUnit(unit),
           lazy: false,
         ),
       ],
@@ -73,8 +78,12 @@ Future<WorkoutCubit> pumpApp(WidgetTester tester) async {
 /// Pump the full app shell via [pumpApp], then push [page] onto the root
 /// navigator so the page under test sits inside the real stack (FTheme +
 /// FToaster + the Material bridge theme), not a bare `MaterialApp`.
-Future<WorkoutCubit> pumpAppPage(WidgetTester tester, Widget page) async {
-  final cubit = await pumpApp(tester);
+Future<WorkoutCubit> pumpAppPage(
+  WidgetTester tester,
+  Widget page, {
+  WeightUnit unit = WeightUnit.kilograms,
+}) async {
+  final cubit = await pumpApp(tester, unit: unit);
   final navigator = tester.state<NavigatorState>(find.byType(Navigator).first);
   unawaited(navigator.push(MaterialPageRoute<void>(builder: (_) => page)));
   await tester.pumpAndSettle();

@@ -5,7 +5,6 @@
 //
 //   pwsh ./capture-app-media.ps1 -Mode video -Seconds 40 \
 //     -Test tracker/integration_test/capture_session_edit_flow_test.dart
-// ignore_for_file: avoid_print
 import 'dart:io';
 
 import 'package:flutter/material.dart';

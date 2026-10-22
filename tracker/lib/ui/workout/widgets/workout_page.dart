@@ -8,12 +8,15 @@ import 'package:tracker/domain/models/workout_set.dart';
 import 'package:tracker/domain/models/workout_split.dart';
 import 'package:tracker/ui/core/ui/app_dialog.dart';
 import 'package:tracker/ui/core/ui/custom_app_bar.dart';
+import 'package:tracker/ui/core/ui/decimal_input_formatter.dart';
 import 'package:tracker/ui/core/ui/keyboard_inset.dart';
-import 'package:tracker/ui/core/ui/reps_input_formatter.dart';
 import 'package:tracker/ui/core/ui/max_width.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
+import 'package:tracker/ui/core/ui/set_type_chip.dart';
+import 'package:tracker/ui/core/ui/weight_confirmation.dart';
 import 'package:tracker/ui/core/ui/weight_format.dart';
 import 'package:tracker/ui/workout/view_models/workout_cubit.dart';
+import 'package:tracker/utils/decimal_input.dart';
 import 'package:tracker/utils/form_validators.dart';
 
 import 'gym_picker.dart';
@@ -507,7 +510,7 @@ class _SetTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = context.theme;
     return FItem(
-      prefix: _WarmupBadge(isWarmup: set.isWarmup),
+      prefix: SetTypeChip(isWarmup: set.isWarmup),
       title: Text(
         '${formatWeight(context, set.weight)} × ${formatReps(set.reps)}',
       ),
@@ -523,39 +526,6 @@ class _SetTile extends StatelessWidget {
         icon: const Icon(FLucideIcons.trash2, size: 20),
         tooltip: 'Remove set',
         onPressed: () => context.read<WorkoutCubit>().removeSet(set.order),
-      ),
-    );
-  }
-}
-
-/// A compact color/number badge distinguishing warm-up from working sets.
-class _WarmupBadge extends StatelessWidget {
-  const _WarmupBadge({required this.isWarmup});
-
-  final bool isWarmup;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = context.theme;
-    // Muted/foreground pairing so the W badge reads on white cards (the old
-    // secondary fill + text was near-invisible).
-    final fill = isWarmup ? theme.colors.muted : theme.colors.primary;
-    final textColor = isWarmup
-        ? theme.colors.mutedForeground
-        : theme.colors.primary;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: isWarmup ? fill : fill.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Text(
-        isWarmup ? 'W' : 'S',
-        style: TextStyle(
-          color: textColor,
-          fontWeight: FontWeight.bold,
-          fontSize: 12,
-        ),
       ),
     );
   }
@@ -637,7 +607,9 @@ class _AddSetFormState extends State<_AddSetForm> {
                 control: FTextFieldControl.managed(controller: _weight),
                 keyboardType: const TextInputType.numberWithOptions(
                   decimal: true,
+                  signed: true,
                 ),
+                inputFormatters: [DecimalInputFormatter(allowNegative: true)],
                 label: Text('Weight (${weightUnitOf(context).symbol})'),
                 error: _weightError == null ? null : Text(_weightError!),
               ),
@@ -649,7 +621,7 @@ class _AddSetFormState extends State<_AddSetForm> {
                 keyboardType: const TextInputType.numberWithOptions(
                   decimal: true,
                 ),
-                inputFormatters: [RepsInputFormatter()],
+                inputFormatters: [DecimalInputFormatter()],
                 label: const Text('Reps'),
                 error: _repsError == null ? null : Text(_repsError!),
               ),
@@ -685,14 +657,18 @@ class _AddSetFormState extends State<_AddSetForm> {
     );
   }
 
-  void _add() {
-    final weightError = requiredDouble(_weight.text);
-    final repsError = requiredDouble(_reps.text);
-    // Reps keep the exact typed value (no rounding): the live input formatter
-    // only allows one decimal place, and the parse below defensively truncates
-    // pasted or hand-set values to one decimal too ("3.55" → 3.5).
-    final reps = _parseReps(_reps.text);
-    if (weightError != null || repsError != null || reps == null) {
+  Future<void> _add() async {
+    final weightError = requiredWeight(_weight.text);
+    final repsError = requiredReps(_reps.text);
+    // Values keep the typed digits (never rounded): the input formatter caps
+    // both fields at two decimal places, and the parse truncates pasted or
+    // hand-set values the same way.
+    final weight = parseDecimal(_weight.text, allowNegative: true);
+    final reps = parseDecimal(_reps.text);
+    if (weightError != null ||
+        repsError != null ||
+        weight == null ||
+        reps == null) {
       setState(() {
         _weightError = weightError;
         _repsError = repsError;
@@ -722,12 +698,12 @@ class _AddSetFormState extends State<_AddSetForm> {
         }
       }
     }
-    final displayedWeight = double.tryParse(_weight.text) ?? 0.0;
-    final weight = kilogramsFromDisplay(context, displayedWeight);
+    final confirmed = await confirmWeightEntry(context, weight);
+    if (!mounted || !confirmed) return;
     context.read<WorkoutCubit>().logSet(
       exerciseId: id,
       exerciseName: name,
-      weight: weight,
+      weight: kilogramsFromDisplay(context, weight),
       reps: reps,
       type: _warmup ? SetType.warmup : SetType.working,
     );
@@ -736,14 +712,3 @@ class _AddSetFormState extends State<_AddSetForm> {
     setState(() {});
   }
 }
-
-/// Parses reps with defensive truncation to one decimal place: "3.55" → 3.5,
-/// "0.4" → 0.4 (never rounded). The longest valid prefix wins, so trailing
-/// garbage from a paste is dropped; null when nothing parses.
-double? _parseReps(String text) {
-  final match = _repsPrefix.firstMatch(text.trim());
-  if (match == null) return null;
-  return double.tryParse(match.group(0)!);
-}
-
-final _repsPrefix = RegExp(r'^\d+\.?\d{0,1}');

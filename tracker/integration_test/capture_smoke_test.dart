@@ -11,7 +11,6 @@
 // `capture_<feature>_test.dart` and change ONLY the test body's
 // "drive the UI" section. The script records the window from when it appears
 // until the test exits, so keep the target state on screen at the end.
-// ignore_for_file: avoid_print
 import 'dart:io';
 
 import 'package:flutter_bloc/flutter_bloc.dart';

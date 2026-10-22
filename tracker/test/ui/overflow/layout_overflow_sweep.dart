@@ -44,6 +44,7 @@ import 'package:tracker/ui/feed/widgets/feed_page.dart';
 import 'package:tracker/ui/history/widgets/calendar/history_calendar.dart';
 import 'package:tracker/ui/history/widgets/history_page.dart';
 import 'package:tracker/ui/history/widgets/session_detail_page.dart';
+import 'package:tracker/ui/history/widgets/session_edit_page.dart';
 import 'package:tracker/ui/settings/view_models/settings_cubit.dart';
 import 'package:tracker/ui/settings/widgets/gyms_page.dart';
 import 'package:tracker/ui/settings/widgets/settings_page.dart';
@@ -195,6 +196,10 @@ Future<void> sweepSize(WidgetTester tester, String label, Size size) async {
   await visit(
     'SessionDetailPage',
     SessionDetailPage(session: sweepFixtures.session, gymName: 'Iron Temple'),
+  );
+  await visit(
+    'SessionEditPage',
+    SessionEditPage(session: sweepFixtures.session),
   );
   await visit(
     'HistoryCalendar',

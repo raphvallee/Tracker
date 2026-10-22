@@ -166,4 +166,61 @@ void main() {
       expect(state.notificationsEnabled, isTrue);
     });
   });
+
+  group('heavy-weight warning preference', () {
+    test('is on by default and round-trips when turned off', () {
+      expect(SettingsState().showHeavyWeightWarning, isTrue);
+
+      final off = SettingsState(showHeavyWeightWarning: false);
+      final restored = SettingsState.fromJson(off.toJson());
+      expect(restored.showHeavyWeightWarning, isFalse);
+      expect(restored, off);
+    });
+
+    test('payloads written before the flag existed keep it on', () {
+      final state = SettingsState.fromJson({'v': 1, 'unit': 'pounds'});
+      expect(state.showHeavyWeightWarning, isTrue);
+    });
+
+    test('a malformed flag falls back to on', () {
+      final state = SettingsState.fromJson({
+        'v': 1,
+        'showHeavyWeightWarning': 'no',
+      });
+      expect(state.showHeavyWeightWarning, isTrue);
+    });
+
+    test('is part of equality and copyWith', () {
+      final on = SettingsState();
+      final off = on.copyWith(showHeavyWeightWarning: false);
+      expect(off.showHeavyWeightWarning, isFalse);
+      expect(off == on, isFalse);
+      expect(off.copyWith(), off);
+    });
+
+    test('heavyWeightConfirmed is off by default and round-trips', () {
+      expect(SettingsState().heavyWeightConfirmed, isFalse);
+
+      final confirmed = SettingsState(heavyWeightConfirmed: true);
+      final restored = SettingsState.fromJson(confirmed.toJson());
+      expect(restored.heavyWeightConfirmed, isTrue);
+      expect(restored, confirmed);
+    });
+
+    test('a malformed heavyWeightConfirmed falls back to false', () {
+      final state = SettingsState.fromJson({
+        'v': 1,
+        'heavyWeightConfirmed': 'yes',
+      });
+      expect(state.heavyWeightConfirmed, isFalse);
+    });
+
+    test('heavyWeightConfirmed is part of equality and copyWith', () {
+      final fresh = SettingsState();
+      final confirmed = fresh.copyWith(heavyWeightConfirmed: true);
+      expect(confirmed.heavyWeightConfirmed, isTrue);
+      expect(confirmed == fresh, isFalse);
+      expect(confirmed.copyWith(), confirmed);
+    });
+  });
 }

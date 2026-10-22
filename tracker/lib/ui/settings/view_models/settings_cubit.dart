@@ -28,6 +28,8 @@ class SettingsState {
     this.defaultReps = initialDefaultReps,
     this.defaultRepRangeMin = initialDefaultRepRangeMin,
     this.defaultRepRangeMax = initialDefaultRepRangeMax,
+    this.showHeavyWeightWarning = true,
+    this.heavyWeightConfirmed = false,
     List<GraphConfig> graphs = const [],
   }) : graphs = List.unmodifiable(graphs);
 
@@ -75,6 +77,12 @@ class SettingsState {
       defaultReps: _positiveInt(json['defaultReps']) ?? initialDefaultReps,
       defaultRepRangeMin: rangeMin,
       defaultRepRangeMax: rangeMax,
+      showHeavyWeightWarning: json['showHeavyWeightWarning'] is bool
+          ? json['showHeavyWeightWarning'] as bool
+          : true,
+      heavyWeightConfirmed: json['heavyWeightConfirmed'] is bool
+          ? json['heavyWeightConfirmed'] as bool
+          : false,
       graphs: rawGraphs is List
           ? rawGraphs
                 .whereType<Map>()
@@ -104,6 +112,14 @@ class SettingsState {
   final int defaultRepRangeMin;
   final int defaultRepRangeMax;
 
+  /// Whether to ask for confirmation before logging a heavy weight. Turned off
+  /// by the "Don't show this again" checkbox in that prompt.
+  final bool showHeavyWeightWarning;
+
+  /// Whether the user has confirmed a heavy weight at least once. The prompt
+  /// only offers "Don't show this again" after that first confirmation.
+  final bool heavyWeightConfirmed;
+
   final List<GraphConfig> graphs;
 
   SettingsState copyWith({
@@ -115,6 +131,8 @@ class SettingsState {
     int? defaultReps,
     int? defaultRepRangeMin,
     int? defaultRepRangeMax,
+    bool? showHeavyWeightWarning,
+    bool? heavyWeightConfirmed,
     List<GraphConfig>? graphs,
   }) {
     return SettingsState(
@@ -126,6 +144,9 @@ class SettingsState {
       defaultReps: defaultReps ?? this.defaultReps,
       defaultRepRangeMin: defaultRepRangeMin ?? this.defaultRepRangeMin,
       defaultRepRangeMax: defaultRepRangeMax ?? this.defaultRepRangeMax,
+      showHeavyWeightWarning:
+          showHeavyWeightWarning ?? this.showHeavyWeightWarning,
+      heavyWeightConfirmed: heavyWeightConfirmed ?? this.heavyWeightConfirmed,
       graphs: graphs ?? this.graphs,
     );
   }
@@ -141,6 +162,8 @@ class SettingsState {
       defaultReps == other.defaultReps &&
       defaultRepRangeMin == other.defaultRepRangeMin &&
       defaultRepRangeMax == other.defaultRepRangeMax &&
+      showHeavyWeightWarning == other.showHeavyWeightWarning &&
+      heavyWeightConfirmed == other.heavyWeightConfirmed &&
       _listEquals(graphs, other.graphs);
 
   @override
@@ -153,6 +176,8 @@ class SettingsState {
     defaultReps,
     defaultRepRangeMin,
     defaultRepRangeMax,
+    showHeavyWeightWarning,
+    heavyWeightConfirmed,
     Object.hashAll(graphs),
   );
 
@@ -175,6 +200,8 @@ class SettingsState {
     'defaultReps': defaultReps,
     'defaultRepRangeMin': defaultRepRangeMin,
     'defaultRepRangeMax': defaultRepRangeMax,
+    'showHeavyWeightWarning': showHeavyWeightWarning,
+    'heavyWeightConfirmed': heavyWeightConfirmed,
     'graphs': graphs.map((graph) => graph.toJson()).toList(),
   };
 }
@@ -209,6 +236,13 @@ class SettingsCubit extends HydratedCubit<SettingsState> {
     if (min < 1 || max < min) return;
     emit(state.copyWith(defaultRepRangeMin: min, defaultRepRangeMax: max));
   }
+
+  void setShowHeavyWeightWarning(bool value) =>
+      emit(state.copyWith(showHeavyWeightWarning: value));
+
+  /// Records that the user confirmed a heavy weight once; from then on the
+  /// heavy-weight prompt offers the "Don't show this again" checkbox.
+  void confirmHeavyWeight() => emit(state.copyWith(heavyWeightConfirmed: true));
 
   void addGraph(GraphConfig graph) =>
       emit(state.copyWith(graphs: [...state.graphs, graph]));

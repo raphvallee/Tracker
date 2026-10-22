@@ -12,10 +12,10 @@ enum SetType { warmup, working }
 /// no `Id` of its own; [order] preserves sequence and [exerciseId] links back to
 /// the [Exercise] performed.
 ///
-/// [reps] is a double: fractional reps (one decimal place, e.g. 3.5) are
-/// supported. Older databases stored whole-number int reps; Isar's automatic
-/// migration loads them as whole doubles (verified by the fixture-backed
-/// migration test in test/ui/workout/).
+/// [reps] is a double: fractional reps (up to two decimal places, e.g. 3.25)
+/// are supported. Older databases stored whole-number int reps; Isar's
+/// automatic migration loads them as whole doubles (verified by the
+/// fixture-backed migration test in test/ui/workout/).
 @embedded
 class WorkoutSet {
   WorkoutSet({

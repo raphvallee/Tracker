@@ -36,6 +36,7 @@ import 'package:tracker/ui/exercises/widgets/new_exercise_page.dart';
 import 'package:tracker/ui/feed/widgets/feed_page.dart';
 import 'package:tracker/ui/history/widgets/calendar/history_calendar.dart';
 import 'package:tracker/ui/history/widgets/session_detail_page.dart';
+import 'package:tracker/ui/history/widgets/session_edit_page.dart';
 import 'package:tracker/ui/settings/view_models/settings_cubit.dart';
 import 'package:tracker/ui/settings/widgets/gyms_page.dart';
 import 'package:tracker/ui/settings/widgets/settings_page.dart';
@@ -239,6 +240,10 @@ void main() {
       await visit(
         'SessionDetailPage',
         SessionDetailPage(session: fixtures.session, gymName: 'Iron Temple'),
+      );
+      await visit(
+        'SessionEditPage',
+        SessionEditPage(session: fixtures.session),
       );
       await visit(
         'HistoryCalendar',

@@ -12,6 +12,7 @@ import 'package:tracker/ui/core/ui/custom_route.dart';
 import 'package:tracker/ui/core/ui/keyboard_inset.dart';
 import 'package:tracker/ui/core/ui/max_width.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
+import 'package:tracker/ui/core/ui/set_type_chip.dart';
 import 'package:tracker/ui/core/ui/weight_format.dart';
 import 'package:tracker/ui/history/widgets/session_edit_page.dart';
 
@@ -332,43 +333,11 @@ class _SetRow extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: FItem(
-        prefix: _WarmupChip(isWarmup: set.isWarmup),
+        prefix: SetTypeChip(isWarmup: set.isWarmup),
         title: Text(name),
         subtitle: Text(
           '${formatWeight(context, set.weight)} × ${formatReps(set.reps)}',
         ),
-      ),
-    );
-  }
-}
-
-/// W / S chip mirroring the current-workout screen's indicator (see the cubit's
-/// `isWarmup`).
-class _WarmupChip extends StatelessWidget {
-  const _WarmupChip({required this.isWarmup});
-
-  final bool isWarmup;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = context.theme;
-    // Muted/foreground pairing so the W chip reads on white cards (the old
-    // secondary fill + text was near-invisible).
-    final fill = isWarmup ? theme.colors.muted : theme.colors.primary;
-    final textColor = isWarmup
-        ? theme.colors.mutedForeground
-        : theme.colors.primary;
-    return Container(
-      width: 28,
-      height: 28,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: isWarmup ? fill : fill.withValues(alpha: 0.15),
-      ),
-      child: Text(
-        isWarmup ? 'W' : 'S',
-        style: TextStyle(color: textColor, fontWeight: FontWeight.bold),
       ),
     );
   }
