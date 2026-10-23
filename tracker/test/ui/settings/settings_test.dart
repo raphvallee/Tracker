@@ -105,4 +105,27 @@ void main() {
     expect(cubit.state.defaultRepRangeMin, 6);
     expect(find.text('Must be at least the min'), findsOneWidget);
   });
+
+  testWidgets('start workout placement is configurable', (tester) async {
+    final cubit = SettingsCubit();
+    await pumpAppPage(
+      tester,
+      BlocProvider.value(value: cubit, child: const SettingsPage()),
+    );
+
+    expect(find.text('Start workout button'), findsOneWidget);
+    expect(cubit.state.freeStartPlacement, FreeStartPlacement.before);
+
+    await tester.tap(find.text('Before splits'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('After splits'));
+    await tester.pumpAndSettle();
+    expect(cubit.state.freeStartPlacement, FreeStartPlacement.after);
+
+    await tester.tap(find.text('After splits'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Hidden'));
+    await tester.pumpAndSettle();
+    expect(cubit.state.freeStartPlacement, FreeStartPlacement.disabled);
+  });
 }

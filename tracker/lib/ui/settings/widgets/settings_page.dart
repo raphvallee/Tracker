@@ -51,6 +51,7 @@ class SettingsPage extends StatelessWidget {
                       context.read<SettingsCubit>().setUnit(unit);
                     },
                   ),
+                  _buildFreeStartPlacementRow(context, state),
                   _buildSwitchRow(
                     context,
                     icon: FLucideIcons.bell,
@@ -123,6 +124,62 @@ class SettingsPage extends StatelessWidget {
                     onChange: (unit) {
                       if (unit != null) {
                         onChanged(unit);
+                      }
+                    },
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFreeStartPlacementRow(
+    BuildContext context,
+    SettingsState state,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      child: FCard(
+        child: FItem.raw(
+          child: Row(
+            children: [
+              Icon(FLucideIcons.play, color: context.theme.colors.primary),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Start workout button',
+                      style: context.theme.typography.body.md,
+                    ),
+                    Text(
+                      'Where it appears on the workout page',
+                      style: context.theme.typography.body.xs.copyWith(
+                        color: context.theme.colors.mutedForeground,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              SizedBox(
+                width: 140,
+                child: FSelect<FreeStartPlacement>(
+                  items: const {
+                    'Before splits': FreeStartPlacement.before,
+                    'After splits': FreeStartPlacement.after,
+                    'Hidden': FreeStartPlacement.disabled,
+                  },
+                  control: FSelectControl<FreeStartPlacement>.lifted(
+                    value: state.freeStartPlacement,
+                    onChange: (placement) {
+                      if (placement != null) {
+                        context.read<SettingsCubit>().setFreeStartPlacement(
+                          placement,
+                        );
                       }
                     },
                   ),
