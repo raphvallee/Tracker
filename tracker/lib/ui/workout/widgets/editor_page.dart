@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:forui/forui.dart';
 import 'package:tracker/domain/models/gym.dart';
+import 'package:tracker/domain/models/weight_unit.dart';
 import 'package:tracker/domain/models/workout_split.dart';
 import 'package:tracker/ui/core/ui/custom_app_bar.dart';
 import 'package:tracker/ui/core/ui/custom_route.dart';
 import 'package:tracker/ui/core/ui/max_width.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
+import 'package:tracker/ui/settings/view_models/settings_cubit.dart';
 import 'package:tracker/ui/workout/view_models/workout_cubit.dart';
 
 import 'gym_picker.dart';
@@ -46,6 +48,7 @@ class _EditorPageState extends State<EditorPage> {
 
   @override
   Widget build(BuildContext context) {
+    final settingsCubit = SettingsCubit.maybeOf(context);
     return CustomScrollView(
       slivers: <Widget>[
         CustomAppBar(context, title: 'Workout'),
@@ -53,35 +56,55 @@ class _EditorPageState extends State<EditorPage> {
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: MaxWidth(
-              child: StreamBuilder<List<WorkoutSplit>>(
-                stream: _stream,
-                initialData: const <WorkoutSplit>[],
-                builder: (context, snapshot) {
-                  final splits = snapshot.data ?? const <WorkoutSplit>[];
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: <Widget>[
-                      const BuildNewSplitButton(),
-                      const SizedBox(height: 12),
-                      if (splits.isEmpty)
-                        const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 24),
-                          child: Text('No splits yet. Create one below.'),
-                        )
-                      else
-                        for (final split in splits)
-                          BuildMaterialSplit(
-                            split,
-                            exerciseNames: _exerciseNames,
-                          ),
-                    ],
-                  );
-                },
-              ),
+              child: settingsCubit == null
+                  ? _buildSplits(context, FreeStartPlacement.before)
+                  : BlocBuilder<SettingsCubit, SettingsState>(
+                      bloc: settingsCubit,
+                      builder: (context, settings) =>
+                          _buildSplits(context, settings.freeStartPlacement),
+                    ),
             ),
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildSplits(
+    BuildContext context,
+    FreeStartPlacement freeStartPlacement,
+  ) {
+    return StreamBuilder<List<WorkoutSplit>>(
+      stream: _stream,
+      initialData: const <WorkoutSplit>[],
+      builder: (context, snapshot) {
+        final splits = snapshot.data ?? const <WorkoutSplit>[];
+        final showStart = freeStartPlacement != FreeStartPlacement.disabled;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            if (showStart && freeStartPlacement == FreeStartPlacement.before)
+              const BuildStartWorkoutButton(),
+            if (showStart && freeStartPlacement == FreeStartPlacement.before)
+              const SizedBox(height: 12),
+            const BuildNewSplitButton(),
+            const SizedBox(height: 12),
+            if (splits.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 24),
+                child: Text('No splits yet. Create one below.'),
+              )
+            else
+              for (final split in splits)
+                BuildMaterialSplit(split, exerciseNames: _exerciseNames),
+            if (showStart &&
+                freeStartPlacement == FreeStartPlacement.after) ...[
+              const SizedBox(height: 12),
+              const BuildStartWorkoutButton(),
+            ],
+          ],
+        );
+      },
     );
   }
 }

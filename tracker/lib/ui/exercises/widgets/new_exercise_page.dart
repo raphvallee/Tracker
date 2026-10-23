@@ -37,6 +37,7 @@ class _NewExercisePageState extends State<NewExercisePage> {
 
   String? _duplicateError;
   bool _saving = false;
+  bool _saveAttempted = false;
 
   @override
   void initState() {
@@ -66,16 +67,11 @@ class _NewExercisePageState extends State<NewExercisePage> {
   }
 
   Future<void> _save() async {
-    setState(() => _duplicateError = null);
+    setState(() {
+      _duplicateError = null;
+      _saveAttempted = true;
+    });
     if (!_formKey.currentState!.validate()) return;
-    if (_primary.isEmpty) {
-      showFToast(
-        context: context,
-        title: const Text('Pick at least one target muscle.'),
-        duration: const Duration(seconds: 2),
-      );
-      return;
-    }
 
     final repo = RepositoryScope.maybeOf(context);
     final name = _title.text.trim();
@@ -227,11 +223,22 @@ class _NewExercisePageState extends State<NewExercisePage> {
                     _MuscleSelectGroup(
                       label: 'Primary muscles',
                       selected: _primary,
-                      onChange: (sel) => setState(
-                        () => _primary
-                          ..clear()
-                          ..addAll(sel),
-                      ),
+                      validator: (selected) =>
+                          selected == null || selected.isEmpty
+                          ? 'Pick at least one target muscle'
+                          : null,
+                      onChange: (sel) {
+                        setState(
+                          () => _primary
+                            ..clear()
+                            ..addAll(sel),
+                        );
+                        // Re-validate once Save has been attempted so the
+                        // inline error clears as soon as a muscle is picked.
+                        if (_saveAttempted) {
+                          _formKey.currentState?.validate();
+                        }
+                      },
                     ),
                     _MuscleSelectGroup(
                       label: 'Secondary muscles (optional)',
@@ -287,11 +294,13 @@ class _MuscleSelectGroup extends StatelessWidget {
     required this.label,
     required this.selected,
     required this.onChange,
+    this.validator,
   });
 
   final String label;
   final Set<Muscle> selected;
   final ValueChanged<Set<Muscle>> onChange;
+  final FormFieldValidator<Set<Muscle>>? validator;
 
   @override
   Widget build(BuildContext context) {
@@ -301,6 +310,7 @@ class _MuscleSelectGroup extends StatelessWidget {
         value: selected,
         onChange: onChange,
       ),
+      validator: validator,
       children: [
         for (final m in Muscle.values)
           FSelectGroupItemMixin.checkbox(

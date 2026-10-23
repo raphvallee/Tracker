@@ -4,6 +4,7 @@ import 'package:tracker/domain/models/exercise.dart';
 import 'package:tracker/domain/models/graph_config.dart';
 import 'package:tracker/domain/services/analytics.dart';
 import 'package:tracker/ui/core/ui/keyboard_inset.dart';
+import 'package:tracker/utils/form_validators.dart';
 
 /// Modal bottom-sheet editor for creating or editing a feed graph.
 ///
@@ -53,6 +54,7 @@ class _GraphEditorSheetState extends State<_GraphEditorSheet> {
   late GraphMetric _metric;
   late GraphTimeframe _timeframe;
   bool _pickingExercise = false;
+  String? _titleError;
 
   @override
   void initState() {
@@ -64,6 +66,14 @@ class _GraphEditorSheetState extends State<_GraphEditorSheet> {
     _exerciseId = initial?.exerciseId;
     _metric = initial?.metric ?? GraphMetric.best1rm;
     _timeframe = initial?.timeframe ?? GraphTimeframe.all;
+    // Clear the empty-title error once the title has actual text. The
+    // controller also notifies on selection changes (e.g. when focusing the
+    // field after a failed save), which must not dismiss the error.
+    _title.addListener(() {
+      if (_titleError != null && _title.text.trim().isNotEmpty) {
+        setState(() => _titleError = null);
+      }
+    });
     // Focus the title while the sheet is still animating in: modal routes
     // only deliver `autofocus` after the entrance completes, which visibly
     // delayed the keyboard. Only for editing: adding a graph should not
@@ -92,11 +102,15 @@ class _GraphEditorSheetState extends State<_GraphEditorSheet> {
             'Exercise';
 
   void _save() {
-    final title = _title.text.trim();
-    if (title.isEmpty) return;
+    final error = requiredText(_title.text);
+    if (error != null) {
+      setState(() => _titleError = error);
+      _titleFocus.requestFocus();
+      return;
+    }
     Navigator.of(context).pop(
       GraphConfig(
-        title: title,
+        title: _title.text.trim(),
         exerciseId: _exerciseId,
         metric: _metric,
         timeframe: _timeframe,
@@ -108,7 +122,11 @@ class _GraphEditorSheetState extends State<_GraphEditorSheet> {
   Widget build(BuildContext context) {
     final theme = context.theme;
     return SafeArea(
+      // The sheet is hosted by the tab navigator, which already stops above
+      // the shell's bottom navigation bar. Applying the bottom safe-area inset
+      // here would add a second gap below the Save button.
       top: false,
+      bottom: false,
       child: SingleChildScrollView(
         // The shell Scaffold opts out of resize-to-avoid-insets, so the
         // sheet has to clear the keyboard itself.
@@ -126,6 +144,7 @@ class _GraphEditorSheetState extends State<_GraphEditorSheet> {
                 focusNode: _titleFocus,
                 label: const Text('Title'),
                 hint: 'e.g. Squat progress',
+                error: _titleError == null ? null : Text(_titleError!),
               ),
             ),
             const SizedBox(height: 12),
@@ -159,15 +178,9 @@ class _GraphEditorSheetState extends State<_GraphEditorSheet> {
             const SizedBox(height: 20),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: ValueListenableBuilder<TextEditingValue>(
-                valueListenable: _title,
-                builder: (context, value, _) => FButton(
-                  onPress: value.text.trim().isEmpty ? null : _save,
-                  child: const Text('Save'),
-                ),
-              ),
+              child: FButton(onPress: _save, child: const Text('Save')),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 16),
           ],
         ),
       ),
