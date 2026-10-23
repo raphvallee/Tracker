@@ -1,7 +1,7 @@
 name: tracker
 description: "Cross-platform workout tracking app."
 publish_to: 'none'
-version: 0.0.1+2
+version: 0.0.2+3
 
 environment:
   sdk: '>=3.13.2 <4.0.0'
