@@ -94,42 +94,28 @@ class SettingsPage extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       child: FCard(
-        child: FItem.raw(
-          child: Row(
-            children: [
-              Icon(icon, color: context.theme.colors.primary),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(title, style: context.theme.typography.body.md),
-                    Text(
-                      subtitle,
-                      style: context.theme.typography.body.xs.copyWith(
-                        color: context.theme.colors.mutedForeground,
-                      ),
-                    ),
-                  ],
-                ),
+        child: FItem(
+          prefix: Icon(icon, color: context.theme.colors.primary),
+          title: Text(title),
+          subtitle: Text(
+            subtitle,
+            style: context.theme.typography.body.xs.copyWith(
+              color: context.theme.colors.mutedForeground,
+            ),
+          ),
+          suffix: SizedBox(
+            width: 120,
+            child: FSelect<WeightUnit>(
+              items: {for (final unit in WeightUnit.values) unit.symbol: unit},
+              control: FSelectControl<WeightUnit>.lifted(
+                value: value,
+                onChange: (unit) {
+                  if (unit != null) {
+                    onChanged(unit);
+                  }
+                },
               ),
-              SizedBox(
-                width: 120,
-                child: FSelect<WeightUnit>(
-                  items: {
-                    for (final unit in WeightUnit.values) unit.symbol: unit,
-                  },
-                  control: FSelectControl<WeightUnit>.lifted(
-                    value: value,
-                    onChange: (unit) {
-                      if (unit != null) {
-                        onChanged(unit);
-                      }
-                    },
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ),
@@ -143,49 +129,34 @@ class SettingsPage extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       child: FCard(
-        child: FItem.raw(
-          child: Row(
-            children: [
-              Icon(FLucideIcons.play, color: context.theme.colors.primary),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Start workout button',
-                      style: context.theme.typography.body.md,
-                    ),
-                    Text(
-                      'Where it appears on the workout page',
-                      style: context.theme.typography.body.xs.copyWith(
-                        color: context.theme.colors.mutedForeground,
-                      ),
-                    ),
-                  ],
-                ),
+        child: FItem(
+          prefix: Icon(FLucideIcons.play, color: context.theme.colors.primary),
+          title: const Text('Start workout button'),
+          subtitle: Text(
+            'Where it appears on the workout page',
+            style: context.theme.typography.body.xs.copyWith(
+              color: context.theme.colors.mutedForeground,
+            ),
+          ),
+          suffix: SizedBox(
+            width: 140,
+            child: FSelect<FreeStartPlacement>(
+              items: const {
+                'Before splits': FreeStartPlacement.before,
+                'After splits': FreeStartPlacement.after,
+                'Hidden': FreeStartPlacement.disabled,
+              },
+              control: FSelectControl<FreeStartPlacement>.lifted(
+                value: state.freeStartPlacement,
+                onChange: (placement) {
+                  if (placement != null) {
+                    context.read<SettingsCubit>().setFreeStartPlacement(
+                      placement,
+                    );
+                  }
+                },
               ),
-              SizedBox(
-                width: 140,
-                child: FSelect<FreeStartPlacement>(
-                  items: const {
-                    'Before splits': FreeStartPlacement.before,
-                    'After splits': FreeStartPlacement.after,
-                    'Hidden': FreeStartPlacement.disabled,
-                  },
-                  control: FSelectControl<FreeStartPlacement>.lifted(
-                    value: state.freeStartPlacement,
-                    onChange: (placement) {
-                      if (placement != null) {
-                        context.read<SettingsCubit>().setFreeStartPlacement(
-                          placement,
-                        );
-                      }
-                    },
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ),

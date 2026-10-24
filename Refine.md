@@ -26,7 +26,7 @@
 
 - [ ] When a workout has multiple sets planned, there should be multiple inputs to enter the weight and reps. The rep-range/fixed-reps should be a hint in the input 
 - [ ] The sets added are in a black container that does not fit the theme at all, find another way to present them
-	
+
 ## Feed - Analytics
 
 - [ ] When editing a graph, dont autofocus a input, i dont want the keyboard to popup at first.
