@@ -7,9 +7,9 @@
 
 ## Settings
 
-- [ ] Units has a different paddings then the other ones.
-- [ ] Defaut rep mode select box should fit the entire words contained in it.
-- [ ] Default reps and default rep range should not have their own container, they should fit the style of the settings page.
+- [x] Units has a different paddings then the other ones.
+- [x] Defaut rep mode select box should fit the entire words contained in it.
+- [x] Default reps and default rep range should not have their own container, they should fit the style of the settings page.
 	
 ## Editor
 
