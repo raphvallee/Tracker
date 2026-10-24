@@ -12,6 +12,13 @@ import 'package:tracker/ui/core/ui/max_width.dart';
 import 'package:tracker/ui/settings/widgets/gyms_page.dart';
 import 'package:tracker/ui/settings/view_models/settings_cubit.dart';
 
+/// Shared padding for every settings row so they line up (e.g. Units matches
+/// the gyms, notifications and workout-default rows).
+const EdgeInsets _kSettingsRowPadding = EdgeInsets.symmetric(
+  horizontal: 16,
+  vertical: 6,
+);
+
 class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key});
 
@@ -92,7 +99,7 @@ class SettingsPage extends StatelessWidget {
     required ValueChanged<WeightUnit> onChanged,
   }) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      padding: _kSettingsRowPadding,
       child: FCard(
         child: FItem(
           prefix: Icon(icon, color: context.theme.colors.primary),
@@ -127,7 +134,7 @@ class SettingsPage extends StatelessWidget {
     SettingsState state,
   ) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      padding: _kSettingsRowPadding,
       child: FCard(
         child: FItem(
           prefix: Icon(FLucideIcons.play, color: context.theme.colors.primary),
@@ -171,7 +178,7 @@ class SettingsPage extends StatelessWidget {
     required VoidCallback onTap,
   }) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      padding: _kSettingsRowPadding,
       child: FCard(
         child: FItem(
           prefix: Icon(icon, color: context.theme.colors.primary),
@@ -193,7 +200,7 @@ class SettingsPage extends StatelessWidget {
     required ValueChanged<bool> onChanged,
   }) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      padding: _kSettingsRowPadding,
       child: FCard(
         child: FItem(
           prefix: Icon(icon, color: context.theme.colors.primary),
@@ -292,7 +299,7 @@ class _WorkoutDefaultsSectionState extends State<_WorkoutDefaultsSection> {
           ),
         ),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          padding: _kSettingsRowPadding,
           child: FCard(
             child: FItem.raw(
               child: Row(
@@ -319,8 +326,7 @@ class _WorkoutDefaultsSectionState extends State<_WorkoutDefaultsSection> {
                       ],
                     ),
                   ),
-                  SizedBox(
-                    width: 120,
+                  IntrinsicWidth(
                     child: FSelect<RepMode>(
                       items: const {
                         'Rep range': RepMode.range,
@@ -344,120 +350,81 @@ class _WorkoutDefaultsSectionState extends State<_WorkoutDefaultsSection> {
           ),
         ),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          padding: _kSettingsRowPadding,
           child: FCard(
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(
-                        FLucideIcons.hash,
-                        color: context.theme.colors.primary,
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Default reps',
-                              style: context.theme.typography.body.md,
-                            ),
-                            Text(
-                              'Pre-filled when adding a fixed set',
-                              style: context.theme.typography.body.xs.copyWith(
-                                color: context.theme.colors.mutedForeground,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
+            child: FItem(
+              prefix: Icon(
+                FLucideIcons.hash,
+                color: context.theme.colors.primary,
+              ),
+              title: const Text('Default reps'),
+              subtitle: Text(
+                'Pre-filled when adding a fixed set',
+                style: context.theme.typography.body.xs.copyWith(
+                  color: context.theme.colors.mutedForeground,
+                ),
+              ),
+              suffix: SizedBox(
+                width: 120,
+                child: FTextField(
+                  control: FTextFieldControl.managed(
+                    controller: _reps,
+                    onChange: _commitReps,
                   ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: 120,
-                    child: FTextField(
-                      control: FTextFieldControl.managed(
-                        controller: _reps,
-                        onChange: _commitReps,
-                      ),
-                      keyboardType: TextInputType.number,
-                      label: const Text('Reps'),
-                      error: _repsError == null ? null : Text(_repsError!),
-                    ),
-                  ),
-                ],
+                  keyboardType: TextInputType.number,
+                  label: const Text('Reps'),
+                  error: _repsError == null ? null : Text(_repsError!),
+                ),
               ),
             ),
           ),
         ),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          padding: _kSettingsRowPadding,
           child: FCard(
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(
-                        FLucideIcons.moveHorizontal,
-                        color: context.theme.colors.primary,
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Default rep range',
-                              style: context.theme.typography.body.md,
-                            ),
-                            Text(
-                              'Pre-filled when adding a range set',
-                              style: context.theme.typography.body.xs.copyWith(
-                                color: context.theme.colors.mutedForeground,
-                              ),
-                            ),
-                          ],
+            child: FItem(
+              prefix: Icon(
+                FLucideIcons.moveHorizontal,
+                color: context.theme.colors.primary,
+              ),
+              title: const Text('Default rep range'),
+              subtitle: Text(
+                'Pre-filled when adding a range set',
+                style: context.theme.typography.body.xs.copyWith(
+                  color: context.theme.colors.mutedForeground,
+                ),
+              ),
+              suffix: SizedBox(
+                width: 150,
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 70,
+                      child: FTextField(
+                        control: FTextFieldControl.managed(
+                          controller: _rangeMin,
+                          onChange: (_) => _commitRange(),
                         ),
+                        keyboardType: TextInputType.number,
+                        label: const Text('Min'),
+                        error: _minError == null ? null : Text(_minError!),
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: FTextField(
-                          control: FTextFieldControl.managed(
-                            controller: _rangeMin,
-                            onChange: (_) => _commitRange(),
-                          ),
-                          keyboardType: TextInputType.number,
-                          label: const Text('Min'),
-                          error: _minError == null ? null : Text(_minError!),
+                    ),
+                    const SizedBox(width: 8),
+                    SizedBox(
+                      width: 70,
+                      child: FTextField(
+                        control: FTextFieldControl.managed(
+                          controller: _rangeMax,
+                          onChange: (_) => _commitRange(),
                         ),
+                        keyboardType: TextInputType.number,
+                        label: const Text('Max'),
+                        error: _maxError == null ? null : Text(_maxError!),
                       ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: FTextField(
-                          control: FTextFieldControl.managed(
-                            controller: _rangeMax,
-                            onChange: (_) => _commitRange(),
-                          ),
-                          keyboardType: TextInputType.number,
-                          label: const Text('Max'),
-                          error: _maxError == null ? null : Text(_maxError!),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
