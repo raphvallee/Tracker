@@ -187,7 +187,13 @@ class _SessionEditPageState extends State<SessionEditPage> {
     final repo = RepositoryScope.maybeOf(context);
     final gyms = await repo?.gyms.getAll() ?? const <Gym>[];
     if (!mounted) return;
-    final picked = await _pickGymSheet(context, gyms);
+    final picked = await showGymPicker(
+      context,
+      gyms,
+      title: 'Which gym?',
+      includeNoGym: true,
+      noGymLabel: 'Other gym',
+    );
     if (!mounted || picked == null) return;
     setState(() {
       _gymLoaded = true;
@@ -427,12 +433,6 @@ class _EditSetRow extends StatelessWidget {
   }
 }
 
-/// Marker returned by the gym sheet when the user explicitly clears the gym
-/// (a bare `null` pop means the sheet was dismissed without a choice).
-class _NoGym {
-  const _NoGym();
-}
-
 /// Immutable snapshot of the editor's draft, used as the dirty-check
 /// baseline (mirrors new_split_page.dart). Sets are deep copies so later
 /// edits cannot mutate the snapshot.
@@ -450,61 +450,6 @@ final class _SessionDraftSnapshot {
   final DateTime? end;
   final int? gymId;
   final List<WorkoutSet> sets;
-}
-
-/// Bottom sheet over the gyms plus an explicit "Other gym" entry; returns the
-/// picked [Gym], `[_NoGym]` to clear, or null on dismiss.
-Future<Object?> _pickGymSheet(BuildContext context, List<Gym> gyms) {
-  return showModalBottomSheet<Object>(
-    context: context,
-    backgroundColor: context.theme.colors.background,
-    builder: (sheetContext) {
-      return SafeArea(
-        top: false,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-              child: Text(
-                'Which gym?',
-                style: sheetContext.theme.typography.body.md.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-            for (final gym in gyms)
-              FItem(
-                prefix: Icon(
-                  gym.isPrimary ? FLucideIcons.house : FLucideIcons.dumbbell,
-                ),
-                title: Text(gym.name),
-                subtitle: gym.isPrimary ? const Text('Primary gym') : null,
-                onPress: () => Navigator.of(sheetContext).pop(gym),
-              ),
-            FItem(
-              prefix: const Icon(FLucideIcons.ban),
-              title: const Text('Other gym'),
-              onPress: () => Navigator.of(sheetContext).pop(const _NoGym()),
-            ),
-            const Divider(height: 1),
-            FItem(
-              prefix: const Icon(FLucideIcons.plus),
-              title: const Text('Add Gym'),
-              onPress: () async {
-                final added = await promptAddGym(sheetContext, gyms);
-                if (added != null && sheetContext.mounted) {
-                  Navigator.of(sheetContext).pop(added);
-                }
-              },
-            ),
-            const SizedBox(height: 8),
-          ],
-        ),
-      );
-    },
-  );
 }
 
 /// Date + time wheels in a dialog; returns the picked [DateTime] or null on

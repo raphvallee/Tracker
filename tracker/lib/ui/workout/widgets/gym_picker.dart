@@ -5,6 +5,12 @@ import 'package:tracker/ui/core/ui/app_dialog.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
 import 'package:tracker/utils/form_validators.dart';
 
+/// Explicit "clear gym" marker returned by the picker when the user selects
+/// "No gym". Use `picked is NoGym` to detect it.
+class NoGym {
+  const NoGym();
+}
+
 /// Resolves which [Gym] a workout should be logged at (Plan.md §2.2).
 ///
 /// - No gyms configured → returns `null` (workout proceeds gym-less).
@@ -16,15 +22,24 @@ Future<Gym?> promptGym(BuildContext context, List<Gym> gyms) async {
   if (gyms.length <= 1) {
     return gyms.isEmpty ? null : gyms.first;
   }
-  return _showGymPicker(context, gyms);
+  return showGymPicker(
+    context,
+    gyms,
+    isDismissible: false,
+  ).then((r) => r is Gym ? r : null);
 }
 
-Future<Gym?> _showGymPicker(BuildContext context, List<Gym> gyms) {
-  // A real bottom-sheet container: showFSheet paints no surface of its own,
-  // so the sheet needs an opaque themed background (forui 0.26 Sheet wraps
-  // the builder's child directly) plus a SafeArea to sit flush on the nav.
-  return showModalBottomSheet<Gym>(
+Future<Object?> showGymPicker(
+  BuildContext context,
+  List<Gym> gyms, {
+  String title = 'Where are you training?',
+  bool includeNoGym = false,
+  bool isDismissible = true,
+  String noGymLabel = 'No gym',
+}) {
+  return showModalBottomSheet<Object>(
     context: context,
+    isDismissible: isDismissible,
     backgroundColor: context.theme.colors.background,
     builder: (sheetContext) {
       return SafeArea(
@@ -39,7 +54,7 @@ Future<Gym?> _showGymPicker(BuildContext context, List<Gym> gyms) {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'Where are you training?',
+                    title,
                     style: sheetContext.theme.typography.body.md.copyWith(
                       fontWeight: FontWeight.w600,
                     ),
@@ -65,6 +80,12 @@ Future<Gym?> _showGymPicker(BuildContext context, List<Gym> gyms) {
                 title: Text(gym.name),
                 subtitle: gym.isPrimary ? const Text('Primary gym') : null,
                 onPress: () => Navigator.of(sheetContext).pop(gym),
+              ),
+            if (includeNoGym)
+              FItem(
+                prefix: const Icon(FLucideIcons.ban),
+                title: Text(noGymLabel),
+                onPress: () => Navigator.of(sheetContext).pop(const NoGym()),
               ),
             const SizedBox(height: 8),
           ],
