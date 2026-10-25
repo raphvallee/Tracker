@@ -14,7 +14,9 @@ import 'package:tracker/data/repositories/tracker_repository.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
 import 'package:tracker/ui/core/ui/set_type_chip.dart';
 import 'package:tracker/ui/core/ui/weight_format.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:tracker/ui/history/widgets/session_edit_page.dart';
+import 'package:tracker/ui/workout/view_models/workout_cubit.dart';
 
 /// Full view of a single past [WorkoutSession] (Plan.md §1.2): header stats
 /// plus every logged set with its warm-up/working indicator and working volume.
@@ -161,6 +163,7 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
   Widget build(BuildContext context) {
     final theme = context.theme;
     final session = _session;
+    final cubit = context.read<WorkoutCubit>();
     final workingSets = session.sets.where((s) => !s.isWarmup).toList();
     final workingVolume = workingSets.fold<double>(
       0,
@@ -218,6 +221,20 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
                   // reveal gap so the delete action can scroll above the
                   // keyboard (see keyboard_inset).
                   const SizedBox(height: 24),
+                  if (!cubit.state.isInProgress &&
+                      cubit.state.savedSessionId == _session.id) ...[
+                    FButton(
+                      size: .lg,
+                      onPress: () async {
+                        final navigator = Navigator.of(context);
+                        await cubit.restoreSavedWorkout();
+                        if (mounted) navigator.pop();
+                      },
+                      prefix: const Icon(FLucideIcons.rotateCcw),
+                      child: const Text('Restore to workout'),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
                   Padding(
                     padding: EdgeInsets.only(
                       bottom: keyboardClearanceOf(context),

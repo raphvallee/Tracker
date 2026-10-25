@@ -26,9 +26,9 @@
 
 - [ ] When a workout has multiple sets planned, there should be multiple inputs to enter the weight and reps. The rep-range/fixed-reps should be a hint in the input 
 - [x] The sets added are in a black container that does not fit the theme at all, find another way to present them
-- [ ] "Restore last workout" and "Restore discarded workout" should be the same button called "Restore last workout", a button that lasts 15 minutes after the last workout was either discarded or saved.
-- [ ] The last saved workout should be restorable from it's history entry.
-- [ ] "Restore last workout" button should be at bottom center of the workout page
+- [x] "Restore last workout" and "Restore discarded workout" should be the same button called "Restore last workout", a button that lasts 15 minutes after the last workout was either discarded or saved.
+- [x] The last saved workout should be restorable from it's history entry.
+- [x] "Restore last workout" button should be at bottom center of the workout page
 
 ## Feed - Analytics
 

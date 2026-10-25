@@ -293,6 +293,7 @@ class WorkoutState {
     this.saveError,
     this.savedSnapshot,
     this.savedSessionId,
+    this.savedAt,
     this.discardedSnapshot,
     this.discardedAt,
     List<PlanExercise> plan = const [],
@@ -317,6 +318,9 @@ class WorkoutState {
               ? WorkoutSnapshot.fromJson(Map<String, dynamic>.from(rawSaved))
               : null,
           savedSessionId: _nullableInt(json['savedSessionId']),
+          savedAt: json['savedAt'] is String
+              ? DateTime.tryParse(json['savedAt'] as String)
+              : null,
         );
       default:
         return WorkoutState.initial();
@@ -378,6 +382,9 @@ class WorkoutState {
   final WorkoutSnapshot? savedSnapshot;
   final int? savedSessionId;
 
+  /// When the last workout was saved; controls the restore window.
+  final DateTime? savedAt;
+
   /// Snapshot of the last discarded workout and when it was discarded. Purely
   /// in-memory - like web sessionStorage, deliberately excluded from hydration
   /// JSON so it never survives an app restart. Restorable only within
@@ -390,7 +397,12 @@ class WorkoutState {
 
   /// The last saved workout can always be restored, as long as no session is
   /// in progress.
-  bool get canRestoreSaved => !isInProgress && savedSnapshot != null;
+  bool canRestoreSaved({DateTime? now}) {
+    if (isInProgress || savedSnapshot == null) return false;
+    final at = now ?? DateTime.now();
+    if (savedAt == null) return true; // backward compatibility for old payloads
+    return at.difference(savedAt!) < discardRestoreWindow;
+  }
 
   /// The last discarded workout is restorable only within
   /// [discardRestoreWindow] of the discard, and only within this app run (the
@@ -428,6 +440,7 @@ class WorkoutState {
       saveError == other.saveError &&
       savedSnapshot == other.savedSnapshot &&
       savedSessionId == other.savedSessionId &&
+      savedAt == other.savedAt &&
       discardedSnapshot == other.discardedSnapshot &&
       discardedAt == other.discardedAt &&
       _listEquals(plan, other.plan) &&
@@ -443,6 +456,7 @@ class WorkoutState {
     saveError,
     savedSnapshot,
     savedSessionId,
+    savedAt,
     discardedSnapshot,
     discardedAt,
     Object.hashAll(plan),
@@ -479,6 +493,7 @@ class WorkoutState {
     // deliberately omitted: it is in-memory only, like web sessionStorage.
     'saved': savedSnapshot?.toJson(),
     'savedSessionId': savedSessionId,
+    'savedAt': savedAt?.toIso8601String(),
   };
 
   WorkoutState copyWith({
@@ -490,6 +505,7 @@ class WorkoutState {
     Object? saveError = _unset,
     Object? savedSnapshot = _unset,
     Object? savedSessionId = _unset,
+    Object? savedAt = _unset,
     Object? discardedSnapshot = _unset,
     Object? discardedAt = _unset,
     List<PlanExercise>? plan,
@@ -514,6 +530,7 @@ class WorkoutState {
       savedSessionId: identical(savedSessionId, _unset)
           ? this.savedSessionId
           : savedSessionId as int?,
+      savedAt: identical(savedAt, _unset) ? this.savedAt : savedAt as DateTime?,
       discardedSnapshot: identical(discardedSnapshot, _unset)
           ? this.discardedSnapshot
           : discardedSnapshot as WorkoutSnapshot?,
@@ -634,6 +651,7 @@ class WorkoutCubit extends HydratedCubit<WorkoutState> {
   Future<void> discardWorkout() async {
     final s = state;
     if (!s.isInProgress) return;
+    final neverModified = s.sets.isEmpty;
     emit(
       s.copyWith(
         isInProgress: false,
@@ -644,8 +662,8 @@ class WorkoutCubit extends HydratedCubit<WorkoutState> {
         saveError: null,
         plan: const [],
         sets: const [],
-        discardedSnapshot: WorkoutSnapshot.fromState(s),
-        discardedAt: _now(),
+        discardedSnapshot: neverModified ? null : WorkoutSnapshot.fromState(s),
+        discardedAt: neverModified ? null : _now(),
       ),
     );
   }
@@ -753,6 +771,7 @@ class WorkoutCubit extends HydratedCubit<WorkoutState> {
         sets: const [],
         savedSnapshot: WorkoutSnapshot.fromState(s),
         savedSessionId: sessionId,
+        savedAt: _now(),
       ),
     );
   }
@@ -792,6 +811,7 @@ class WorkoutCubit extends HydratedCubit<WorkoutState> {
         sets: snapshot.sets,
         savedSnapshot: null,
         savedSessionId: null,
+        savedAt: null,
       ),
     );
   }
@@ -824,6 +844,32 @@ class WorkoutCubit extends HydratedCubit<WorkoutState> {
         discardedAt: null,
       ),
     );
+  }
+
+  /// Restore the most recent restorable workout (saved first, then discarded).
+  Future<void> restoreLastWorkout() async {
+    final s = state;
+    final now = _now();
+    final savedRestorable =
+        s.savedSnapshot != null &&
+        (s.savedAt == null ||
+            now.difference(s.savedAt!) < WorkoutState.discardRestoreWindow);
+    final discardedRestorable = s.canRestoreDiscarded(now: now);
+    if (savedRestorable && discardedRestorable) {
+      final savedTime = s.savedAt;
+      final discardedTime = s.discardedAt;
+      if (savedTime != null &&
+          discardedTime != null &&
+          savedTime.isAfter(discardedTime)) {
+        await restoreSavedWorkout();
+      } else {
+        restoreDiscardedWorkout();
+      }
+    } else if (savedRestorable) {
+      await restoreSavedWorkout();
+    } else if (discardedRestorable) {
+      restoreDiscardedWorkout();
+    }
   }
 
   @override
