@@ -252,7 +252,7 @@ void main() {
       await cubit.endWorkout();
 
       expect(cubit.state.isInProgress, isFalse);
-      expect(cubit.state.canRestoreSaved, isTrue);
+      expect(cubit.state.canRestoreSaved(), isTrue);
       expect(cubit.state.savedSessionId, isNotNull);
 
       await cubit.restoreSavedWorkout();
@@ -261,7 +261,7 @@ void main() {
       expect(cubit.state.isInProgress, isTrue);
       expect(cubit.state.sets.single.weight, 100);
       expect(cubit.state.sets.single.reps, 5);
-      expect(cubit.state.canRestoreSaved, isFalse);
+      expect(cubit.state.canRestoreSaved(), isFalse);
       expect(await repo.sessions.getAll(), isEmpty);
 
       // Re-saving the restored session works and becomes the new restore
@@ -269,7 +269,7 @@ void main() {
       // original start time is replayed verbatim (not the restore time).
       await cubit.endWorkout();
       expect(cubit.state.isInProgress, isFalse);
-      expect(cubit.state.canRestoreSaved, isTrue);
+      expect(cubit.state.canRestoreSaved(), isTrue);
       final sessions = await repo.sessions.getAll();
       expect(sessions, hasLength(1));
       expect(sessions.single.sets, hasLength(1));
@@ -603,11 +603,11 @@ void main() {
       // every 30 s and would never let the fake clock settle.
       await tester.pump();
 
-      expect(find.text('Restore discarded workout'), findsOneWidget);
-      expect(find.text('Restore last workout'), findsNothing);
+      expect(find.text('Restore last workout'), findsOneWidget);
+      expect(find.text('Restore discarded workout'), findsNothing);
 
       // Restoring brings the discarded session back in progress.
-      await tester.tap(find.text('Restore discarded workout'));
+      await tester.tap(find.text('Restore last workout'));
       await tester.pumpAndSettle();
       expect(cubit.state.isInProgress, isTrue);
       expect(cubit.state.sets.single.weight, 100);

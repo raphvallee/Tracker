@@ -199,19 +199,19 @@ void main() {
         savedSessionId: 7,
       );
 
-      expect(state.canRestoreSaved, isTrue);
+      expect(state.canRestoreSaved(), isTrue);
 
       final restored = WorkoutState.fromJson(state.toJson());
       expect(restored.savedSnapshot, saved);
       expect(restored.savedSessionId, 7);
-      expect(restored.canRestoreSaved, isTrue);
+      expect(restored.canRestoreSaved(), isTrue);
     });
 
     test('legacy v1 payloads restore without a saved snapshot', () {
       final state = WorkoutState.fromJson({'isInProgress': false});
       expect(state.savedSnapshot, isNull);
       expect(state.savedSessionId, isNull);
-      expect(state.canRestoreSaved, isFalse);
+      expect(state.canRestoreSaved(), isFalse);
     });
 
     test('discarded snapshot is in-memory only (never hydrated)', () {
@@ -264,7 +264,7 @@ void main() {
         discardedSnapshot: WorkoutSnapshot.fromState(inProgress()),
         discardedAt: DateTime.now(),
       );
-      expect(state.canRestoreSaved, isFalse);
+      expect(state.canRestoreSaved(), isFalse);
       expect(state.canRestoreDiscarded(), isFalse);
     });
 
@@ -285,7 +285,7 @@ void main() {
       expect(cleared.savedSessionId, isNull);
       expect(cleared.discardedSnapshot, isNull);
       expect(cleared.discardedAt, isNull);
-      expect(cleared.canRestoreSaved, isFalse);
+      expect(cleared.canRestoreSaved(), isFalse);
       expect(cleared.canRestoreDiscarded(), isFalse);
     });
 

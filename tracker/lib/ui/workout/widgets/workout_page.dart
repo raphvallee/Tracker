@@ -50,37 +50,44 @@ class WorkoutPage extends StatelessWidget {
       child: CustomScrollView(
         slivers: <Widget>[
           CustomAppBar(context, title: 'Current Workout'),
-          SliverToBoxAdapter(
-            child: MaxWidth(
-              child:
-                  BlocSelector<
-                    WorkoutCubit,
-                    WorkoutState,
-                    ({
-                      bool canRestoreDiscarded,
-                      bool canRestoreSaved,
-                      bool isInProgress,
-                    })
-                  >(
-                    selector: (state) => (
-                      isInProgress: state.isInProgress,
-                      canRestoreSaved: state.canRestoreSaved,
-                      canRestoreDiscarded: state.canRestoreDiscarded(),
-                    ),
-                    builder: (context, view) {
-                      return view.isInProgress
-                          ? _InProgressView(
-                              onEnd: cubit.endWorkout,
-                              onDiscard: cubit.discardWorkout,
-                            )
-                          : _IdleView(
-                              onStart: () => _startWorkout(context),
-                              onRestoreSaved: cubit.restoreSavedWorkout,
-                              onRestoreDiscarded: cubit.restoreDiscardedWorkout,
-                            );
-                    },
-                  ),
+          // The idle view fills the remaining viewport height so its restore
+          // action can sit at the bottom of the page, just above the nav bar.
+          // The in-progress view keeps its content-sized sliver (it scrolls).
+          BlocSelector<
+            WorkoutCubit,
+            WorkoutState,
+            ({
+              bool canRestoreDiscarded,
+              bool canRestoreSaved,
+              bool isInProgress,
+            })
+          >(
+            selector: (state) => (
+              isInProgress: state.isInProgress,
+              canRestoreSaved: state.canRestoreSaved(),
+              canRestoreDiscarded: state.canRestoreDiscarded(),
             ),
+            builder: (context, view) {
+              if (view.isInProgress) {
+                return SliverToBoxAdapter(
+                  child: MaxWidth(
+                    child: _InProgressView(
+                      onEnd: cubit.endWorkout,
+                      onDiscard: cubit.discardWorkout,
+                    ),
+                  ),
+                );
+              }
+              return SliverFillRemaining(
+                hasScrollBody: false,
+                child: MaxWidth(
+                  child: _IdleView(
+                    onStart: () => _startWorkout(context),
+                    onRestoreLast: cubit.restoreLastWorkout,
+                  ),
+                ),
+              );
+            },
           ),
         ],
       ),
@@ -98,15 +105,10 @@ class WorkoutPage extends StatelessWidget {
 }
 
 class _IdleView extends StatefulWidget {
-  const _IdleView({
-    required this.onStart,
-    required this.onRestoreSaved,
-    required this.onRestoreDiscarded,
-  });
+  const _IdleView({required this.onStart, required this.onRestoreLast});
 
   final VoidCallback onStart;
-  final Future<void> Function() onRestoreSaved;
-  final VoidCallback onRestoreDiscarded;
+  final Future<void> Function() onRestoreLast;
 
   @override
   State<_IdleView> createState() => _IdleViewState();
@@ -127,7 +129,7 @@ class _IdleViewState extends State<_IdleView> {
     // The discarded-restore window lapses with wall-clock time, which no cubit
     // state change announces. While the window is live, tick periodically so
     // the restore button disappears on time (and stays away afterwards).
-    final windowLive = state.canRestoreDiscarded();
+    final windowLive = state.canRestoreSaved() || state.canRestoreDiscarded();
     _windowTicker?.cancel();
     _windowTicker = windowLive
         ? Timer.periodic(const Duration(seconds: 30), (_) {
@@ -138,40 +140,31 @@ class _IdleViewState extends State<_IdleView> {
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
         children: <Widget>[
-          const SizedBox(height: 64),
-          const Icon(FLucideIcons.dumbbell, size: 48),
-          const SizedBox(height: 12),
-          const Text('No workout in progress'),
-          const SizedBox(height: 16),
-          FButton(
-            mainAxisSize: MainAxisSize.min,
-            onPress: widget.onStart,
-            prefix: const Icon(FLucideIcons.play),
-            child: const Text('Start Workout'),
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: <Widget>[
+                const Icon(FLucideIcons.dumbbell, size: 48),
+                const SizedBox(height: 12),
+                const Text('No workout in progress'),
+                const SizedBox(height: 16),
+                FButton(
+                  mainAxisSize: MainAxisSize.min,
+                  onPress: widget.onStart,
+                  prefix: const Icon(FLucideIcons.play),
+                  child: const Text('Start Workout'),
+                ),
+              ],
+            ),
           ),
-          // Leaving a workout is never destructive: the last SAVED workout
-          // stays in history but can always be pulled back out of it, and the
-          // last DISCARDED one is held in memory for a short window.
-          if (state.canRestoreSaved) ...[
-            const SizedBox(height: 12),
+          if (state.canRestoreSaved() || state.canRestoreDiscarded()) ...[
             FButton(
-              variant: .outline,
               mainAxisSize: MainAxisSize.min,
-              onPress: () => widget.onRestoreSaved(),
+              variant: .outline,
+              onPress: () => widget.onRestoreLast(),
               prefix: const Icon(FLucideIcons.rotateCcw),
               child: const Text('Restore last workout'),
-            ),
-          ],
-          if (state.canRestoreDiscarded()) ...[
-            const SizedBox(height: 12),
-            FButton(
-              variant: .outline,
-              mainAxisSize: MainAxisSize.min,
-              onPress: () => widget.onRestoreDiscarded(),
-              prefix: const Icon(FLucideIcons.undo2),
-              child: const Text('Restore discarded workout'),
             ),
           ],
         ],
