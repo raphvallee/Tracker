@@ -31,8 +31,26 @@ abstract final class GraphEditor {
     constraints: BoxConstraints(
       maxWidth: MediaQuery.sizeOf(context).width - 10,
     ),
-    builder: (sheetContext) =>
-        _GraphEditorSheet(initial: initial, exercises: exercises),
+    builder: (sheetContext) {
+      // The sheet lifts its bottom edge above the keyboard (padding outside
+      // the scroll view below), so the keyboard can never cover its content
+      // and fields inside must not use the app's keyboard-height reveal
+      // overshoot - with the exercise picker open it would over-scroll the
+      // search field. Give the fields the plain reveal gap instead.
+      final theme = sheetContext.theme.copyWith(
+        textFieldStyles: sheetContext.theme.textFieldStyles.apply([
+          .all(
+            .delta(
+              scrollPadding: EdgeInsetsDelta.delta(bottom: kKeyboardRevealGap),
+            ),
+          ),
+        ]),
+      );
+      return FTheme(
+        data: theme,
+        child: _GraphEditorSheet(initial: initial, exercises: exercises),
+      );
+    },
   );
 }
 
@@ -127,62 +145,84 @@ class _GraphEditorSheetState extends State<_GraphEditorSheet> {
       // here would add a second gap below the Save button.
       top: false,
       bottom: false,
-      child: SingleChildScrollView(
-        // The shell Scaffold opts out of resize-to-avoid-insets, so the
-        // sheet has to clear the keyboard itself.
-        padding: EdgeInsets.only(bottom: keyboardInsetOf(context)),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _header(theme),
-            const SizedBox(height: 16),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: FTextField(
-                control: FTextFieldControl.managed(controller: _title),
-                focusNode: _titleFocus,
-                label: const Text('Title'),
-                hint: 'e.g. Squat progress',
-                error: _titleError == null ? null : Text(_titleError!),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          // The sheet lifts its bottom edge above the keyboard by padding
+          // OUTSIDE the scroll view. (It used to pad the scroll content
+          // instead: the sheet is bottom-anchored and grows to fit its
+          // content, so the growing keyboard padding stretched the sheet by
+          // the keyboard's full height, pushing the card to the top of the
+          // screen and leaving a large blank, scrollable strip under the
+          // Save button.)
+          //
+          // This sheet is hosted by the tab navigator, which stops above the
+          // shell's bottom navigation bar, so the sheet's container bottom
+          // already sits above the screen bottom and only part of the sheet
+          // would actually be covered by the keyboard: lift by the covered
+          // part only (keyboard inset minus that bottom gap), never the full
+          // inset, or the content loses height and clips.
+          final inset = keyboardInsetOf(context);
+          final obstructed =
+              MediaQuery.sizeOf(context).height - constraints.maxHeight;
+          final lift = (inset - obstructed).clamp(0.0, inset).toDouble();
+          return Padding(
+            padding: EdgeInsets.only(bottom: lift),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _header(theme),
+                  const SizedBox(height: 16),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: FTextField(
+                      control: FTextFieldControl.managed(controller: _title),
+                      focusNode: _titleFocus,
+                      label: const Text('Title'),
+                      hint: 'e.g. Squat progress',
+                      error: _titleError == null ? null : Text(_titleError!),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  _exerciseSection(theme),
+                  const SizedBox(height: 12),
+                  _optionGroup(
+                    theme,
+                    label: 'Metric',
+                    options: [
+                      for (final metric in GraphMetric.values)
+                        (
+                          label: graphMetricLabel(metric),
+                          selected: metric == _metric,
+                          onPress: () => setState(() => _metric = metric),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  _optionGroup(
+                    theme,
+                    label: 'Timeframe',
+                    options: [
+                      for (final timeframe in GraphTimeframe.values)
+                        (
+                          label: graphTimeframeLabel(timeframe),
+                          selected: timeframe == _timeframe,
+                          onPress: () => setState(() => _timeframe = timeframe),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: FButton(onPress: _save, child: const Text('Save')),
+                  ),
+                  const SizedBox(height: 16),
+                ],
               ),
             ),
-            const SizedBox(height: 12),
-            _exerciseSection(theme),
-            const SizedBox(height: 12),
-            _optionGroup(
-              theme,
-              label: 'Metric',
-              options: [
-                for (final metric in GraphMetric.values)
-                  (
-                    label: graphMetricLabel(metric),
-                    selected: metric == _metric,
-                    onPress: () => setState(() => _metric = metric),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            _optionGroup(
-              theme,
-              label: 'Timeframe',
-              options: [
-                for (final timeframe in GraphTimeframe.values)
-                  (
-                    label: graphTimeframeLabel(timeframe),
-                    selected: timeframe == _timeframe,
-                    onPress: () => setState(() => _timeframe = timeframe),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 20),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: FButton(onPress: _save, child: const Text('Save')),
-            ),
-            const SizedBox(height: 16),
-          ],
-        ),
+          );
+        },
       ),
     );
   }

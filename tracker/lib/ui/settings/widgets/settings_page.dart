@@ -31,14 +31,14 @@ class SettingsPage extends StatelessWidget {
           child: BlocBuilder<SettingsCubit, SettingsState>(
             builder: (context, state) => MaxWidth(
               child: ListView(
-                // Bottom padding tracks the keyboard so the workout-defaults
-                // fields scroll above it (shell no longer resizes for the
-                // keyboard).
+                // Bottom padding tracks the keyboard (plus the reveal gap) so
+                // the workout-defaults fields scroll above it (shell no
+                // longer resizes for the keyboard).
                 padding: EdgeInsets.fromLTRB(
                   0,
                   12,
                   0,
-                  12 + keyboardInsetOf(context),
+                  keyboardClearanceOf(context),
                 ),
                 children: <Widget>[
                   _buildSettingsMenuItem(

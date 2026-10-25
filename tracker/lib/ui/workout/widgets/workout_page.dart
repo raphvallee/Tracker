@@ -193,11 +193,11 @@ class _InProgressView extends StatelessWidget {
     return BlocSelector<WorkoutCubit, WorkoutState, _WorkoutPresentation>(
       selector: _WorkoutPresentation.fromState,
       builder: (context, presentation) => Padding(
-        // The bottom padding grows by the keyboard height so the inline
-        // add-set form and the End Workout action can scroll above the
-        // keyboard instead of being clipped by it (the shell Scaffold no
-        // longer resizes for the keyboard).
-        padding: EdgeInsets.fromLTRB(16, 16, 16, 32 + keyboardInsetOf(context)),
+        // The bottom padding grows by the keyboard height plus the reveal gap
+        // so the inline add-set form and the End Workout action can scroll
+        // above the keyboard instead of being clipped by it (the shell
+        // Scaffold no longer resizes for the keyboard).
+        padding: EdgeInsets.fromLTRB(16, 16, 16, keyboardClearanceOf(context)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[

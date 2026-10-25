@@ -214,11 +214,14 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
                             'Exercise ${set.exerciseId}',
                         set: set,
                       ),
-                  // Bottom padding grows by the keyboard height so the delete
-                  // action can scroll above the keyboard (see keyboard_inset).
+                  // Bottom padding grows by the keyboard height plus the
+                  // reveal gap so the delete action can scroll above the
+                  // keyboard (see keyboard_inset).
                   const SizedBox(height: 24),
                   Padding(
-                    padding: EdgeInsets.only(bottom: keyboardInsetOf(context)),
+                    padding: EdgeInsets.only(
+                      bottom: keyboardClearanceOf(context),
+                    ),
                     child: FButton(
                       variant: .destructive,
                       size: .lg,

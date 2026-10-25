@@ -281,14 +281,14 @@ class _SplitDayEditorPageState extends State<SplitDayEditorPage> {
           ),
           SliverToBoxAdapter(
             child: Padding(
-              // Bottom padding tracks the keyboard so the fields and the
-              // planned-set editors can scroll above it (shell no longer
-              // resizes for the keyboard).
+              // Bottom padding tracks the keyboard (plus the reveal gap) so
+              // the fields and the planned-set editors can scroll above it
+              // (shell no longer resizes for the keyboard).
               padding: EdgeInsets.fromLTRB(
                 16,
                 16,
                 16,
-                16 + keyboardInsetOf(context),
+                keyboardClearanceOf(context),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,

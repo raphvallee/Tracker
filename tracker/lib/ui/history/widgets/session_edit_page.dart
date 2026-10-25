@@ -244,7 +244,7 @@ class _SessionEditPageState extends State<SessionEditPage> {
                   16,
                   16,
                   16,
-                  32 + keyboardInsetOf(context),
+                  keyboardClearanceOf(context),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
