@@ -111,11 +111,17 @@ void main() {
             ),
           ),
         );
-        for (var i = 0; i < 3; i++) {
+        // Real delays let Isar's watcher events reach the StreamBuilders (the
+        // same arrangement as the visual sweep); wait until the feed leaves
+        // its loading spinner instead of pumping a fixed number of rounds -
+        // CI runners deliver the initial data slower than a local machine,
+        // and the feed only builds the analytics header once ready.
+        for (var i = 0; i < 20; i++) {
           await tester.runAsync(
             () => Future<void>.delayed(const Duration(milliseconds: 150)),
           );
           await tester.pump(const Duration(milliseconds: 250));
+          if (!tester.any(find.byType(FCircularProgress))) break;
         }
 
         await run(tester, recorder);
