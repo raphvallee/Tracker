@@ -315,51 +315,43 @@ class _SessionFieldsCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final d = start.toLocal();
-    // The hint lives under the card (not inside it): inside, it sat flush
-    // against the card's bottom edge and read as a clipped divider line.
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        FCard(
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: <Widget>[
-                FTextField(
-                  control: FTextFieldControl.managed(controller: title),
-                  label: const Text('Title'),
-                  error: titleError == null ? null : Text(titleError!),
-                ),
-                const SizedBox(height: 8),
-                FItem(
-                  prefix: const Icon(FLucideIcons.dumbbell),
-                  title: const Text('Gym'),
-                  subtitle: Text(gymLabel),
-                  suffix: const Icon(FLucideIcons.chevronRight),
-                  onPress: onPickGym,
-                ),
-                FItem(
-                  prefix: const Icon(FLucideIcons.calendar),
-                  title: const Text('Started'),
-                  subtitle: Text(
-                    '${d.year}-${_p(d.month)}-${_p(d.day)} ${_p(d.hour)}:${_p(d.minute)}',
-                  ),
-                  suffix: const Icon(FLucideIcons.chevronRight),
-                  onPress: onPickStart,
-                ),
-              ],
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          FTextField(
+            control: FTextFieldControl.managed(controller: title),
+            label: const Text('Title'),
+            error: titleError == null ? null : Text(titleError!),
+          ),
+          const SizedBox(height: 16),
+          FItem(
+            prefix: const Icon(FLucideIcons.dumbbell),
+            title: const Text('Gym'),
+            subtitle: Text(gymLabel),
+            suffix: const Icon(FLucideIcons.chevronRight),
+            onPress: onPickGym,
+          ),
+          const FDivider(),
+          FItem(
+            prefix: const Icon(FLucideIcons.calendar),
+            title: const Text('Started'),
+            subtitle: Text(
+              '${d.year}-${_p(d.month)}-${_p(d.day)} ${_p(d.hour)}:${_p(d.minute)}',
+            ),
+            suffix: const Icon(FLucideIcons.chevronRight),
+            onPress: onPickStart,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Editing the start time keeps the session duration.',
+            style: context.theme.typography.body.xs.copyWith(
+              color: context.theme.colors.mutedForeground,
             ),
           ),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          'Editing the start time keeps the session duration.',
-          style: context.theme.typography.body.xs.copyWith(
-            color: context.theme.colors.mutedForeground,
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 

@@ -25,7 +25,7 @@
 ## Workout
 
 - [ ] When a workout has multiple sets planned, there should be multiple inputs to enter the weight and reps. The rep-range/fixed-reps should be a hint in the input 
-- [ ] The sets added are in a black container that does not fit the theme at all, find another way to present them
+- [x] The sets added are in a black container that does not fit the theme at all, find another way to present them
 - [ ] "Restore last workout" and "Restore discarded workout" should be the same button called "Restore last workout", a button that lasts 15 minutes after the last workout was either discarded or saved.
 - [ ] The last saved workout should be restorable from it's history entry.
 - [ ] "Restore last workout" button should be at bottom center of the workout page
@@ -37,6 +37,6 @@
 	
 ## History
 
-- [ ] When editing a session, the gym and started datetime are in a black container that does not fit the theme at all, find another way to present them
+- [x] When editing a session, the gym and started datetime are in a black container that does not fit the theme at all, find another way to present them
 - [ ] Editing a session's start time should modify the session duration. (We assume the user forgot to start the session but remembered to finish it when he was done working out)
 - [ ] When editing a session, replace the "no gym" option with "Other gym"
