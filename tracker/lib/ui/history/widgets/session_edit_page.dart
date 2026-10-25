@@ -14,6 +14,7 @@ import 'package:tracker/ui/core/ui/set_type_chip.dart';
 import 'package:tracker/ui/core/ui/unsaved_changes_dialog.dart';
 import 'package:tracker/ui/core/ui/weight_confirmation.dart';
 import 'package:tracker/ui/core/ui/weight_format.dart';
+import 'package:tracker/ui/workout/widgets/gym_picker.dart';
 import 'package:tracker/utils/decimal_input.dart';
 import 'package:tracker/utils/form_validators.dart';
 
@@ -454,6 +455,17 @@ Future<Object?> _pickGymSheet(BuildContext context, List<Gym> gyms) {
               prefix: const Icon(FLucideIcons.ban),
               title: const Text('No gym'),
               onPress: () => Navigator.of(sheetContext).pop(const _NoGym()),
+            ),
+            const Divider(height: 1),
+            FItem(
+              prefix: const Icon(FLucideIcons.plus),
+              title: const Text('Add Gym'),
+              onPress: () async {
+                final added = await promptAddGym(sheetContext, gyms);
+                if (added != null && sheetContext.mounted) {
+                  Navigator.of(sheetContext).pop(added);
+                }
+              },
             ),
             const SizedBox(height: 8),
           ],
