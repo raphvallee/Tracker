@@ -478,47 +478,42 @@ class _ExerciseLogCard extends StatelessWidget {
     );
     final planSummary = plannedSetsSummary(plannedSets);
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: FCard(
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          Row(
             children: <Widget>[
-              Row(
-                children: <Widget>[
-                  if (orderNumber != null)
-                    Text('${orderNumber! + 1}. ', style: titleStyle),
-                  Expanded(child: Text(title, style: titleStyle)),
-                ],
-              ),
-              if (planSummary != null)
-                Text(
-                  'Planned: $planSummary',
-                  style: context.theme.typography.body.xs.copyWith(
-                    color: context.theme.colors.mutedForeground,
-                  ),
-                ),
-              const SizedBox(height: 8),
-              if (sets.isEmpty)
-                Text(
-                  'No sets yet',
-                  style: context.theme.typography.body.xs.copyWith(
-                    color: context.theme.colors.mutedForeground,
-                  ),
-                )
-              else
-                for (final set in sets) _SetTile(set: set),
-              const FDivider(),
-              _AddSetForm(
-                exerciseId: exerciseId,
-                exerciseName: exerciseName,
-                exercises: exercises,
-                nextTargetReps: nextTargetReps,
-              ),
+              if (orderNumber != null)
+                Text('${orderNumber! + 1}. ', style: titleStyle),
+              Expanded(child: Text(title, style: titleStyle)),
             ],
           ),
-        ),
+          if (planSummary != null)
+            Text(
+              'Planned: $planSummary',
+              style: context.theme.typography.body.xs.copyWith(
+                color: context.theme.colors.mutedForeground,
+              ),
+            ),
+          const SizedBox(height: 8),
+          if (sets.isEmpty)
+            Text(
+              'No sets yet',
+              style: context.theme.typography.body.xs.copyWith(
+                color: context.theme.colors.mutedForeground,
+              ),
+            )
+          else
+            for (final set in sets) _SetTile(set: set),
+          const FDivider(),
+          _AddSetForm(
+            exerciseId: exerciseId,
+            exerciseName: exerciseName,
+            exercises: exercises,
+            nextTargetReps: nextTargetReps,
+          ),
+        ],
       ),
     );
   }
