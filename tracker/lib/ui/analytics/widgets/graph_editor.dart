@@ -4,6 +4,8 @@ import 'package:tracker/domain/models/exercise.dart';
 import 'package:tracker/domain/models/graph_config.dart';
 import 'package:tracker/domain/services/analytics.dart';
 import 'package:tracker/ui/core/ui/keyboard_inset.dart';
+import 'package:tracker/ui/core/ui/custom_route.dart';
+import 'package:tracker/ui/analytics/widgets/graph_exercise_picker_page.dart';
 import 'package:tracker/utils/form_validators.dart';
 
 /// Modal bottom-sheet editor for creating or editing a feed graph.
@@ -66,24 +68,35 @@ class _GraphEditorSheet extends StatefulWidget {
 
 class _GraphEditorSheetState extends State<_GraphEditorSheet> {
   late final TextEditingController _title;
-  late final TextEditingController _search;
+  late final TextEditingController _exerciseDisplay;
   late final FocusNode _titleFocus;
   late int? _exerciseId;
   late GraphMetric _metric;
   late GraphTimeframe _timeframe;
-  bool _pickingExercise = false;
+
+  /// Whether the user has manually edited the title. When false the title is
+  /// either empty or auto-generated from the selected exercise, so picking a
+  /// different exercise regenerates it to mirror the new choice.
+  bool _titleEditedByUser = false;
   String? _titleError;
+
+  /// Whether the exercise picker route is already being opened, used to guard
+  /// against double-taps firing the push twice.
+  bool _isPicking = false;
 
   @override
   void initState() {
     super.initState();
     final initial = widget.initial;
     _title = TextEditingController(text: initial?.title ?? '');
-    _search = TextEditingController();
     _titleFocus = FocusNode();
     _exerciseId = initial?.exerciseId;
     _metric = initial?.metric ?? GraphMetric.best1rm;
     _timeframe = initial?.timeframe ?? GraphTimeframe.all;
+    _exerciseDisplay = TextEditingController(text: _exerciseValueLabel);
+    // A persisted title is treated as a manual choice and preserved when the
+    // exercise changes. A fresh (empty) title is auto-named from the exercise.
+    _titleEditedByUser = initial != null && initial.title.isNotEmpty;
     // Clear the empty-title error once the title has actual text. The
     // controller also notifies on selection changes (e.g. when focusing the
     // field after a failed save), which must not dismiss the error.
@@ -97,7 +110,7 @@ class _GraphEditorSheetState extends State<_GraphEditorSheet> {
   @override
   void dispose() {
     _title.dispose();
-    _search.dispose();
+    _exerciseDisplay.dispose();
     _titleFocus.dispose();
     super.dispose();
   }
@@ -125,6 +138,49 @@ class _GraphEditorSheetState extends State<_GraphEditorSheet> {
         timeframe: _timeframe,
       ),
     );
+  }
+
+  /// Opens the full-screen exercise picker over the sheet. When the user picks
+  /// an exercise (or "All exercises") the sheet is updated and the title is
+  /// auto-named to mirror the choice unless the user customized it manually.
+  Future<void> _pickExercise() async {
+    if (_isPicking) return;
+    _isPicking = true;
+    FocusScope.of(context).unfocus();
+    try {
+      final pick = await pushTo<GraphExercisePick>(
+        context,
+        GraphExercisePickerPage(
+          exercises: widget.exercises,
+          selectedId: _exerciseId,
+        ),
+      );
+      if (!mounted || pick == null) return;
+      switch (pick.kind) {
+        case PickKind.specific:
+          setState(() {
+            _exerciseId = pick.exercise!.id;
+            _exerciseDisplay.text = pick.exercise!.title;
+            if (!_titleEditedByUser || _title.text.trim().isEmpty) {
+              _title.text = '${pick.exercise!.title} Progress';
+            }
+          });
+          break;
+        case PickKind.all:
+          setState(() {
+            _exerciseId = null;
+            _exerciseDisplay.text = 'All exercises';
+            if (!_titleEditedByUser || _title.text.trim().isEmpty) {
+              _title.text = 'All exercises Progress';
+            }
+          });
+          break;
+        case PickKind.cancelled:
+          break;
+      }
+    } finally {
+      _isPicking = false;
+    }
   }
 
   @override
@@ -239,96 +295,39 @@ class _GraphEditorSheetState extends State<_GraphEditorSheet> {
     ),
   );
 
+  /// The exercise selector: a single read-only input row showing the chosen
+  /// exercise (or "All exercises") with a chevron. Tapping *anywhere* on the
+  /// field opens the full-screen picker instead of expanding inline, so the
+  /// sheet never layout-shifts or forces a scroll inside its limited height.
+  /// The "Exercise" caption comes from the field's own label (like the Title
+  /// field above it), so no separate section heading is drawn - that only
+  /// duplicated the word.
   Widget _exerciseSection(FThemeData theme) => Padding(
     padding: const EdgeInsets.symmetric(horizontal: 16),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(
-          'Exercise',
-          style: theme.typography.body.sm.copyWith(fontWeight: FontWeight.w600),
-        ),
-        const SizedBox(height: 4),
-        FItem(
-          // The value row is the only toggle: tap to expand, tap again to
-          // collapse; the chevron flips to show which way it goes.
-          onPress: () => setState(() {
-            if (_pickingExercise) {
-              _search.clear();
-              _pickingExercise = false;
-            } else {
-              _pickingExercise = true;
-              // Get the keyboard out of the way so the whole list shows.
-              FocusScope.of(context).unfocus();
-            }
-          }),
-          title: Text(_exerciseValueLabel),
-          suffix: Icon(
-            _pickingExercise
-                ? FLucideIcons.chevronUp
-                : FLucideIcons.chevronDown,
+    child: Semantics(
+      button: true,
+      child: GestureDetector(
+        // The field spans the whole row, and its internals are absorbed:
+        // otherwise the read-only input's own focus/tap recognizer (and any
+        // suffix button) wins the gesture arena, leaving only part of the row
+        // clickable. With the child absorbed, every pixel of the row routes to
+        // this single tap handler.
+        behavior: HitTestBehavior.opaque,
+        onTap: _pickExercise,
+        child: AbsorbPointer(
+          child: FTextField(
+            control: FTextFieldControl.managed(controller: _exerciseDisplay),
+            label: const Text('Exercise'),
+            readOnly: true,
+            suffixBuilder: (context, style, variants) => Icon(
+              FLucideIcons.chevronRight,
+              color: theme.colors.mutedForeground,
+            ),
           ),
         ),
-        if (_pickingExercise) ...[
-          const SizedBox(height: 4),
-          _exercisePicker(theme),
-        ],
-      ],
+      ),
     ),
   );
-
-  /// Inline, lazily-built exercise picker. Rendered in place instead of an
-  /// overlay popover so it never triggers the popover's animated backdrop
-  /// filter, and `ListView.builder` keeps only visible rows alive.
-  Widget _exercisePicker(FThemeData theme) => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      FTextField(
-        control: FTextFieldControl.managed(controller: _search),
-        label: const Text('Search'),
-        hint: 'Filter exercises',
-      ),
-      const SizedBox(height: 4),
-      SizedBox(
-        height: 260,
-        child: ValueListenableBuilder<TextEditingValue>(
-          valueListenable: _search,
-          builder: (context, value, _) {
-            final query = value.text.trim().toLowerCase();
-            final matches = [
-              for (final exercise in widget.exercises)
-                if (exercise.title.toLowerCase().contains(query)) exercise,
-            ];
-            return ListView.builder(
-              key: const ValueKey('exercise-options'),
-              itemCount: 1 + matches.length,
-              itemBuilder: (context, index) {
-                if (index == 0) {
-                  return FItem(
-                    title: const Text('All exercises'),
-                    onPress: () => _pickExercise(null),
-                  );
-                }
-                final exercise = matches[index - 1];
-                return FItem(
-                  title: Text(exercise.title),
-                  onPress: () => _pickExercise(exercise.id),
-                );
-              },
-            );
-          },
-        ),
-      ),
-    ],
-  );
-
-  void _pickExercise(int? exerciseId) {
-    _search.clear();
-    setState(() {
-      _exerciseId = exerciseId;
-      _pickingExercise = false;
-    });
-  }
 
   Widget _optionGroup(
     FThemeData theme, {
