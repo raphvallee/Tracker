@@ -83,6 +83,8 @@ class WorkoutSessionRepository {
     return sessions.length;
   }
 
-  Stream<List<WorkoutSession>> watchAll() =>
-      _isar.workoutSessions.where().watch(fireImmediately: true);
+  Stream<List<WorkoutSession>> watchAll() => _isar.workoutSessions
+      .where()
+      .sortByStartTimeDesc()
+      .watch(fireImmediately: true);
 }
