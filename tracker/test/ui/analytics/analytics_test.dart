@@ -107,5 +107,49 @@ void main() {
       // The sheet stays open instead of silently doing nothing.
       expect(find.text('Add graph'), findsOneWidget);
     });
+
+    testWidgets('the whole exercise field opens the picker, not just the '
+        'chevron', (tester) async {
+      await pumpAppPage(
+        tester,
+        Builder(
+          builder: (context) => Scaffold(
+            body: Center(
+              child: TextButton(
+                onPressed: () => GraphEditor.show(context, exercises: const []),
+                child: const Text('Open editor'),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Open editor'));
+      await tester.pumpAndSettle();
+      expect(find.text('Add graph'), findsOneWidget);
+
+      final field = tester.getRect(
+        find
+            .ancestor(
+              of: find.text('All exercises'),
+              matching: find.byType(FTextField),
+            )
+            .first,
+      );
+      // Tap the far-left of the row: the label/value area, as far as possible
+      // from the trailing chevron, which used to be the only hit target.
+      await tester.tapAt(Offset(field.left + 8, field.center.dy));
+      await tester.pumpAndSettle();
+      expect(find.text('Select exercise'), findsOneWidget);
+
+      // Back to the sheet, then tap the middle of the row (between the value
+      // and the chevron) to prove there is no dead zone in between either.
+      await tester.tap(find.byIcon(FLucideIcons.chevronLeft));
+      await tester.pumpAndSettle();
+      expect(find.text('Add graph'), findsOneWidget);
+      await tester.tapAt(Offset(field.center.dx, field.center.dy));
+      await tester.pumpAndSettle();
+      expect(find.text('Select exercise'), findsOneWidget);
+    });
   });
 }
