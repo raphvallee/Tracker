@@ -67,10 +67,11 @@ class _ExercisePickerPageState extends State<ExercisePickerPage> {
           ),
         ),
         SliverPadding(
-          // Keyboard-aware bottom padding: the search field stays pinned at
-          // the top while list rows can scroll above the keyboard (the shell
-          // Scaffold no longer resizes for the keyboard).
-          padding: EdgeInsets.only(bottom: 12 + keyboardInsetOf(context)),
+          // Keyboard-aware bottom padding (keyboard height + reveal gap): the
+          // search field stays pinned at the top while list rows can scroll
+          // above the keyboard (the shell Scaffold no longer resizes for the
+          // keyboard).
+          padding: EdgeInsets.only(bottom: keyboardClearanceOf(context)),
           sliver: SliverList(
             delegate: SliverChildBuilderDelegate((context, index) {
               final e = _shown[index];

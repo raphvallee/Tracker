@@ -178,13 +178,14 @@ class _NewExercisePageState extends State<NewExercisePage> {
         ),
         SliverToBoxAdapter(
           child: Padding(
-            // Bottom padding tracks the keyboard so the focused field and the
-            // trailing selects can scroll above it (shell no longer resizes).
+            // Bottom padding tracks the keyboard (plus the reveal gap) so the
+            // focused field and the trailing selects can scroll above it
+            // (shell no longer resizes).
             padding: EdgeInsets.fromLTRB(
               16,
               16,
               16,
-              16 + keyboardInsetOf(context),
+              keyboardClearanceOf(context),
             ),
             child: MaxWidth(
               child: Form(

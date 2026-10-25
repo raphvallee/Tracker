@@ -129,8 +129,9 @@ class _GraphEditorSheetState extends State<_GraphEditorSheet> {
       bottom: false,
       child: SingleChildScrollView(
         // The shell Scaffold opts out of resize-to-avoid-insets, so the
-        // sheet has to clear the keyboard itself.
-        padding: EdgeInsets.only(bottom: keyboardInsetOf(context)),
+        // sheet has to clear the keyboard itself (plus the reveal gap so the
+        // Save button never rests against the keyboard).
+        padding: EdgeInsets.only(bottom: keyboardClearanceOf(context)),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,

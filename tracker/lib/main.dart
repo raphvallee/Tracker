@@ -15,6 +15,7 @@ import 'package:tracker/data/services/db.dart';
 import 'package:tracker/data/services/seed.dart';
 import 'package:tracker/routing/home_page.dart';
 import 'package:tracker/ui/core/themes/material_theme_bridge.dart';
+import 'package:tracker/ui/core/ui/keyboard_inset.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
 import 'package:tracker/ui/settings/view_models/settings_cubit.dart';
 import 'package:tracker/ui/workout/view_models/workout_cubit.dart';
@@ -172,9 +173,12 @@ class MyApp extends StatelessWidget {
         // gesture arena, so this only fires for taps on unconsumed areas.
         onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
         child: FTheme(
-          data: Theme.brightnessOf(context) == Brightness.light
-              ? navLightTheme
-              : navDarkTheme,
+          data: keyboardAwareFieldReveal(
+            Theme.brightnessOf(context) == Brightness.light
+                ? navLightTheme
+                : navDarkTheme,
+            MediaQuery.viewInsetsOf(context).bottom,
+          ),
           child: FToaster(child: FTooltipGroup(child: child!)),
         ),
       ),
