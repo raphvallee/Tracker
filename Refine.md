@@ -32,7 +32,7 @@
 
 ## Feed - Analytics
 
-- [ ] When editing a graph, dont autofocus a input, i dont want the keyboard to popup at first.
+- [x] When editing a graph, dont autofocus a input, i dont want the keyboard to popup at first.
 - [ ] When editing a graph, the Exercice selector should be rewritten to be easier to understand. It should be clear that it is an input, with a dropdown indicator. In the dropdown, we can search, select all or select a specific exercice.
 	
 ## History
