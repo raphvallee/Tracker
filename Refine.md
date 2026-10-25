@@ -38,5 +38,5 @@
 ## History
 
 - [x] When editing a session, the gym and started datetime are in a black container that does not fit the theme at all, find another way to present them
-- [ ] Editing a session's start time should modify the session duration. (We assume the user forgot to start the session but remembered to finish it when he was done working out)
-- [ ] When editing a session, replace the "no gym" option with "Other gym"
+- [x] Editing a session's start time should modify the session duration. (We assume the user forgot to start the session but remembered to finish it when he was done working out)
+- [x] When editing a session, replace the "no gym" option with "Other gym"

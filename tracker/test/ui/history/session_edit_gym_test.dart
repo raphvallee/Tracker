@@ -82,7 +82,7 @@ void main() {
       expect(saved.gymId, seeded.session.gymId);
     });
 
-    testWidgets('picking No gym clears the gym on save', (tester) async {
+    testWidgets('picking Other gym clears the gym on save', (tester) async {
       final seeded = await pumpPersistenceApp(tester, 'session_edit_gym_clear');
       await tester.tap(find.text('Edit'));
       await settleSessionFlow(tester);
@@ -94,9 +94,9 @@ void main() {
       await waitForText(tester, 'Which gym?');
       await settleSessionFlow(tester); // let the sheet finish sliding in
       expect(find.text('Which gym?'), findsOneWidget);
-      await tester.tap(find.text('No gym'));
+      await tester.tap(find.text('Other gym'));
       await settleSessionFlow(tester);
-      expect(find.text('No gym'), findsOneWidget);
+      expect(find.text('Other gym'), findsOneWidget);
 
       await tester.enterText(titleField(), 'Pull');
       await tester.tap(find.text('Save')); // editor header action

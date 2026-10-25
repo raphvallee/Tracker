@@ -2,15 +2,15 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
-import 'package:tracker/data/repositories/tracker_repository.dart';
-import 'package:tracker/data/services/app_log.dart';
 import 'package:tracker/domain/models/workout_session.dart';
 import 'package:tracker/domain/models/workout_set.dart';
 import 'package:tracker/ui/core/ui/app_dialog.dart';
+import 'package:tracker/data/services/app_log.dart';
 import 'package:tracker/ui/core/ui/custom_app_bar.dart';
 import 'package:tracker/ui/core/ui/custom_route.dart';
 import 'package:tracker/ui/core/ui/keyboard_inset.dart';
 import 'package:tracker/ui/core/ui/max_width.dart';
+import 'package:tracker/data/repositories/tracker_repository.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
 import 'package:tracker/ui/core/ui/set_type_chip.dart';
 import 'package:tracker/ui/core/ui/weight_format.dart';
@@ -252,22 +252,55 @@ class _HeaderCard extends StatelessWidget {
     final duration = session.endTime != null
         ? session.endTime!.difference(session.startTime)
         : Duration.zero;
-    final d = session.startTime.toLocal();
+    final started = session.startTime.toLocal();
+    final ended = session.endTime?.toLocal();
+
     return FCard(
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            Text(
-              _date(d),
-              style: theme.typography.body.md.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
-            ),
+            (ended == null
+                ? Text(
+                    'Started ${_date(started)}',
+                    style: theme.typography.body.md.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  )
+                : Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: <Widget>[
+                      Expanded(
+                        child: Text(
+                          _date(started),
+                          style: theme.typography.body.md.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                          textAlign: TextAlign.start,
+                        ),
+                      ),
+                      Text(
+                        ' - ',
+                        style: theme.typography.body.md.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: theme.colors.mutedForeground,
+                        ),
+                      ),
+                      Expanded(
+                        child: Text(
+                          _date(ended),
+                          style: theme.typography.body.md.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                          textAlign: TextAlign.end,
+                        ),
+                      ),
+                    ],
+                  )),
             const SizedBox(height: 4),
             Text(
-              [?gymName, _duration(duration)].join(' · '),
+              [gymName ?? 'Other gym', _duration(duration)].join(' · '),
               style: theme.typography.body.sm.copyWith(
                 color: theme.colors.mutedForeground,
               ),

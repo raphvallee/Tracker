@@ -45,7 +45,7 @@ void main() {
 
       expect(find.text('Edit session'), findsOneWidget); // app bar title
       expect(find.text('Save'), findsOneWidget); // app bar action
-      expect(find.text('No gym'), findsOneWidget); // no repository in scope
+      expect(find.text('Other gym'), findsOneWidget); // no repository in scope
       expect(find.text('80 kg × 5'), findsOneWidget);
       expect(find.text('60 kg × 8'), findsOneWidget);
       final title = find
