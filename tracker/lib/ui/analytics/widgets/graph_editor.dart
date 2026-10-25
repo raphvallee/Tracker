@@ -12,9 +12,9 @@ import 'package:tracker/utils/form_validators.dart';
 /// dialog's full-screen animated backdrop blur dropped the entrance to a
 /// frame-by-frame crawl over the chart-heavy feed, and its autofocus only
 /// fired after the route animation finished, so the keyboard lagged
-/// visibly behind the popup. The sheet uses a plain dim barrier, slides up
-/// with no blur, and, when editing, focuses the title field mid-animation so
-/// the keyboard rises together with it.
+/// visibly behind the popup. The sheet uses a plain dim barrier and slides up
+/// with no blur. No field is autofocused so the keyboard does not pop up when
+/// the sheet opens.
 abstract final class GraphEditor {
   /// Shows the editor, resolving with the saved [GraphConfig] or null when
   /// dismissed.
@@ -92,15 +92,6 @@ class _GraphEditorSheetState extends State<_GraphEditorSheet> {
         setState(() => _titleError = null);
       }
     });
-    // Focus the title while the sheet is still animating in: modal routes
-    // only deliver `autofocus` after the entrance completes, which visibly
-    // delayed the keyboard. Only for editing: adding a graph should not
-    // grab focus right away.
-    if (initial != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _titleFocus.requestFocus();
-      });
-    }
   }
 
   @override
