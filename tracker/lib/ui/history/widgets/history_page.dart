@@ -82,7 +82,8 @@ class _HistoryPageState extends State<HistoryPage> {
         const SliverFillRemaining(hasScrollBody: false, child: _EmptyHistory()),
       );
     } else {
-      final sessions = snapshot.data ?? const <WorkoutSession>[];
+      final sessions = (snapshot.data ?? const <WorkoutSession>[]).toList()
+        ..sort((a, b) => b.startTime.compareTo(a.startTime));
       slivers.add(
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
