@@ -74,7 +74,7 @@ class _SessionEditPageState extends State<SessionEditPage> {
   String get _gymLabel {
     final gym = _gym;
     if (gym != null) return gym.name;
-    if (_gymId == null) return 'No gym';
+    if (_gymId == null) return 'Other gym';
     return _gymLoaded ? 'Unknown gym' : 'Loading...';
   }
 
@@ -162,23 +162,25 @@ class _SessionEditPageState extends State<SessionEditPage> {
     });
   }
 
-  /// Applies the picked start time and keeps the logged duration stable by
-  /// shifting the end time by the same delta.
+  /// Applies the picked start time. The end time stays fixed, so editing the
+  /// start time changes the session duration (the user forgot to start but
+  /// remembered to finish).
   void _applyStart(DateTime picked) {
     setState(() {
-      final delta = picked.difference(_start);
       _start = picked;
-      final end = _end;
-      if (end != null) {
-        _end = end.add(delta);
-      }
     });
   }
 
   Future<void> _pickStart() async {
-    final picked = await _pickStartDateTime(context, _start);
+    final picked = await _pickDateTime(context, _start, 'Start time');
     if (!mounted || picked == null) return;
     _applyStart(picked);
+  }
+
+  Future<void> _pickEnd() async {
+    final picked = await _pickDateTime(context, _end ?? _start, 'End time');
+    if (!mounted || picked == null) return;
+    setState(() => _end = picked);
   }
 
   Future<void> _pickGym() async {
@@ -254,8 +256,10 @@ class _SessionEditPageState extends State<SessionEditPage> {
                       title: _title,
                       titleError: _titleError,
                       start: _start,
+                      end: _end,
                       onPickGym: _pickGym,
                       onPickStart: _pickStart,
+                      onPickEnd: _pickEnd,
                       gymLabel: _gymLabel,
                     ),
                     const SizedBox(height: 16),
@@ -301,57 +305,90 @@ class _SessionFieldsCard extends StatelessWidget {
     required this.titleError,
     required this.gymLabel,
     required this.start,
+    required this.end,
     required this.onPickGym,
     required this.onPickStart,
+    required this.onPickEnd,
   });
 
   final TextEditingController title;
   final String? titleError;
   final String gymLabel;
   final DateTime start;
+  final DateTime? end;
   final VoidCallback onPickGym;
   final VoidCallback onPickStart;
+  final VoidCallback onPickEnd;
 
   @override
   Widget build(BuildContext context) {
     final d = start.toLocal();
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          FTextField(
-            control: FTextFieldControl.managed(controller: title),
-            label: const Text('Title'),
-            error: titleError == null ? null : Text(titleError!),
+    final e = end?.toLocal();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        FTextField(
+          control: FTextFieldControl.managed(controller: title),
+          label: const Text('Title'),
+          error: titleError == null ? null : Text(titleError!),
+        ),
+        const SizedBox(height: 16),
+        FItem(
+          prefix: const Icon(FLucideIcons.dumbbell),
+          title: const Text('Gym'),
+          subtitle: Text(gymLabel),
+          suffix: const SizedBox(
+            width: 4,
+            child: Icon(FLucideIcons.chevronRight, size: 16),
           ),
-          const SizedBox(height: 16),
-          FItem(
-            prefix: const Icon(FLucideIcons.dumbbell),
-            title: const Text('Gym'),
-            subtitle: Text(gymLabel),
-            suffix: const Icon(FLucideIcons.chevronRight),
-            onPress: onPickGym,
-          ),
-          const FDivider(),
-          FItem(
-            prefix: const Icon(FLucideIcons.calendar),
-            title: const Text('Started'),
-            subtitle: Text(
-              '${d.year}-${_p(d.month)}-${_p(d.day)} ${_p(d.hour)}:${_p(d.minute)}',
+          onPress: onPickGym,
+        ),
+        Row(
+          children: <Widget>[
+            Expanded(
+              child: FItem(
+                prefix: const Icon(FLucideIcons.clock),
+                title: const Text('Started'),
+                subtitle: Text(
+                  (e != null &&
+                          d.year == e.year &&
+                          d.month == e.month &&
+                          d.day == e.day)
+                      ? '${_p(d.hour)}:${_p(d.minute)}'
+                      : '${d.year}-${_p(d.month)}-${_p(d.day)} ${_p(d.hour)}:${_p(d.minute)}',
+                ),
+                suffix: const SizedBox(
+                  width: 4,
+                  child: Icon(FLucideIcons.chevronRight, size: 16),
+                ),
+                onPress: onPickStart,
+              ),
             ),
-            suffix: const Icon(FLucideIcons.chevronRight),
-            onPress: onPickStart,
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Editing the start time keeps the session duration.',
-            style: context.theme.typography.body.xs.copyWith(
-              color: context.theme.colors.mutedForeground,
+            const FDivider(),
+            Expanded(
+              child: FItem(
+                prefix: const Icon(FLucideIcons.clock),
+                title: const Text('Ended'),
+                subtitle: Text(
+                  e != null
+                      ? (e.year == d.year &&
+                                e.month == d.month &&
+                                e.day == d.day)
+                            ? '${_p(e.hour)}:${_p(e.minute)}'
+                            : '${e.year}-${_p(e.month)}-${_p(e.day)} ${_p(e.hour)}:${_p(e.minute)}'
+                      : '—',
+                ),
+                suffix: const SizedBox(
+                  width: 4,
+                  child: Icon(FLucideIcons.chevronRight, size: 16),
+                ),
+                onPress: onPickEnd,
+              ),
             ),
-          ),
-        ],
-      ),
+          ],
+        ),
+        const SizedBox(height: 6),
+      ],
     );
   }
 
@@ -381,7 +418,10 @@ class _EditSetRow extends StatelessWidget {
         subtitle: Text(
           '${formatWeight(context, set.weight)} × ${formatReps(set.reps)}',
         ),
-        suffix: const Icon(FLucideIcons.chevronRight),
+        suffix: const SizedBox(
+          width: 4,
+          child: Icon(FLucideIcons.chevronRight, size: 16),
+        ),
       ),
     );
   }
@@ -412,7 +452,7 @@ final class _SessionDraftSnapshot {
   final List<WorkoutSet> sets;
 }
 
-/// Bottom sheet over the gyms plus an explicit "No gym" entry; returns the
+/// Bottom sheet over the gyms plus an explicit "Other gym" entry; returns the
 /// picked [Gym], `[_NoGym]` to clear, or null on dismiss.
 Future<Object?> _pickGymSheet(BuildContext context, List<Gym> gyms) {
   return showModalBottomSheet<Object>(
@@ -445,7 +485,7 @@ Future<Object?> _pickGymSheet(BuildContext context, List<Gym> gyms) {
               ),
             FItem(
               prefix: const Icon(FLucideIcons.ban),
-              title: const Text('No gym'),
+              title: const Text('Other gym'),
               onPress: () => Navigator.of(sheetContext).pop(const _NoGym()),
             ),
             const Divider(height: 1),
@@ -469,12 +509,16 @@ Future<Object?> _pickGymSheet(BuildContext context, List<Gym> gyms) {
 
 /// Date + time wheels in a dialog; returns the picked [DateTime] or null on
 /// cancel. Captures wheel changes in a local, so Save just pops with it.
-Future<DateTime?> _pickStartDateTime(BuildContext context, DateTime initial) {
+Future<DateTime?> _pickDateTime(
+  BuildContext context,
+  DateTime initial,
+  String title,
+) {
   var picked = initial;
   return showFDialog<DateTime>(
     context: context,
     builder: (dialogContext, _, _) => AppDialog(
-      title: 'Start time',
+      title: title,
       headerGap: 12,
       actionsGap: 16,
       scrollable: true,
