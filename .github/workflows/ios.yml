@@ -27,6 +27,16 @@ jobs:
       with:
         channel: stable
         flutter-version-file: tracker/pubspec.yaml
+        # Also caches pub packages (keyed on pubspec.lock); flutter pub get
+        # still runs every time, so a stale cache can only cost a
+        # re-download, never produce a wrong build.
+        cache: true
+    - name: Cache CocoaPods
+      uses: actions/cache@v4
+      with:
+        path: ~/Library/Caches/CocoaPods
+        # Pod versions are pinned by Podfile.lock, which is the cache key.
+        key: v1-pods-${{ runner.os }}-${{ hashFiles('tracker/ios/Podfile.lock') }}
     - name: Install Dependencies
       run: flutter pub get
     - name: Verify generated code
