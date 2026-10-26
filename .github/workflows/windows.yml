@@ -28,6 +28,10 @@ jobs:
         channel: stable
         flutter-version-file: tracker/pubspec.yaml
         architecture: X64
+        # Also caches pub packages (keyed on pubspec.lock); flutter pub get
+        # still runs every time, so a stale cache can only cost a
+        # re-download, never produce a wrong build.
+        cache: true
     - name: Install Dependencies
       run: flutter pub get
     - name: Run Tests
