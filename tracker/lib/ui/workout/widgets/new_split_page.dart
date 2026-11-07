@@ -184,6 +184,44 @@ class _SplitEditorPageState extends State<SplitEditorPage> {
     }
   }
 
+  /// Days as a drag-to-reorder list. Keys are the day objects themselves: a
+  /// reorder moves the same object, so its row keeps its identity, and the
+  /// tap handlers always read the index of the current build.
+  Widget _buildReorderableDays() {
+    return ReorderableListView(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      buildDefaultDragHandles: false,
+      onReorderItem: _onReorderDay,
+      children: [
+        for (var i = 0; i < _days.length; i++)
+          FItem(
+            key: ObjectKey(_days[i]),
+            prefix: ReorderableDragStartListener(
+              index: i,
+              child: const Icon(FLucideIcons.gripHorizontal, size: 18),
+            ),
+            title: Text(_days[i].title),
+            subtitle: Text(plural('exercise', _days[i].exercises.length)),
+            suffix: AppIconButton(
+              icon: FLucideIcons.trash2,
+              tooltip: 'Remove day',
+              onPress: () => _removeDay(_days[i]),
+            ),
+            onPress: () => _openDayEditor(i),
+          ),
+      ],
+    );
+  }
+
+  void _onReorderDay(int oldIndex, int newIndex) {
+    setState(() {
+      // onReorderItem already accounts for the removed item at oldIndex.
+      final day = _days.removeAt(oldIndex);
+      _days.insert(newIndex, day);
+    });
+  }
+
   Future<void> _removeDay(WorkoutSplitDay day) async {
     final confirmed = await showConfirmDialog(
       context,
@@ -337,19 +375,7 @@ class _SplitEditorPageState extends State<SplitEditorPage> {
                   if (_days.isEmpty)
                     const Text('No days yet - add one below.')
                   else
-                    for (var i = 0; i < _days.length; i++)
-                      FItem(
-                        title: Text(_days[i].title),
-                        subtitle: Text(
-                          plural('exercise', _days[i].exercises.length),
-                        ),
-                        suffix: AppIconButton(
-                          icon: FLucideIcons.trash2,
-                          tooltip: 'Remove day',
-                          onPress: () => _removeDay(_days[i]),
-                        ),
-                        onPress: () => _openDayEditor(i),
-                      ),
+                    _buildReorderableDays(),
                   const SizedBox(height: 12),
                   FButton(
                     variant: .outline,
