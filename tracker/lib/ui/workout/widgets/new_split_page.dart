@@ -11,6 +11,7 @@ import 'package:tracker/ui/core/ui/keyboard_inset.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
 import 'package:tracker/ui/core/ui/unsaved_changes_dialog.dart';
 import 'package:tracker/ui/core/ui/weight_format.dart';
+import 'package:tracker/utils/form_validators.dart';
 
 import 'split_day_editor_page.dart';
 
@@ -34,15 +35,15 @@ class _SplitEditorPageState extends State<SplitEditorPage> {
   List<WorkoutSplitDay> _days = [];
   bool _saving = false;
 
+  /// Split-name error, set only by [_save]; typing in the name field clears it.
+  String? _titleError;
+
   /// Snapshot of the split as loaded; compared against the live draft to
   /// detect unsaved changes when the user tries to leave without saving.
   /// For a new split this is the pristine empty draft.
   WorkoutSplit? _initial;
 
   bool get _isNew => widget.split == null;
-
-  String? get _titleError =>
-      _title.text.trim().isEmpty ? 'Cannot be empty' : null;
 
   /// True when the draft differs from what was loaded (see [_initial]):
   /// title, description, days, or their exercise plans.
@@ -177,6 +178,7 @@ class _SplitEditorPageState extends State<SplitEditorPage> {
       }
       setState(() {
         _title.text = template.title;
+        _titleError = null;
         _days = template.createDays();
       });
     }
@@ -199,8 +201,9 @@ class _SplitEditorPageState extends State<SplitEditorPage> {
   }
 
   Future<void> _save() async {
-    if (_titleError != null) {
-      setState(() {});
+    final titleError = requiredText(_title.text);
+    if (titleError != null) {
+      setState(() => _titleError = titleError);
       return;
     }
 
@@ -287,7 +290,8 @@ class _SplitEditorPageState extends State<SplitEditorPage> {
                   FTextField(
                     control: FTextFieldControl.managed(
                       controller: _title,
-                      onChange: (_) => setState(() {}),
+                      // Typing clears the error; only Save raises it again.
+                      onChange: (_) => setState(() => _titleError = null),
                     ),
                     label: const Text('Split name'),
                     error: _titleError == null ? null : Text(_titleError!),
