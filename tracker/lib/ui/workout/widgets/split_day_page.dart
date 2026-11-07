@@ -95,7 +95,7 @@ class _SplitDayPageState extends State<SplitDayPage> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
                 Text(
-                  widget.splitTitle,
+                  'Exercises',
                   style: context.theme.typography.body.xl.copyWith(
                     fontWeight: FontWeight.w600,
                   ),
