@@ -122,6 +122,27 @@ class _SplitDayPageState extends State<SplitDayPage> {
                         padding: const EdgeInsets.all(12),
                         child: Row(
                           children: [
+                            // Fixed width so exercise names line up once the
+                            // order reaches two digits.
+                            SizedBox(
+                              width: 20,
+                              child: Text(
+                                '${index + 1}',
+                                style: context.theme.typography.body.sm
+                                    .copyWith(
+                                      color:
+                                          context.theme.colors.mutedForeground,
+                                    ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                _names[item.exerciseId] ??
+                                    'Exercise ${item.exerciseId}',
+                              ),
+                            ),
+                            const SizedBox(width: 12),
                             // Planned sets are the source of truth; legacy
                             // items (saved before sets existed) fall back to
                             // their old target field.
@@ -129,13 +150,6 @@ class _SplitDayPageState extends State<SplitDayPage> {
                               count: item.sets.isNotEmpty
                                   ? item.sets.length
                                   : item.targetSets,
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                _names[item.exerciseId] ??
-                                    'Exercise ${item.exerciseId}',
-                              ),
                             ),
                           ],
                         ),

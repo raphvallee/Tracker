@@ -37,13 +37,39 @@ void main() {
     );
     await pumpAppPage(tester, SplitDayPage(splitTitle: 'PPL', day: day));
 
-    expect(find.text('3'), findsOneWidget);
-    expect(find.text('sets'), findsNWidgets(2));
-    expect(find.text('1'), findsOneWidget);
-    expect(find.text('set'), findsOneWidget);
+    // Orders are 1, 2, 3 and set counts are 3, 1, 4.
+    expect(find.text('1'), findsNWidgets(2));
+    expect(find.text('2'), findsOneWidget);
+    expect(find.text('3'), findsNWidgets(2));
     expect(find.text('4'), findsOneWidget);
+    expect(find.text('sets'), findsNWidgets(2));
+    expect(find.text('set'), findsOneWidget);
     expect(find.textContaining('8-12'), findsNothing);
     expect(find.textContaining('reps'), findsNothing);
+  });
+
+  testWidgets('order sits left of the name and set count right of it', (
+    tester,
+  ) async {
+    final day = WorkoutSplitDay(
+      title: 'Push Day',
+      description: '',
+      order: 0,
+      exercises: [
+        ExerciseItem(
+          exerciseId: 7,
+          order: 0,
+          sets: [for (var i = 0; i < 5; i++) PlannedSet(order: i, minReps: 8)],
+        ),
+      ],
+    );
+    await pumpAppPage(tester, SplitDayPage(splitTitle: 'PPL', day: day));
+
+    final order = tester.getCenter(find.text('1')).dx;
+    final name = tester.getCenter(find.text('Exercise 7')).dx;
+    final count = tester.getCenter(find.text('5')).dx;
+    expect(order, lessThan(name));
+    expect(name, lessThan(count));
   });
 
   testWidgets('exercises without any plan leave the count blank', (
