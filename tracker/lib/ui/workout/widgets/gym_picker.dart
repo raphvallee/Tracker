@@ -162,6 +162,10 @@ class _EditGymDialogState extends State<EditGymDialog> {
   late final TextEditingController _description;
   late final TextEditingController _multiplier;
 
+  // Set only by Save; typing in the matching field clears its error.
+  String? _nameError;
+  String? _multiplierError;
+
   @override
   void initState() {
     super.initState();
@@ -203,8 +207,12 @@ class _EditGymDialogState extends State<EditGymDialog> {
               _multiplier.text,
               isPrimary: widget.initial.isPrimary,
             );
-            if (_gymNameError(nameText) != null || multiplierError != null) {
-              setState(() {});
+            final nameError = _gymNameError(nameText);
+            if (nameError != null || multiplierError != null) {
+              setState(() {
+                _nameError = nameError;
+                _multiplierError = multiplierError;
+              });
               return;
             }
             final candidate = Gym(
@@ -243,12 +251,10 @@ class _EditGymDialogState extends State<EditGymDialog> {
           FTextField(
             control: FTextFieldControl.managed(
               controller: _name,
-              onChange: (_) => setState(() {}),
+              onChange: (_) => setState(() => _nameError = null),
             ),
             label: const Text('Gym name'),
-            error: _gymNameError(_name.text) == null
-                ? null
-                : Text(_gymNameError(_name.text)!),
+            error: _nameError == null ? null : Text(_nameError!),
           ),
           const SizedBox(height: 12),
           FTextField(
@@ -262,7 +268,7 @@ class _EditGymDialogState extends State<EditGymDialog> {
           FTextField(
             control: FTextFieldControl.managed(
               controller: _multiplier,
-              onChange: (_) => setState(() {}),
+              onChange: (_) => setState(() => _multiplierError = null),
             ),
             enabled: !widget.initial.isPrimary,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -276,19 +282,7 @@ class _EditGymDialogState extends State<EditGymDialog> {
                   ? 'The primary gym is the fixed baseline.'
                   : 'Scales logged weights to the primary gym.',
             ),
-            error:
-                _gymMultiplierError(
-                      _multiplier.text,
-                      isPrimary: widget.initial.isPrimary,
-                    ) ==
-                    null
-                ? null
-                : Text(
-                    _gymMultiplierError(
-                      _multiplier.text,
-                      isPrimary: widget.initial.isPrimary,
-                    )!,
-                  ),
+            error: _multiplierError == null ? null : Text(_multiplierError!),
           ),
         ],
       ),
