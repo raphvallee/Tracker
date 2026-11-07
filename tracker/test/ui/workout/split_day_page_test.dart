@@ -4,11 +4,114 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forui/forui.dart';
 import 'package:tracker/domain/models/workout_split.dart';
+import 'package:tracker/ui/core/ui/swipeable_text.dart';
 import 'package:tracker/ui/workout/widgets/split_day_page.dart';
 
 import '../../../testing/test_helpers.dart';
 
 void main() {
+  testWidgets('exercises show their set count and no rep targets', (
+    tester,
+  ) async {
+    final day = WorkoutSplitDay(
+      title: 'Push Day',
+      description: '',
+      order: 0,
+      exercises: [
+        ExerciseItem(
+          exerciseId: 1,
+          order: 0,
+          sets: [
+            PlannedSet(order: 0, minReps: 10),
+            PlannedSet(order: 1, minReps: 8, maxReps: 12),
+            PlannedSet(order: 2, minReps: 8, maxReps: 12),
+          ],
+        ),
+        ExerciseItem(
+          exerciseId: 2,
+          order: 1,
+          sets: [PlannedSet(order: 0, minReps: 5)],
+        ),
+        // Legacy item saved before planned sets existed.
+        ExerciseItem(exerciseId: 3, order: 2, targetSets: 4, targetReps: 6),
+      ],
+    );
+    await pumpAppPage(tester, SplitDayPage(splitTitle: 'PPL', day: day));
+
+    // Orders are 1, 2, 3 and set counts are 3, 1, 4.
+    expect(find.text('1'), findsNWidgets(2));
+    expect(find.text('2'), findsOneWidget);
+    expect(find.text('3'), findsNWidgets(2));
+    expect(find.text('4'), findsOneWidget);
+    expect(find.text('sets'), findsNWidgets(2));
+    expect(find.text('set'), findsOneWidget);
+    expect(find.textContaining('8-12'), findsNothing);
+    expect(find.textContaining('reps'), findsNothing);
+  });
+
+  testWidgets('heading reads Exercises, not the split title', (tester) async {
+    final day = WorkoutSplitDay(
+      title: 'Push Day',
+      description: '',
+      order: 0,
+      exercises: [ExerciseItem(exerciseId: 1, order: 0)],
+    );
+    await pumpAppPage(tester, SplitDayPage(splitTitle: 'PPL', day: day));
+
+    expect(find.text('Exercises'), findsOneWidget);
+    expect(find.text('PPL'), findsNothing);
+    expect(find.textContaining('PPL ·'), findsNothing);
+    // The day title stays in the app bar only.
+    expect(find.text('Push Day'), findsOneWidget);
+  });
+
+  testWidgets('order sits left of the name and set count right of it', (
+    tester,
+  ) async {
+    final day = WorkoutSplitDay(
+      title: 'Push Day',
+      description: '',
+      order: 0,
+      exercises: [
+        ExerciseItem(
+          exerciseId: 7,
+          order: 0,
+          sets: [for (var i = 0; i < 5; i++) PlannedSet(order: i, minReps: 8)],
+        ),
+      ],
+    );
+    await pumpAppPage(tester, SplitDayPage(splitTitle: 'PPL', day: day));
+
+    expect(
+      find.ancestor(
+        of: find.text('Exercise 7'),
+        matching: find.byType(SwipeableText),
+      ),
+      findsOneWidget,
+    );
+    final order = tester.getCenter(find.text('1')).dx;
+    final name = tester.getCenter(find.text('Exercise 7')).dx;
+    final count = tester.getCenter(find.text('5')).dx;
+    expect(order, lessThan(name));
+    expect(name, lessThan(count));
+  });
+
+  testWidgets('exercises without any plan leave the count blank', (
+    tester,
+  ) async {
+    final day = WorkoutSplitDay(
+      title: 'Push Day',
+      description: '',
+      order: 0,
+      exercises: [ExerciseItem(exerciseId: 1, order: 0)],
+    );
+    await pumpAppPage(tester, SplitDayPage(splitTitle: 'PPL', day: day));
+
+    expect(find.text('Exercise 1'), findsOneWidget);
+    expect(find.text('sets'), findsNothing);
+    expect(find.text('set'), findsNothing);
+  });
+
   testWidgets('exercise cards on the split day page are 8px apart', (
     tester,
   ) async {

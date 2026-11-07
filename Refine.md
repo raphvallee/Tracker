@@ -19,7 +19,7 @@
 - [x] In the splitday editor, add a couple pixel of gap between sets when there are multiple
 - [x] In the splitday editor, when switching back and forth between fixed and rep range, we should remember the max reps range so we can put it back if the user had accidentally switched the mode. (Exemple: if it default to 8-12, then user customizes it to 5-9, then he switches to fixed, the fix reps will be 5, then he switches back to rep-range, it becomes 5-9 again) dont store that value in the persistent db across restart, we just want it while hes editing that set
 - [x] Split Days should be re-orderable just like splitdays exercices
-- [ ] When clicking on a split day before starting the workout, the descriptions for the sets is really confusing.
+- [x] When clicking on a split day before starting the workout, the descriptions for the sets is really confusing.
 - [x] When clicking on a split day before starting the workout, we should add a gap between exercices.
 	
 ## Workout

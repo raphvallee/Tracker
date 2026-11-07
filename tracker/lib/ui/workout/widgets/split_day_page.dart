@@ -6,6 +6,7 @@ import 'package:tracker/routing/tab_navigation.dart';
 import 'package:tracker/domain/models/gym.dart';
 import 'package:tracker/domain/models/workout_split.dart';
 import 'package:tracker/ui/core/ui/custom_app_bar.dart';
+import 'package:tracker/ui/core/ui/swipeable_text.dart';
 import 'package:tracker/ui/workout/view_models/workout_cubit.dart';
 
 import 'gym_picker.dart';
@@ -94,7 +95,7 @@ class _SplitDayPageState extends State<SplitDayPage> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
                 Text(
-                  '${widget.splitTitle} · ${widget.day.title}',
+                  'Exercises',
                   style: context.theme.typography.body.xl.copyWith(
                     fontWeight: FontWeight.w600,
                   ),
@@ -122,20 +123,35 @@ class _SplitDayPageState extends State<SplitDayPage> {
                         padding: const EdgeInsets.all(12),
                         child: Row(
                           children: [
-                            Text('${index + 1}'),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    _names[item.exerciseId] ??
-                                        'Exercise ${item.exerciseId}',
-                                  ),
-                                  ...[_targetSubtitle(item)]
-                                      .whereType<Widget>(),
-                                ],
+                            // Fixed width so exercise names line up once the
+                            // order reaches two digits.
+                            SizedBox(
+                              width: 20,
+                              child: Text(
+                                '${index + 1}',
+                                style: context.theme.typography.body.sm
+                                    .copyWith(
+                                      color:
+                                          context.theme.colors.mutedForeground,
+                                    ),
                               ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: SwipeableText(
+                                _names[item.exerciseId] ??
+                                    'Exercise ${item.exerciseId}',
+                                style: context.theme.typography.body.md,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            // Planned sets are the source of truth; legacy
+                            // items (saved before sets existed) fall back to
+                            // their old target field.
+                            _SetCount(
+                              count: item.sets.isNotEmpty
+                                  ? item.sets.length
+                                  : item.targetSets,
                             ),
                           ],
                         ),
@@ -184,16 +200,45 @@ class _SplitDayPageState extends State<SplitDayPage> {
   }
 
   List<ExerciseItem> get items => widget.day.exercises;
+}
 
-  Widget? _targetSubtitle(ExerciseItem item) {
-    // Planned sets are the source of truth; legacy items (saved before sets
-    // existed) fall back to their old target fields.
-    final summary = plannedSetsSummary(item.sets);
-    if (summary != null) return Text(summary);
-    if (item.targetSets == null && item.targetReps == null) return null;
-    final parts = <String>[];
-    if (item.targetSets != null) parts.add('${item.targetSets} sets');
-    if (item.targetReps != null) parts.add('${item.targetReps} reps');
-    return Text(parts.join(' × '));
+/// The number of sets planned for an exercise, set large in a fixed-width
+/// column so the counts line up down the day and scan like a program sheet.
+/// Blank when the exercise has no planned sets.
+class _SetCount extends StatelessWidget {
+  const _SetCount({required this.count});
+
+  final int? count;
+
+  @override
+  Widget build(BuildContext context) {
+    final count = this.count;
+    final typography = context.theme.typography;
+    return SizedBox(
+      width: 36,
+      child: count == null
+          ? null
+          : MergeSemantics(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  Text(
+                    '$count',
+                    style: typography.body.xl.copyWith(
+                      fontWeight: FontWeight.w700,
+                      height: 1.1,
+                    ),
+                  ),
+                  Text(
+                    count == 1 ? 'set' : 'sets',
+                    style: typography.body.xs.copyWith(
+                      color: context.theme.colors.mutedForeground,
+                      height: 1.1,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+    );
   }
 }

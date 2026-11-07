@@ -16,26 +16,11 @@ void main() {
     });
   });
 
-  group('plannedSetsSummary', () {
-    test('returns null for an empty list', () {
-      expect(plannedSetsSummary(const []), isNull);
-    });
-
-    test('collapses identical targets into one label', () {
-      final sets = [
-        PlannedSet(order: 0, minReps: 8, maxReps: 12),
-        PlannedSet(order: 1, minReps: 8, maxReps: 12),
-        PlannedSet(order: 2, minReps: 8, maxReps: 12),
-      ];
-      expect(plannedSetsSummary(sets), '3 × 8-12');
-    });
-
-    test('lists each distinct target when sets differ', () {
-      final sets = [
-        PlannedSet(order: 0, minReps: 10),
-        PlannedSet(order: 1, minReps: 8, maxReps: 12),
-      ];
-      expect(plannedSetsSummary(sets), '2 × 10, 8-12');
+  group('repsUnit', () {
+    test('is singular only for a fixed target of one rep', () {
+      expect(PlannedSet(minReps: 1).repsUnit, 'rep');
+      expect(PlannedSet(minReps: 10).repsUnit, 'reps');
+      expect(PlannedSet(minReps: 1, maxReps: 3).repsUnit, 'reps');
     });
   });
 }
