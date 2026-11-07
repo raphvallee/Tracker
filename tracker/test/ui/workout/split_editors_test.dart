@@ -313,6 +313,156 @@ void main() {
     expect(set.maxReps, isNull);
   });
 
+  testWidgets('restores a customized range max after a fixed round trip', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+    final result = pushEditor(
+      tester,
+      WorkoutSplitDay(
+        title: 'Push',
+        exercises: [
+          ExerciseItem(
+            exerciseId: 1,
+            order: 0,
+            sets: [PlannedSet(order: 0, minReps: 8, maxReps: 12)],
+          ),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Customize the range from 8-12 to 5-9.
+    final fields = find.descendant(
+      of: setRow(0, 0),
+      matching: find.byType(EditableText),
+    );
+    await tester.enterText(fields.at(0), '5');
+    await tester.enterText(fields.at(1), '9');
+    await tester.pumpAndSettle();
+
+    // Fixed reps keep the min.
+    await tester.tap(fButtonByTooltip('Use fixed reps'));
+    await tester.pumpAndSettle();
+    expect(fieldOf(tester, 0, 0).text, '5');
+
+    // Back to a range: 5-9 again, not the Settings default 8-12.
+    await tester.tap(fButtonByTooltip('Use rep range'));
+    await tester.pumpAndSettle();
+    expect(fieldOf(tester, 0, 0).text, '5');
+    expect(fieldOf(tester, 0, 0, index: 1).text, '9');
+
+    await tester.tap(find.text('Done'));
+    await tester.pumpAndSettle();
+
+    final set = (await result)!.exercises.single.sets.single;
+    expect(set.minReps, 5);
+    expect(set.maxReps, 9);
+  });
+
+  testWidgets('falls back to the default max when the min passes it', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+    final result = pushEditor(
+      tester,
+      WorkoutSplitDay(
+        title: 'Push',
+        exercises: [
+          ExerciseItem(
+            exerciseId: 1,
+            order: 0,
+            sets: [PlannedSet(order: 0, minReps: 8, maxReps: 12)],
+          ),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Remember 5-9, then leave the range.
+    final fields = find.descendant(
+      of: setRow(0, 0),
+      matching: find.byType(EditableText),
+    );
+    await tester.enterText(fields.at(0), '5');
+    await tester.enterText(fields.at(1), '9');
+    await tester.pumpAndSettle();
+    await tester.tap(fButtonByTooltip('Use fixed reps'));
+    await tester.pumpAndSettle();
+
+    // Raise the fixed reps past the remembered max of 9.
+    await tester.enterText(fields.at(0), '10');
+    await tester.pumpAndSettle();
+
+    // 9 no longer sits above the min: the default max 12 applies.
+    await tester.tap(fButtonByTooltip('Use rep range'));
+    await tester.pumpAndSettle();
+    expect(fieldOf(tester, 0, 0).text, '10');
+    expect(fieldOf(tester, 0, 0, index: 1).text, '12');
+
+    await tester.tap(find.text('Done'));
+    await tester.pumpAndSettle();
+
+    final set = (await result)!.exercises.single.sets.single;
+    expect(set.minReps, 10);
+    expect(set.maxReps, 12);
+  });
+
+  testWidgets('a row that shows another set forgets the old remembered max', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+    final result = pushEditor(
+      tester,
+      WorkoutSplitDay(
+        title: 'Push',
+        exercises: [
+          ExerciseItem(
+            exerciseId: 1,
+            order: 0,
+            sets: [
+              PlannedSet(order: 0, minReps: 8, maxReps: 12),
+              PlannedSet(order: 1, minReps: 8, maxReps: 12),
+            ],
+          ),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Set 1 remembers max 9.
+    await tester.enterText(
+      find
+          .descendant(of: setRow(0, 0), matching: find.byType(EditableText))
+          .at(1),
+      '9',
+    );
+    await tester.pumpAndSettle();
+
+    // Removing set 1 shifts set 2 into row 0, which must not inherit 9.
+    await tester.tap(
+      find.descendant(
+        of: setRow(0, 0),
+        matching: fButtonByTooltip('Remove set'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(fieldOf(tester, 0, 0, index: 1).text, '12');
+
+    await tester.tap(fButtonByTooltip('Use fixed reps'));
+    await tester.pumpAndSettle();
+    await tester.tap(fButtonByTooltip('Use rep range'));
+    await tester.pumpAndSettle();
+    expect(fieldOf(tester, 0, 0).text, '8');
+    expect(fieldOf(tester, 0, 0, index: 1).text, '12');
+
+    await tester.tap(find.text('Done'));
+    await tester.pumpAndSettle();
+
+    final set = (await result)!.exercises.single.sets.single;
+    expect(set.maxReps, 12);
+  });
+
   testWidgets('back with unsaved changes asks before leaving', (tester) async {
     await pumpApp(tester);
     final result = pushEditor(tester, WorkoutSplitDay(title: 'Push'));
@@ -408,5 +558,35 @@ void main() {
     await tester.tap(find.text('Discard'));
     await tester.pumpAndSettle();
     expect(await result, isNull);
+  });
+
+  testWidgets('planned sets are spaced apart, not flush', (tester) async {
+    await pumpApp(tester);
+    pushEditor(
+      tester,
+      WorkoutSplitDay(
+        title: 'Push',
+        exercises: [
+          ExerciseItem(
+            exerciseId: 1,
+            order: 0,
+            sets: [
+              for (var i = 0; i < 3; i++) PlannedSet(order: i, minReps: 8),
+            ],
+          ),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // The set's grid row excludes the row's bottom padding, so the distance
+    // between consecutive grid rows is the visible gap between sets.
+    Rect gridRowOf(int set) => tester.getRect(
+      find.descendant(of: setRow(0, set), matching: find.byType(Row)).first,
+    );
+
+    final gap = gridRowOf(1).top - gridRowOf(0).bottom;
+    expect(gap, greaterThanOrEqualTo(4));
+    expect(gridRowOf(2).top - gridRowOf(1).bottom, closeTo(gap, 0.01));
   });
 }

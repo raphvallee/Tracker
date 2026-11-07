@@ -184,6 +184,22 @@ class _SplitEditorPageState extends State<SplitEditorPage> {
     }
   }
 
+  Future<void> _removeDay(WorkoutSplitDay day) async {
+    final confirmed = await showConfirmDialog(
+      context,
+      title: 'Remove day?',
+      message:
+          'Remove "${day.title}" and its exercises from this split? '
+          'The change is saved when you save the split.',
+      confirmLabel: 'Remove',
+      destructive: true,
+    );
+    // The dialog is async: the page may have left, and the day may already be
+    // gone, so check both before touching the list.
+    if (!confirmed || !mounted) return;
+    setState(() => _days.remove(day));
+  }
+
   Future<void> _deleteSplit() async {
     final split = widget.split;
     final repo = RepositoryScope.maybeOf(context);
@@ -330,7 +346,7 @@ class _SplitEditorPageState extends State<SplitEditorPage> {
                         suffix: AppIconButton(
                           icon: FLucideIcons.trash2,
                           tooltip: 'Remove day',
-                          onPress: () => setState(() => _days.removeAt(i)),
+                          onPress: () => _removeDay(_days[i]),
                         ),
                         onPress: () => _openDayEditor(i),
                       ),
