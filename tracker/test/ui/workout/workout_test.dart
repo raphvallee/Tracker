@@ -449,7 +449,7 @@ void main() {
 
       // The planned sets render as a summary line, and the reps field is
       // pre-filled with the first planned set's target.
-      expect(find.text('Planned: 2 × 10, 8-12'), findsOneWidget);
+      expect(find.text('Planned: 10, 8-12 reps'), findsOneWidget);
       final repsField = find
           .descendant(
             of: find.byType(FTextField).at(1),
