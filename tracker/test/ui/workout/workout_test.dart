@@ -7,6 +7,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forui/forui.dart';
 import 'package:hydrated_bloc/hydrated_bloc.dart';
@@ -15,11 +16,15 @@ import 'package:tracker/data/services/db.dart';
 import 'package:tracker/data/repositories/tracker_repository.dart';
 import 'package:tracker/domain/models/exercise.dart';
 import 'package:tracker/domain/models/gym.dart';
+import 'package:tracker/domain/models/muscle.dart';
+import 'package:tracker/domain/models/weight_unit.dart';
 import 'package:tracker/domain/models/workout_session.dart';
 import 'package:tracker/domain/models/workout_set.dart';
 import 'package:tracker/domain/models/workout_split.dart';
+import 'package:tracker/main.dart';
+import 'package:tracker/ui/core/ui/repository_scope.dart';
+import 'package:tracker/ui/settings/view_models/settings_cubit.dart';
 import 'package:tracker/ui/workout/view_models/workout_cubit.dart';
-import 'package:tracker/ui/workout/widgets/planned_sets_view.dart';
 
 import '../../../testing/fakes/in_memory_storage.dart';
 import '../../../testing/test_helpers.dart';
@@ -246,6 +251,31 @@ void main() {
       expect(cubit.state.sets.last.exerciseName, 'C');
     });
 
+    test('updateSet edits weight/reps in place, keeping type and order', () {
+      cubit.startWorkout();
+      cubit.logSet(exerciseId: 1, exerciseName: 'A', weight: 10, reps: 5);
+      cubit.logSet(
+        exerciseId: 2,
+        exerciseName: 'B',
+        weight: 20,
+        reps: 5,
+        type: SetType.warmup,
+      );
+
+      cubit.updateSet(1, weight: 22.5, reps: 6);
+
+      final updated = cubit.state.sets.singleWhere((s) => s.order == 1);
+      expect(updated.weight, 22.5);
+      expect(updated.reps, 6);
+      // Everything else about the set is preserved.
+      expect(updated.isWarmup, isTrue);
+      expect(updated.exerciseId, 2);
+      expect(cubit.state.sets, hasLength(2));
+      // A partial update keeps the untouched field.
+      cubit.updateSet(1, weight: 25);
+      expect(cubit.state.sets.singleWhere((s) => s.order == 1).reps, 6);
+    });
+
     test('saved workout can always be restored (leaving history)', () async {
       cubit.startWorkout();
       final originalStart = cubit.state.startTime;
@@ -372,7 +402,9 @@ void main() {
   });
 
   group('CurrentWorkout logging UI', () {
-    testWidgets('logs a set inline from a plan exercise', (tester) async {
+    testWidgets('planned exercises log on blur and keep the typed values', (
+      tester,
+    ) async {
       final cubit = await pumpApp(tester);
       cubit.startPlanWorkout(
         title: 'PPL · Push',
@@ -391,7 +423,10 @@ void main() {
       // The plan title and exercise render.
       expect(find.text('PPL · Push'), findsOneWidget);
       expect(find.text('Bench Press'), findsOneWidget);
-      // One inline add-form → weight + reps fields, warm-up checkbox, Add set.
+      // Planned logging has an add button but no warm-up toggle: leaving the
+      // row (here: the keyboard's done action unfocusing) commits it instead.
+      expect(find.text('Add set'), findsOneWidget);
+      expect(find.byType(FCheckbox), findsNothing);
       expect(find.byType(FTextField), findsNWidgets(2));
       final weightField = find
           .descendant(
@@ -408,23 +443,453 @@ void main() {
 
       await tester.enterText(weightField, '100');
       await tester.enterText(repsField, '5');
-
-      // Mark the set as warm-up before adding (tap the checkbox itself -
-      // FCheckbox's label is not part of the hit target).
-      await tester.tap(find.byType(FCheckbox));
-      await tester.pump();
-      await tester.tap(find.text('Add set'));
+      await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pumpAndSettle();
 
       final state = cubit.state;
       expect(state.sets, hasLength(1));
       expect(state.sets.single.weight, 100);
       expect(state.sets.single.reps, 5);
-      expect(state.sets.single.type, SetType.warmup);
-      expect(find.text('100 kg × 5'), findsOneWidget);
+      // There is no rendered-set display: the set keeps living in its input.
+      expect(find.text('100 kg × 5'), findsNothing);
+      expect(tester.widget<EditableText>(weightField).controller.text, '100');
+      expect(tester.widget<EditableText>(repsField).controller.text, '5');
+
+      // Retyping both values and leaving again edits the same set in place -
+      // it never becomes a duplicate.
+      await tester.enterText(weightField, '120');
+      await tester.enterText(repsField, '6');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+
+      final updated = cubit.state;
+      expect(updated.sets, hasLength(1));
+      expect(updated.sets.single.weight, 120);
+      expect(updated.sets.single.reps, 6);
+      expect(tester.widget<EditableText>(weightField).controller.text, '120');
+      expect(tester.widget<EditableText>(repsField).controller.text, '6');
+
+      // Planned rows are not swipeable: dragging does nothing and never opens
+      // the delete dialog (the plan itself sizes the rows).
+      await tester.timedDrag(
+        weightField,
+        const Offset(-250, 0),
+        const Duration(milliseconds: 200),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Delete this set?'), findsNothing);
+      expect(cubit.state.sets, hasLength(1));
     });
 
-    testWidgets('plan exercises show targets and pre-fill the next reps', (
+    testWidgets('free-form logging keeps the warm-up toggle and add button', (
+      tester,
+    ) async {
+      // Tall enough that the footer row clears the bottom navigation bar.
+      tester.view.physicalSize = const Size(800, 1000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      // A free workout loads its exercise dropdown from the repository, so
+      // pump the real shell scoped to a test Isar with one seeded exercise
+      // (pumpApp has no RepositoryScope). Real Isar IO only progresses inside
+      // tester.runAsync (same concession as pumpPersistenceApp), and there is
+      // no tearDown close: native close never completes in the fake-async
+      // zone, the temp DB dies with the test process instead.
+      late TrackerRepository repo;
+      late int exerciseId;
+      await tester.runAsync(() async {
+        final isar = await openTestIsar([
+          WorkoutSessionSchema,
+          ExerciseSchema,
+          GymSchema,
+        ], name: 'workout_ui_freeform');
+        repo = TrackerRepository(isar);
+        exerciseId = await repo.exercises.put(
+          Exercise(
+            title: 'Bench Press',
+            primaryMuscle: [Muscle.chest],
+            equipment: [Equipment.barbell],
+          ),
+        );
+      });
+
+      // Advances the tree with timed pumps while giving the real event loop
+      // room to land widget-zone Isar reads (pumpAndSettle would hang on the
+      // feed page's live Isar watcher, forever animating).
+      Future<void> pumpUntil(Finder finder) async {
+        for (var i = 0; i < 50; i++) {
+          await tester.pump(const Duration(milliseconds: 100));
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 50)),
+          );
+          if (finder.evaluate().isNotEmpty) return;
+        }
+        fail('expected $finder to become visible');
+      }
+
+      final cubit = WorkoutCubit(repository: repo);
+      addTearDown(cubit.close);
+      await tester.pumpWidget(
+        RepositoryProvider<TrackerRepository>.value(
+          value: repo,
+          child: RepositoryScope(
+            repository: repo,
+            child: MultiBlocProvider(
+              providers: [
+                BlocProvider<WorkoutCubit>.value(value: cubit),
+                BlocProvider<SettingsCubit>(
+                  create: (_) => SettingsCubit()..setUnit(WeightUnit.kilograms),
+                ),
+              ],
+              child: const MyApp(),
+            ),
+          ),
+        ),
+      );
+      await pumpUntil(find.byType(FBottomNavigationBar));
+
+      cubit.startWorkout();
+      tester
+          .widget<FBottomNavigationBar>(find.byType(FBottomNavigationBar))
+          .onChange!(2);
+      await pumpUntil(find.text('Log a set'));
+
+      // Free-form logging keeps its own affordances: the exercise dropdown,
+      // the warm-up toggle and the Add set button (no planned hints). (The
+      // exercise dropdown must match FSelect via a predicate: FSelect's
+      // constructor redirects to a private subclass, so byType never matches.
+      // It renders an internal read-only field too, so the form shows three
+      // FTextFields: exercise, weight, reps.)
+      final exerciseDropdown = find.byWidgetPredicate((w) => w is FSelect<int>);
+      expect(find.text('Add set'), findsOneWidget);
+      expect(find.byType(FCheckbox), findsOneWidget);
+      expect(exerciseDropdown, findsOneWidget);
+      expect(find.byType(FTextField), findsNWidgets(3));
+      final repsField = find
+          .descendant(
+            of: find.byType(FTextField).at(2),
+            matching: find.byType(EditableText),
+          )
+          .first;
+      expect(
+        tester.widget<FTextField>(find.byType(FTextField).at(2)).hint,
+        'Reps',
+      );
+      expect(tester.widget<EditableText>(repsField).controller.text, '');
+
+      // Tapping Add set must materialize the blank row immediately, before
+      // any cubit emission: the row lives in the form now, not behind the
+      // next state-driven rebuild.
+      tester
+          .widget<FButton>(
+            find.ancestor(
+              of: find.text('Add set'),
+              matching: find.byType(FButton),
+            ),
+          )
+          .onPress!();
+      await tester.pump();
+      expect(find.byType(FTextField), findsNWidgets(5)); // 2 rows + dropdown
+      final addedWeightText = find
+          .descendant(
+            of: find.byType(FTextField).at(3),
+            matching: find.byType(EditableText),
+          )
+          .first;
+      expect(tester.widget<EditableText>(addedWeightText).controller.text, '');
+      expect(cubit.state.sets, isEmpty);
+
+      // Pick the exercise through the dropdown's open picker (hit-testing the
+      // popover's animated overlay is unreliable under the test zone, so
+      // invoke the tile's press handler directly), then log a warm-up set via
+      // the kept controls.
+      await tester.tap(exerciseDropdown.first);
+      await pumpUntil(find.text('Bench Press').hitTestable());
+      tilePress() => tester
+          .widget<FItem>(
+            find
+                .ancestor(
+                  of: find.text('Bench Press'),
+                  matching: find.byType(FItem),
+                )
+                .first,
+          )
+          .onPress!;
+      tilePress()();
+      // The tile's press hides the popover (auto-hide) before lifting the
+      // selection; pump the hide animation to completion so the selection
+      // lands and no animation timer outlives the test.
+      for (var i = 0; i < 30; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+        if (find
+            .ancestor(
+              of: find.text('Bench Press'),
+              matching: find.byType(FItem),
+            )
+            .evaluate()
+            .isEmpty) {
+          break;
+        }
+      }
+      await tester.pump();
+
+      final weightField = find
+          .descendant(
+            of: find.byType(FTextField).at(1),
+            matching: find.byType(EditableText),
+          )
+          .first;
+      await tester.enterText(weightField, '50');
+      await tester.enterText(repsField, '8');
+      // Tapping the warm-up toggle does not move focus away from the row
+      // (only focus change commits), so the flag applies to the set when it
+      // finally commits - here through the keyboard's done action.
+      await tester.ensureVisible(find.byType(FCheckbox));
+      await tester.tap(find.byType(FCheckbox));
+      // Forui tappables (checkbox included) defer their press callbacks
+      // through 100ms press/up timers; pump past them so the toggle lands and
+      // no timer outlives the test.
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+
+      final state = cubit.state;
+      expect(state.sets, hasLength(1));
+      expect(state.sets.single.exerciseId, exerciseId);
+      expect(state.sets.single.exerciseName, 'Bench Press');
+      expect(state.sets.single.type, SetType.warmup);
+      // No rendered-set display: the logged set keeps living in its inputs,
+      // and the warm-up flag reset is ready for the next set.
+      expect(find.text('50 kg × 8'), findsNothing);
+      expect(tester.widget<EditableText>(weightField).controller.text, '50');
+      expect(tester.widget<EditableText>(repsField).controller.text, '8');
+      expect(tester.widget<FCheckbox>(find.byType(FCheckbox)).value, isFalse);
+
+      // Add set appends another empty row below the committed one (on top of
+      // the blank row added above, which the commit consumed).
+      tester
+          .widget<FButton>(
+            find.ancestor(
+              of: find.text('Add set'),
+              matching: find.byType(FButton),
+            ),
+          )
+          .onPress!();
+      await tester.pumpAndSettle();
+      expect(find.byType(FTextField), findsNWidgets(7)); // 3 rows + dropdown
+      final nextWeightText = find
+          .descendant(
+            of: find.byType(FTextField).at(3),
+            matching: find.byType(EditableText),
+          )
+          .first;
+      expect(tester.widget<EditableText>(nextWeightText).controller.text, '');
+      expect(cubit.state.sets, hasLength(1));
+
+      // A deletable row is rubber-banded for the first 75% of the delete
+      // distance - the row lags the finger there - and tracks the finger 1:1
+      // from there to the delete distance, 63.5% of the row's width.
+      // The row fills the card's inner width (the card pads 12 on each side).
+      final rowWidth =
+          tester
+              .getSize(
+                find.ancestor(
+                  of: find.byType(FTextField).first,
+                  matching: find.byType(FCard),
+                ),
+              )
+              .width -
+          24;
+      final bandEnd = rowWidth * 0.635 * 0.75;
+      final fieldRect = tester.getRect(find.byType(FTextField).at(1));
+
+      final bandGesture = await tester.startGesture(
+        tester.getCenter(find.byType(FTextField).at(1)),
+      );
+      await bandGesture.moveBy(Offset(-bandEnd / 2, 0));
+      await tester.pump();
+      final halfBandTravel =
+          fieldRect.left - tester.getRect(find.byType(FTextField).at(1)).left;
+      // Rubber-banded: the row moved less than the finger did.
+      expect(halfBandTravel, lessThan(bandEnd / 2));
+      // Releasing inside the band cancels: the row springs back to rest over
+      // several frames - it must not teleport - and no dialog opens.
+      final cancelStartRect = tester.getRect(find.byType(FTextField).at(1));
+      await bandGesture.up();
+      await tester.pump();
+      expect(tester.getRect(find.byType(FTextField).at(1)), cancelStartRect);
+      await tester.pump(const Duration(milliseconds: 30));
+      final earlySpring = tester.getRect(find.byType(FTextField).at(1)).left;
+      expect(earlySpring, greaterThan(cancelStartRect.left));
+      expect(earlySpring, lessThan(fieldRect.left));
+      await tester.pump(const Duration(milliseconds: 30));
+      final laterSpring = tester.getRect(find.byType(FTextField).at(1)).left;
+      expect(laterSpring, greaterThan(earlySpring));
+      expect(laterSpring, lessThan(fieldRect.left));
+      await tester.pumpAndSettle();
+      expect(tester.getRect(find.byType(FTextField).at(1)), fieldRect);
+      expect(find.text('Delete this set?'), findsNothing);
+      expect(cubit.state.sets, hasLength(1));
+
+      final trackGesture = await tester.startGesture(
+        tester.getCenter(find.byType(FTextField).at(1)),
+      );
+      await trackGesture.moveBy(Offset(-bandEnd - 10, 0));
+      await tester.pump();
+      final atBandEnd = tester.getRect(find.byType(FTextField).at(1)).left;
+      // Still lagging the finger when the band ends...
+      expect(fieldRect.left - atBandEnd, lessThan(bandEnd));
+      await trackGesture.moveBy(const Offset(-30, 0));
+      await tester.pump();
+      // ...then nearly keeping pace with it (the mid-swipe stretch only
+      // bleeds a few pixels off those 30px of travel).
+      expect(
+        tester.getRect(find.byType(FTextField).at(1)).left,
+        closeTo(atBandEnd - 30, 6),
+      );
+      await trackGesture.cancel();
+      await tester.pumpAndSettle();
+      expect(tester.getRect(find.byType(FTextField).at(1)), fieldRect);
+      expect(cubit.state.sets, hasLength(1));
+
+      // Past the band but short of the gate the swipe still springs back:
+      // 60% of the row width is not enough to delete.
+      await tester.timedDrag(
+        find.byType(FTextField).at(1),
+        Offset(-rowWidth * 0.6, 0),
+        const Duration(milliseconds: 200),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Delete this set?'), findsNothing);
+      expect(tester.getRect(find.byType(FTextField).at(1)), fieldRect);
+      expect(cubit.state.sets, hasLength(1));
+
+      // Swipe-to-delete (free workouts only): a swipe of at least 63.5% of the
+      // row width on the first row (the logged set) opens the destructive
+      // confirmation first.
+      final rowRect = tester.getRect(find.byType(FTextField).at(1));
+      await tester.timedDrag(
+        find.byType(FTextField).at(1),
+        Offset(-rowWidth * 0.7, 0),
+        const Duration(milliseconds: 200),
+      );
+      await tester.pumpAndSettle();
+      expect(cubit.state.sets, hasLength(1)); // asked, not removed yet
+      expect(find.text('Delete this set?'), findsOneWidget);
+
+      // Cancelling keeps the set and returns the row: the row does not stay
+      // frozen mid-swipe but sits back exactly where it was.
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(cubit.state.sets, hasLength(1));
+      expect(tester.getRect(find.byType(FTextField).at(1)), rowRect);
+      expect(
+        tester
+            .widget<EditableText>(
+              find
+                  .descendant(
+                    of: find.byType(FTextField).at(1),
+                    matching: find.byType(EditableText),
+                  )
+                  .first,
+            )
+            .controller
+            .text,
+        '50',
+      );
+
+      // Confirming removes the set and shifts the remaining rows up: row 0
+      // now holds nothing (the deleted set is gone) and stays blank.
+      await tester.timedDrag(
+        find.byType(FTextField).at(1),
+        Offset(-rowWidth * 1.1, 0),
+        const Duration(milliseconds: 200),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Delete this set?'), findsOneWidget);
+      await tester.tap(find.widgetWithText(FButton, 'Delete'));
+      await tester.pumpAndSettle();
+      expect(cubit.state.sets, isEmpty);
+      // The logged set is gone; the trailing blank rows (the always-available
+      // one plus the added extra) remain for the next entry.
+      expect(find.byType(FTextField), findsNWidgets(5));
+      expect(
+        tester
+            .widget<EditableText>(
+              find
+                  .descendant(
+                    of: find.byType(FTextField).at(1),
+                    matching: find.byType(EditableText),
+                  )
+                  .first,
+            )
+            .controller
+            .text,
+        '',
+      );
+      expect(
+        tester
+            .widget<EditableText>(
+              find
+                  .descendant(
+                    of: find.byType(FTextField).at(3),
+                    matching: find.byType(EditableText),
+                  )
+                  .first,
+            )
+            .controller
+            .text,
+        '',
+      );
+
+      // A blank extra row (Add set) is still removable silently, but it never
+      // asks: there is nothing to lose. It needs the same 63.5% swipe.
+      expect(find.byIcon(FLucideIcons.trash2), findsNWidgets(2));
+      await tester.timedDrag(
+        find.byType(FTextField).at(1),
+        Offset(-rowWidth * 0.7, 0),
+        const Duration(milliseconds: 200),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Delete this set?'), findsNothing);
+      expect(find.byType(FTextField), findsNWidgets(3));
+
+      // Only the always-available logging row is left, and it cannot be
+      // deleted: no delete indicator is revealed at rest (the trash icon
+      // only exists while a deletable row is mid-swipe), a swipe rubber-bands
+      // with sqrt resistance (200px of finger travel move it only ~50px), and
+      // it springs back on release without ever opening the dialog.
+      expect(find.byIcon(FLucideIcons.trash2), findsNothing);
+      final loggingRowRect = tester.getRect(find.byType(FTextField).at(1));
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byType(FTextField).at(1)),
+      );
+      await gesture.moveBy(const Offset(-200, 0));
+      await tester.pump();
+      final draggedRect = tester.getRect(find.byType(FTextField).at(1));
+      expect(draggedRect.left, greaterThan(loggingRowRect.left - 60));
+      expect(draggedRect.left, lessThan(loggingRowRect.left - 20));
+      expect(find.byIcon(FLucideIcons.trash2), findsNothing);
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(tester.getRect(find.byType(FTextField).at(1)), loggingRowRect);
+      expect(find.text('Delete this set?'), findsNothing);
+      expect(cubit.state.sets, isEmpty);
+
+      // Even a swipe past the delete distance cannot delete it: deletability,
+      // not distance, is the gate.
+      await tester.timedDrag(
+        find.byType(FTextField).at(1),
+        Offset(-rowWidth * 1.1, 0),
+        const Duration(milliseconds: 200),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Delete this set?'), findsNothing);
+      expect(tester.getRect(find.byType(FTextField).at(1)), loggingRowRect);
+      expect(cubit.state.sets, isEmpty);
+      expect(find.byType(FTextField), findsNWidgets(3));
+    });
+
+    testWidgets('plan exercises show one row per remaining set with hints', (
       tester,
     ) async {
       final cubit = await pumpApp(tester);
@@ -438,6 +903,7 @@ void main() {
             sets: [
               PlannedSet(order: 0, minReps: 10),
               PlannedSet(order: 1, minReps: 8, maxReps: 12),
+              PlannedSet(order: 2, minReps: 8, maxReps: 12),
             ],
           ),
         ],
@@ -448,37 +914,128 @@ void main() {
           .onChange!(2);
       await tester.pumpAndSettle();
 
-      // The planned sets render as tiles, and the reps field is pre-filled
-      // with the first planned set's target.
+      // The planned sets render as a summary line, and the editor shows one
+      // weight/reps row per planned set, captioned with the set number and
+      // targeting the plan through hints - never pre-filled values.
+      expect(find.text('Planned: 3 × 10, 8-12'), findsNothing);
+      final fields = find.byType(FTextField);
+      expect(fields, findsNWidgets(6)); // 3 rows × (weight + reps)
+      String hintOf(int index) =>
+          tester.widget<FTextField>(fields.at(index)).hint!;
+      expect(hintOf(1), '10');
+      expect(hintOf(3), '8-12');
+      expect(hintOf(5), '8-12');
+      expect(find.text('Set'), findsNWidgets(3));
+      // Set order is not shown: no row numbers.
+      expect(find.text('1'), findsNothing);
+      expect(find.text('2'), findsNothing);
+      expect(find.text('3'), findsNothing);
       expect(
-        find.descendant(
-          of: find.byType(PlannedSetsView),
-          matching: find.text('8-12'),
-        ),
-        findsOneWidget,
+        tester
+            .widget<EditableText>(
+              find
+                  .descendant(
+                    of: fields.at(1),
+                    matching: find.byType(EditableText),
+                  )
+                  .first,
+            )
+            .controller
+            .text,
+        '',
       );
-      final repsField = find
-          .descendant(
-            of: find.byType(FTextField).at(1),
-            matching: find.byType(EditableText),
-          )
-          .first;
-      expect(tester.widget<EditableText>(repsField).controller.text, '10');
 
-      // Logging the first planned set advances the pre-fill to the next
-      // planned set's target (the range minimum).
-      final weightField = find
-          .descendant(
-            of: find.byType(FTextField).at(0),
-            matching: find.byType(EditableText),
-          )
+      Finder fieldText(int index) => find
+          .descendant(of: fields.at(index), matching: find.byType(EditableText))
           .first;
-      await tester.enterText(weightField, '100');
-      await tester.tap(find.text('Add set'));
+
+      // Row 1 commits when focus leaves it - here via the keyboard's done
+      // action - and stays in its inputs; exactly one of three planned sets
+      // is logged.
+      await tester.enterText(fieldText(0), '100');
+      await tester.enterText(fieldText(1), '10');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pumpAndSettle();
 
-      expect(find.text('100 kg × 10'), findsOneWidget);
-      expect(tester.widget<EditableText>(repsField).controller.text, '8');
+      expect(cubit.state.sets, hasLength(1));
+      expect(cubit.state.sets.single.weight, 100);
+      expect(cubit.state.sets.single.reps, 10);
+      expect(find.text('100 kg × 10'), findsNothing);
+      expect(tester.widget<EditableText>(fieldText(0)).controller.text, '100');
+      expect(tester.widget<EditableText>(fieldText(1)).controller.text, '10');
+
+      // Tapping into the next row commits the previous one, with no
+      // keyboard shortcut involved.
+      await tester.enterText(fieldText(2), '80');
+      await tester.enterText(fieldText(3), '8');
+      await tester.enterText(fieldText(4), '90');
+      await tester.pumpAndSettle();
+
+      expect(cubit.state.sets, hasLength(2));
+      expect(cubit.state.sets.last.weight, 80);
+      expect(cubit.state.sets.last.reps, 8);
+      // Row 1 keeps serving the first set; row 2 is the committed one; row 3
+      // still holds the just-typed values waiting for its own commit.
+      expect(tester.widget<EditableText>(fieldText(0)).controller.text, '100');
+      expect(tester.widget<EditableText>(fieldText(2)).controller.text, '80');
+      expect(tester.widget<EditableText>(fieldText(4)).controller.text, '90');
+      // There are exactly three planned rows - the plan, not the log count,
+      // sizes the form.
+      expect(fields, findsNWidgets(6));
+    });
+
+    testWidgets('a partially filled row commits nothing for itself', (
+      tester,
+    ) async {
+      final cubit = await pumpApp(tester);
+      cubit.startPlanWorkout(
+        title: 'PPL · Push',
+        exercises: [
+          PlanExercise(
+            exerciseId: 1,
+            name: 'Bench Press',
+            order: 0,
+            sets: [
+              PlannedSet(order: 0, minReps: 10),
+              PlannedSet(order: 1, minReps: 10),
+              PlannedSet(order: 2, minReps: 10),
+            ],
+          ),
+        ],
+      );
+
+      tester
+          .widget<FBottomNavigationBar>(find.byType(FBottomNavigationBar))
+          .onChange!(2);
+      await tester.pumpAndSettle();
+
+      // Row 1 commits on blur; row 2 only has a weight typed, so blurring it
+      // surfaces the missing-reps error and commits nothing for that row.
+      final fields = find.byType(FTextField);
+      Finder fieldText(int index) => find
+          .descendant(of: fields.at(index), matching: find.byType(EditableText))
+          .first;
+      await tester.enterText(fieldText(0), '100');
+      await tester.enterText(fieldText(1), '10');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(cubit.state.sets, hasLength(1));
+
+      await tester.enterText(fieldText(2), '80');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+
+      expect(cubit.state.sets, hasLength(1));
+      expect(find.text('Must be greater than 0'), findsOneWidget);
+      // The error stays until the row is completed: filling reps and leaving
+      // again logs the row.
+      await tester.enterText(fieldText(3), '8');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(cubit.state.sets, hasLength(2));
+      expect(cubit.state.sets.last.weight, 80);
+      expect(cubit.state.sets.last.reps, 8);
+      expect(find.text('Must be greater than 0'), findsNothing);
     });
 
     testWidgets('fractional reps log and persist exactly (two decimals)', (
@@ -487,8 +1044,16 @@ void main() {
       final cubit = await pumpApp(tester);
       cubit.startPlanWorkout(
         title: 'PPL · Push',
-        exercises: const [
-          PlanExercise(exerciseId: 1, name: 'Bench Press', order: 0),
+        exercises: [
+          PlanExercise(
+            exerciseId: 1,
+            name: 'Bench Press',
+            order: 0,
+            sets: [
+              PlannedSet(order: 0, minReps: 10),
+              PlannedSet(order: 1, minReps: 10),
+            ],
+          ),
         ],
       );
 
@@ -510,14 +1075,14 @@ void main() {
           )
           .first;
 
-      // "3.25" logs as 3.25 - no rounding anywhere.
+      // "3.25" logs as 3.25 - no rounding anywhere. The keyboard's done
+      // action moves focus away, which commits the row.
       await tester.enterText(weightField, '100');
       await tester.enterText(repsField, '3.25');
-      await tester.tap(find.text('Add set'));
+      await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pumpAndSettle();
       expect(cubit.state.sets, hasLength(1));
       expect(cubit.state.sets.single.reps, 3.25);
-      expect(find.text('100 kg × 3.25'), findsOneWidget);
 
       // The live input formatter blocks a third decimal digit while typing.
       await tester.enterText(repsField, '3.255');
@@ -525,41 +1090,43 @@ void main() {
       // A second decimal separator is ignored as well.
       await tester.enterText(repsField, '3.25.5');
       expect(tester.widget<EditableText>(repsField).controller.text, '3.25');
+      // Committing the same value again changes nothing (still one set).
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(cubit.state.sets, hasLength(1));
 
       // Hand-set values (bypassing the formatter, e.g. a paste through other
-      // means) are truncated defensively to two decimals - never rounded.
+      // means) are truncated defensively to two decimals - never rounded -
+      // and leave the same set updated, not duplicated.
       tester.widget<EditableText>(repsField).controller.text = '12.345';
-      // Once two set tiles render, the button can sit below the test viewport;
-      // press the FButton directly instead of hit-testing its label.
-      FButton addSetButton() => tester.widget<FButton>(
-        find.ancestor(of: find.text('Add set'), matching: find.byType(FButton)),
-      );
-      addSetButton().onPress!();
+      // Hand-setting text bypasses the focus too: put the field back on the
+      // keyboard before the done action can unfocus-commit the row.
+      await tester.showKeyboard(repsField);
+      await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pumpAndSettle();
-      expect(cubit.state.sets, hasLength(2));
-      expect(cubit.state.sets.last.reps, 12.34);
-      expect(find.text('100 kg × 12.34'), findsOneWidget);
+      expect(cubit.state.sets, hasLength(1));
+      expect(cubit.state.sets.single.reps, 12.34);
 
       // A fraction below one rep shows an explicit error, never a no-op.
       await tester.enterText(repsField, '0.4');
-      addSetButton().onPress!();
+      await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pumpAndSettle();
-      expect(cubit.state.sets, hasLength(2));
+      expect(cubit.state.sets, hasLength(1));
       expect(find.text('Must be at least 1'), findsOneWidget);
 
       // A leading-decimal value is a fraction too, so it gets the same error
       // rather than being dropped without a message.
       await tester.enterText(repsField, '.5');
-      addSetButton().onPress!();
+      await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pumpAndSettle();
-      expect(cubit.state.sets, hasLength(2));
+      expect(cubit.state.sets, hasLength(1));
       expect(find.text('Must be at least 1'), findsOneWidget);
 
       // Genuinely invalid input keeps the standard validation error.
       await tester.enterText(repsField, 'abc');
-      addSetButton().onPress!();
+      await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pumpAndSettle();
-      expect(cubit.state.sets, hasLength(2));
+      expect(cubit.state.sets, hasLength(1));
       expect(find.text('Must be greater than 0'), findsOneWidget);
     });
   });
