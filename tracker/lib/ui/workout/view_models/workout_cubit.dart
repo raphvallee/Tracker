@@ -644,6 +644,30 @@ class WorkoutCubit extends HydratedCubit<WorkoutState> {
     emit(state.copyWith(sets: sets));
   }
 
+  /// Replace the weight and/or reps of the set at [order], keeping its
+  /// exercise, type and position. Used by the inline set rows when the user
+  /// retypes a logged set's values and leaves the row.
+  void updateSet(int order, {double? weight, double? reps}) {
+    emit(
+      state.copyWith(
+        sets: [
+          for (final set in state.sets)
+            if (set.order == order)
+              ActiveSet(
+                exerciseId: set.exerciseId,
+                exerciseName: set.exerciseName,
+                weight: weight ?? set.weight,
+                reps: reps ?? set.reps,
+                type: set.type,
+                order: set.order,
+              )
+            else
+              set,
+        ],
+      ),
+    );
+  }
+
   /// Abandon the workout without persisting anything. Nothing was saved to
   /// Isar yet, so clearing the hydrated state is all that is needed - but the
   /// session is first snapshotted into in-memory-only state so the workout tab

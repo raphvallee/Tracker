@@ -60,8 +60,9 @@ void main() {
   }
 
   Future<void> addSet(WidgetTester tester) async {
-    await tester.ensureVisible(find.text('Add set'));
-    await tester.tap(find.text('Add set'));
+    // Planned logging has no Add button: the keyboard's done action on the
+    // focused reps field submits the row.
+    await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pumpAndSettle();
   }
 
@@ -96,7 +97,10 @@ void main() {
 
       await tapInDialog(tester, 'Yes, log it');
       expect(cubit.state.sets.single.weight, -20);
-      expect(find.text('-20 kg × 8'), findsOneWidget);
+      // There is no rendered-set tile: the logged set keeps living in its
+      // input row, so the typed values stay editable.
+      expect(textOf(tester, 0), '-20');
+      expect(textOf(tester, 1), '8');
     });
 
     testWidgets('going back logs nothing and keeps the typed values', (
@@ -144,7 +148,7 @@ void main() {
       expect(find.text('Assisted machine?'), findsNothing);
       expect(cubit.state.sets.single.weight, 0);
       expect(cubit.state.sets.single.weight.isNegative, isFalse);
-      expect(find.text('0 kg × 5'), findsOneWidget);
+      expect(textOf(tester, 0), '-0');
     });
   });
 
@@ -155,7 +159,7 @@ void main() {
       await addSet(tester);
 
       expect(cubit.state.sets.single.weight, 0);
-      expect(find.text('0 kg × 5'), findsOneWidget);
+      expect(textOf(tester, 0), '0');
     });
 
     testWidgets('an empty weight shows the range message', (tester) async {
@@ -198,7 +202,7 @@ void main() {
       await addSet(tester);
 
       expect(cubit.state.sets.single.weight, 82.25);
-      expect(find.text('82.25 kg × 5'), findsOneWidget);
+      expect(textOf(tester, 0), '82.25');
     });
   });
 
@@ -308,6 +312,9 @@ void main() {
       expect(settingsOf(tester).state.showHeavyWeightWarning, isTrue);
       expect(cubit.state.sets.length, 1);
 
+      // Re-entering the text re-focuses the reps field, needed so the done
+      // action can reach the form after the dialog took focus away.
+      await enterSet(tester, weight: '750');
       await addSet(tester);
       expect(find.text("That's a lot of weight"), findsOneWidget);
     });
@@ -323,7 +330,7 @@ void main() {
 
       expect(find.text("That's a lot of weight"), findsNothing);
       expect(cubit.state.sets.single.weight, closeTo(453.59, 0.01));
-      expect(find.text('1000 lb × 5'), findsOneWidget);
+      expect(textOf(tester, 0), '1000');
     });
 
     testWidgets('above 1000 lb asks and reports the pound threshold', (
