@@ -4,6 +4,7 @@
 
 - [x] When a field is selected, the keyboard should not hide that field, the page should automatically scroll to allow viewing that field
 - [x] Everywhere a gym selector appears i want the option to "Add Gym"
+- [ ] Every reorderable list where an item can be dragged should have a rubberbanding effect, so the dragged item cannot be pulled outside the borders of the list
 
 ## Settings
 
