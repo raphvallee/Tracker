@@ -84,6 +84,9 @@ extension PlannedSetX on PlannedSet {
 
   /// Human-readable rep target, e.g. `10` or `8-12`.
   String get repsLabel => maxReps == null ? '$minReps' : '$minReps-$maxReps';
+
+  /// Unit for [repsLabel]: singular only for a fixed target of exactly 1 rep.
+  String get repsUnit => !isRange && minReps == 1 ? 'rep' : 'reps';
 }
 
 /// Whether two exercise lists are content-identical: same exercises in the
@@ -113,16 +116,3 @@ bool splitDayPlanEquals(WorkoutSplitDay a, WorkoutSplitDay b) =>
     a.title == b.title &&
     a.description == b.description &&
     exercisePlanEquals(a.exercises, b.exercises);
-
-/// Compact summary of an exercise's planned sets. Identical sets read as
-/// `3 sets × 8-12 reps` (or `1 set × 10 reps`); differing sets list every
-/// target in order, e.g. `10, 8-12, 8-12 reps`. Null when there are no sets.
-String? plannedSetsSummary(List<PlannedSet> sets) {
-  if (sets.isEmpty) return null;
-  final labels = sets.map((set) => set.repsLabel).toList();
-  if (labels.toSet().length > 1) return '${labels.join(', ')} reps';
-  final count = sets.length == 1 ? '1 set' : '${sets.length} sets';
-  final first = sets.first;
-  final unit = first.isRange || first.minReps != 1 ? 'reps' : 'rep';
-  return '$count × ${first.repsLabel} $unit';
-}

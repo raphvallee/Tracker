@@ -23,6 +23,7 @@ import 'package:tracker/utils/decimal_input.dart';
 import 'package:tracker/utils/form_validators.dart';
 
 import 'gym_picker.dart';
+import 'planned_sets_view.dart';
 
 /// The "Current Workout" tab: drives the active session from [WorkoutCubit].
 ///
@@ -469,7 +470,6 @@ class _ExerciseLogCard extends StatelessWidget {
     final titleStyle = context.theme.typography.body.md.copyWith(
       fontWeight: FontWeight.w600,
     );
-    final planSummary = plannedSetsSummary(plannedSets);
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
       child: Column(
@@ -482,13 +482,10 @@ class _ExerciseLogCard extends StatelessWidget {
               Expanded(child: Text(title, style: titleStyle)),
             ],
           ),
-          if (planSummary != null)
-            Text(
-              'Planned: $planSummary',
-              style: context.theme.typography.body.xs.copyWith(
-                color: context.theme.colors.mutedForeground,
-              ),
-            ),
+          if (plannedSets.isNotEmpty) ...<Widget>[
+            const SizedBox(height: 4),
+            PlannedSetsView(sets: plannedSets, captionPrefix: 'Planned: '),
+          ],
           const SizedBox(height: 8),
           if (sets.isEmpty)
             Text(

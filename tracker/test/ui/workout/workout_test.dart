@@ -19,6 +19,7 @@ import 'package:tracker/domain/models/workout_session.dart';
 import 'package:tracker/domain/models/workout_set.dart';
 import 'package:tracker/domain/models/workout_split.dart';
 import 'package:tracker/ui/workout/view_models/workout_cubit.dart';
+import 'package:tracker/ui/workout/widgets/planned_sets_view.dart';
 
 import '../../../testing/fakes/in_memory_storage.dart';
 import '../../../testing/test_helpers.dart';
@@ -447,9 +448,16 @@ void main() {
           .onChange!(2);
       await tester.pumpAndSettle();
 
-      // The planned sets render as a summary line, and the reps field is
-      // pre-filled with the first planned set's target.
-      expect(find.text('Planned: 10, 8-12 reps'), findsOneWidget);
+      // The planned sets render as tiles, and the reps field is pre-filled
+      // with the first planned set's target.
+      expect(find.text('Planned: 2 sets'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(PlannedSetsView),
+          matching: find.text('8-12'),
+        ),
+        findsOneWidget,
+      );
       final repsField = find
           .descendant(
             of: find.byType(FTextField).at(1),

@@ -9,6 +9,7 @@ import 'package:tracker/ui/core/ui/custom_app_bar.dart';
 import 'package:tracker/ui/workout/view_models/workout_cubit.dart';
 
 import 'gym_picker.dart';
+import 'planned_sets_view.dart';
 
 /// A real detail screen for one split day (Milestone 3): shows the day's
 /// exercises and lets the user start that workout as the active session. This
@@ -186,8 +187,12 @@ class _SplitDayPageState extends State<SplitDayPage> {
   Widget? _targetSubtitle(ExerciseItem item) {
     // Planned sets are the source of truth; legacy items (saved before sets
     // existed) fall back to their old target fields.
-    final summary = plannedSetsSummary(item.sets);
-    if (summary != null) return Text(summary);
+    if (item.sets.isNotEmpty) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 6),
+        child: PlannedSetsView(sets: item.sets),
+      );
+    }
     if (item.targetSets == null && item.targetReps == null) return null;
     final parts = <String>[];
     if (item.targetSets != null) parts.add('${item.targetSets} sets');
