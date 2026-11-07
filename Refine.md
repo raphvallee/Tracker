@@ -4,6 +4,7 @@
 
 - [x] When a field is selected, the keyboard should not hide that field, the page should automatically scroll to allow viewing that field
 - [x] Everywhere a gym selector appears i want the option to "Add Gym"
+- [ ] Every reorderable list where an item can be dragged should have a rubberbanding effect, so the dragged item cannot be pulled outside the borders of the list
 
 ## Settings
 
@@ -13,14 +14,13 @@
 	
 ## Editor
 
-- [ ] Field validation should only be done when saving (we have a "cannot be empty" when entering the page for first time)
-- [ ] Removing a split day should prompt confirmation
-- [ ] In the splitday editor, add a couple pixel of gap between sets when there are multiple
-- [ ] In the splitday editor, when switching back and forth between fixed and rep range, we should remember the max reps range so we can put it back if the user had accidentally switched the mode. (Exemple: if it default to 8-12, then user customizes it to 5-9, then he switches to fixed, the fix reps will be 5, then he switches back to rep-range, it becomes 5-9 again) dont store that value in the persistent db across restart, we just want it while hes editing that set
-- [ ] Split Days should be re-orderable just like splitdays exercices
+- [x] Field validation should only be done when saving (we have a "cannot be empty" when entering the page for first time)
+- [x] Removing a split day should prompt confirmation
+- [x] In the splitday editor, add a couple pixel of gap between sets when there are multiple
+- [x] In the splitday editor, when switching back and forth between fixed and rep range, we should remember the max reps range so we can put it back if the user had accidentally switched the mode. (Exemple: if it default to 8-12, then user customizes it to 5-9, then he switches to fixed, the fix reps will be 5, then he switches back to rep-range, it becomes 5-9 again) dont store that value in the persistent db across restart, we just want it while hes editing that set
+- [x] Split Days should be re-orderable just like splitdays exercices
 - [x] When clicking on a split day before starting the workout, the descriptions for the sets is really confusing.
-- [ ] When clicking on a split day before starting the workout, we should add a gap between exercices.
-- [ ] When clicking on a split day before starting the workout, the title of the page should be Splitname + splitdayname, replace the other redundant title that is above the exercice list with the splitday description
+- [x] When clicking on a split day before starting the workout, we should add a gap between exercices.
 	
 ## Workout
 

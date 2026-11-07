@@ -116,7 +116,8 @@ class _SplitDayPageState extends State<SplitDayPage> {
                 else if (items.isEmpty)
                   const Text('No exercises in this day yet.')
                 else
-                  for (final (index, item) in items.indexed)
+                  for (final (index, item) in items.indexed) ...[
+                    if (index > 0) const SizedBox(height: 8),
                     FCard(
                       child: Padding(
                         padding: const EdgeInsets.all(12),
@@ -141,6 +142,7 @@ class _SplitDayPageState extends State<SplitDayPage> {
                         ),
                       ),
                     ),
+                  ],
                 const SizedBox(height: 4),
                 const SizedBox(height: 24),
                 // Reactive on the cubit so the button comes back the moment

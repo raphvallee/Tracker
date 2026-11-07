@@ -534,12 +534,23 @@ class _SetRowState extends State<_SetRow> {
   String? _minError;
   String? _maxError;
 
+  /// Last valid range max shown by this row, so toggling range -> fixed ->
+  /// range restores it. Memory only: never persisted, and cleared when the
+  /// row starts representing another set.
+  int? _rememberedMax;
+
+  /// The set object this row last showed or reported. The parent swaps in a
+  /// new object when an add, remove or reorder shifts rows, so an identity
+  /// change means this row now represents a different set.
+  late PlannedSet _rowSet;
+
   @override
   void initState() {
     super.initState();
     _isRange = widget.set.isRange;
     _min = TextEditingController(text: '${widget.set.minReps}');
     _max = TextEditingController(text: widget.set.maxReps?.toString() ?? '');
+    _rowSet = widget.set;
   }
 
   @override
@@ -556,6 +567,10 @@ class _SetRowState extends State<_SetRow> {
     }
     if (_isRange != widget.set.isRange) {
       _isRange = widget.set.isRange;
+    }
+    if (!identical(widget.set, _rowSet)) {
+      _rememberedMax = null;
+      _rowSet = widget.set;
     }
     _minError = null;
     _maxError = null;
@@ -590,9 +605,10 @@ class _SetRowState extends State<_SetRow> {
       _minError = minError;
       _maxError = maxError;
     });
+    if (_isRange && max != null && maxError == null) _rememberedMax = max;
     if (min == null || minError != null) return;
     if (_isRange && (max == null || maxError != null)) return;
-    widget.onChanged(
+    _report(
       PlannedSet(
         order: widget.set.order,
         minReps: min,
@@ -601,27 +617,43 @@ class _SetRowState extends State<_SetRow> {
     );
   }
 
-  /// Switches between fixed reps and a rep range, pre-filling the max from
-  /// the configured default (raised above the min when necessary).
+  /// Switches between fixed reps and a rep range. Leaving a range remembers
+  /// its max; entering one restores that max (see [_rangeMaxFor]).
   void _toggleMode() {
+    final min = int.tryParse(_min.text.trim()) ?? widget.set.minReps;
+    if (_isRange) {
+      final max = int.tryParse(_max.text.trim());
+      if (max != null && max >= min) _rememberedMax = max;
+    }
     setState(() {
       _isRange = !_isRange;
       _minError = null;
       _maxError = null;
     });
-    final min = int.tryParse(_min.text.trim()) ?? widget.set.minReps;
     if (_isRange) {
-      var max = widget.defaultRangeMax;
-      if (max <= min) max = min + 2;
+      final max = _rangeMaxFor(min);
       _max.text = max.toString();
-      widget.onChanged(
-        PlannedSet(order: widget.set.order, minReps: min, maxReps: max),
-      );
+      _report(PlannedSet(order: widget.set.order, minReps: min, maxReps: max));
     } else {
-      widget.onChanged(
-        PlannedSet(order: widget.set.order, minReps: min, maxReps: null),
-      );
+      _report(PlannedSet(order: widget.set.order, minReps: min, maxReps: null));
     }
+  }
+
+  /// The max for a range starting at [min]: the remembered max while it still
+  /// sits above min, otherwise the Settings default (raised to min + 2 when
+  /// needed).
+  int _rangeMaxFor(int min) {
+    final remembered = _rememberedMax;
+    if (remembered != null && remembered > min) return remembered;
+    var max = widget.defaultRangeMax;
+    if (max <= min) max = min + 2;
+    return max;
+  }
+
+  /// Hands [set] to the editor and records it as the set this row shows.
+  void _report(PlannedSet set) {
+    _rowSet = set;
+    widget.onChanged(set);
   }
 
   @override
@@ -639,7 +671,7 @@ class _SetRowState extends State<_SetRow> {
     );
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 2),
+      padding: const EdgeInsets.only(bottom: 6),
       child: _gridRow(
         leading: Text(
           'Set ${widget.setNumber}',

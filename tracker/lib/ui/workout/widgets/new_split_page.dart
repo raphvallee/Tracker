@@ -11,6 +11,7 @@ import 'package:tracker/ui/core/ui/keyboard_inset.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
 import 'package:tracker/ui/core/ui/unsaved_changes_dialog.dart';
 import 'package:tracker/ui/core/ui/weight_format.dart';
+import 'package:tracker/utils/form_validators.dart';
 
 import 'split_day_editor_page.dart';
 
@@ -34,15 +35,15 @@ class _SplitEditorPageState extends State<SplitEditorPage> {
   List<WorkoutSplitDay> _days = [];
   bool _saving = false;
 
+  /// Split-name error, set only by [_save]; typing in the name field clears it.
+  String? _titleError;
+
   /// Snapshot of the split as loaded; compared against the live draft to
   /// detect unsaved changes when the user tries to leave without saving.
   /// For a new split this is the pristine empty draft.
   WorkoutSplit? _initial;
 
   bool get _isNew => widget.split == null;
-
-  String? get _titleError =>
-      _title.text.trim().isEmpty ? 'Cannot be empty' : null;
 
   /// True when the draft differs from what was loaded (see [_initial]):
   /// title, description, days, or their exercise plans.
@@ -177,9 +178,64 @@ class _SplitEditorPageState extends State<SplitEditorPage> {
       }
       setState(() {
         _title.text = template.title;
+        _titleError = null;
         _days = template.createDays();
       });
     }
+  }
+
+  /// Days as a drag-to-reorder list. Keys are the day objects themselves: a
+  /// reorder moves the same object, so its row keeps its identity, and the
+  /// tap handlers always read the index of the current build.
+  Widget _buildReorderableDays() {
+    return ReorderableListView(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      buildDefaultDragHandles: false,
+      onReorderItem: _onReorderDay,
+      children: [
+        for (var i = 0; i < _days.length; i++)
+          FItem(
+            key: ObjectKey(_days[i]),
+            prefix: ReorderableDragStartListener(
+              index: i,
+              child: const Icon(FLucideIcons.gripHorizontal, size: 18),
+            ),
+            title: Text(_days[i].title),
+            subtitle: Text(plural('exercise', _days[i].exercises.length)),
+            suffix: AppIconButton(
+              icon: FLucideIcons.trash2,
+              tooltip: 'Remove day',
+              onPress: () => _removeDay(_days[i]),
+            ),
+            onPress: () => _openDayEditor(i),
+          ),
+      ],
+    );
+  }
+
+  void _onReorderDay(int oldIndex, int newIndex) {
+    setState(() {
+      // onReorderItem already accounts for the removed item at oldIndex.
+      final day = _days.removeAt(oldIndex);
+      _days.insert(newIndex, day);
+    });
+  }
+
+  Future<void> _removeDay(WorkoutSplitDay day) async {
+    final confirmed = await showConfirmDialog(
+      context,
+      title: 'Remove day?',
+      message:
+          'Remove "${day.title}" and its exercises from this split? '
+          'The change is saved when you save the split.',
+      confirmLabel: 'Remove',
+      destructive: true,
+    );
+    // The dialog is async: the page may have left, and the day may already be
+    // gone, so check both before touching the list.
+    if (!confirmed || !mounted) return;
+    setState(() => _days.remove(day));
   }
 
   Future<void> _deleteSplit() async {
@@ -199,8 +255,9 @@ class _SplitEditorPageState extends State<SplitEditorPage> {
   }
 
   Future<void> _save() async {
-    if (_titleError != null) {
-      setState(() {});
+    final titleError = requiredText(_title.text);
+    if (titleError != null) {
+      setState(() => _titleError = titleError);
       return;
     }
 
@@ -287,7 +344,8 @@ class _SplitEditorPageState extends State<SplitEditorPage> {
                   FTextField(
                     control: FTextFieldControl.managed(
                       controller: _title,
-                      onChange: (_) => setState(() {}),
+                      // Typing clears the error; only Save raises it again.
+                      onChange: (_) => setState(() => _titleError = null),
                     ),
                     label: const Text('Split name'),
                     error: _titleError == null ? null : Text(_titleError!),
@@ -317,19 +375,7 @@ class _SplitEditorPageState extends State<SplitEditorPage> {
                   if (_days.isEmpty)
                     const Text('No days yet - add one below.')
                   else
-                    for (var i = 0; i < _days.length; i++)
-                      FItem(
-                        title: Text(_days[i].title),
-                        subtitle: Text(
-                          plural('exercise', _days[i].exercises.length),
-                        ),
-                        suffix: AppIconButton(
-                          icon: FLucideIcons.trash2,
-                          tooltip: 'Remove day',
-                          onPress: () => setState(() => _days.removeAt(i)),
-                        ),
-                        onPress: () => _openDayEditor(i),
-                      ),
+                    _buildReorderableDays(),
                   const SizedBox(height: 12),
                   FButton(
                     variant: .outline,
