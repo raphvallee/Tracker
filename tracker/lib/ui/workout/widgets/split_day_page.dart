@@ -9,7 +9,6 @@ import 'package:tracker/ui/core/ui/custom_app_bar.dart';
 import 'package:tracker/ui/workout/view_models/workout_cubit.dart';
 
 import 'gym_picker.dart';
-import 'planned_sets_view.dart';
 
 /// A real detail screen for one split day (Milestone 3): shows the day's
 /// exercises and lets the user start that workout as the active session. This
@@ -123,19 +122,19 @@ class _SplitDayPageState extends State<SplitDayPage> {
                         padding: const EdgeInsets.all(12),
                         child: Row(
                           children: [
-                            Text('${index + 1}'),
+                            // Planned sets are the source of truth; legacy
+                            // items (saved before sets existed) fall back to
+                            // their old target field.
+                            _SetCount(
+                              count: item.sets.isNotEmpty
+                                  ? item.sets.length
+                                  : item.targetSets,
+                            ),
                             const SizedBox(width: 12),
                             Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    _names[item.exerciseId] ??
-                                        'Exercise ${item.exerciseId}',
-                                  ),
-                                  ...[_targetSubtitle(item)]
-                                      .whereType<Widget>(),
-                                ],
+                              child: Text(
+                                _names[item.exerciseId] ??
+                                    'Exercise ${item.exerciseId}',
                               ),
                             ),
                           ],
@@ -185,20 +184,45 @@ class _SplitDayPageState extends State<SplitDayPage> {
   }
 
   List<ExerciseItem> get items => widget.day.exercises;
+}
 
-  Widget? _targetSubtitle(ExerciseItem item) {
-    // Planned sets are the source of truth; legacy items (saved before sets
-    // existed) fall back to their old target fields.
-    if (item.sets.isNotEmpty) {
-      return Padding(
-        padding: const EdgeInsets.only(top: 6),
-        child: PlannedSetsView(sets: item.sets),
-      );
-    }
-    if (item.targetSets == null && item.targetReps == null) return null;
-    final parts = <String>[];
-    if (item.targetSets != null) parts.add('${item.targetSets} sets');
-    if (item.targetReps != null) parts.add('${item.targetReps} reps');
-    return Text(parts.join(' × '));
+/// The number of sets planned for an exercise, set large in a fixed-width
+/// column so the counts line up down the day and scan like a program sheet.
+/// Blank when the exercise has no planned sets.
+class _SetCount extends StatelessWidget {
+  const _SetCount({required this.count});
+
+  final int? count;
+
+  @override
+  Widget build(BuildContext context) {
+    final count = this.count;
+    final typography = context.theme.typography;
+    return SizedBox(
+      width: 36,
+      child: count == null
+          ? null
+          : MergeSemantics(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  Text(
+                    '$count',
+                    style: typography.body.xl.copyWith(
+                      fontWeight: FontWeight.w700,
+                      height: 1.1,
+                    ),
+                  ),
+                  Text(
+                    count == 1 ? 'set' : 'sets',
+                    style: typography.body.xs.copyWith(
+                      color: context.theme.colors.mutedForeground,
+                      height: 1.1,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+    );
   }
 }
