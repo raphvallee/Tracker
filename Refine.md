@@ -20,7 +20,6 @@
 - [ ] Split Days should be re-orderable just like splitdays exercices
 - [ ] When clicking on a split day before starting the workout, the descriptions for the sets is really confusing.
 - [x] When clicking on a split day before starting the workout, we should add a gap between exercices.
-- [ ] When clicking on a split day before starting the workout, the title of the page should be Splitname + splitdayname, replace the other redundant title that is above the exercice list with the splitday description
 	
 ## Workout
 
