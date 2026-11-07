@@ -3,12 +3,15 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:forui/forui.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
 import 'package:tracker/routing/tab_navigation.dart';
+import 'package:tracker/domain/models/exercise.dart';
 import 'package:tracker/domain/models/gym.dart';
 import 'package:tracker/domain/models/workout_split.dart';
+import 'package:tracker/domain/services/muscle_set_load.dart';
 import 'package:tracker/ui/core/ui/custom_app_bar.dart';
 import 'package:tracker/ui/workout/view_models/workout_cubit.dart';
 
 import 'gym_picker.dart';
+import 'split_day_muscle_section.dart';
 
 /// A real detail screen for one split day (Milestone 3): shows the day's
 /// exercises and lets the user start that workout as the active session. This
@@ -24,7 +27,8 @@ class SplitDayPage extends StatefulWidget {
 }
 
 class _SplitDayPageState extends State<SplitDayPage> {
-  Map<int, String> _names = const {};
+  Map<int, Exercise> _exercises = const {};
+  List<MuscleSetLoad> _muscles = const [];
   bool _loading = true;
   bool _didLoad = false;
 
@@ -42,13 +46,17 @@ class _SplitDayPageState extends State<SplitDayPage> {
   Future<void> _load() async {
     final repo = RepositoryScope.maybeOf(context);
     final exercises = await repo?.exercises.getAll() ?? const [];
-    final names = <int, String>{for (final e in exercises) e.id: e.title};
+    final byId = <int, Exercise>{for (final e in exercises) e.id: e};
     if (!mounted) return;
     setState(() {
-      _names = names;
+      _exercises = byId;
+      _muscles = dayMuscleSetLoads(widget.day, byId);
       _loading = false;
     });
   }
+
+  String _nameOf(int exerciseId) =>
+      _exercises[exerciseId]?.title ?? 'Exercise $exerciseId';
 
   Future<void> _startWorkout(BuildContext context) async {
     final cubit = context.read<WorkoutCubit>();
@@ -68,7 +76,7 @@ class _SplitDayPageState extends State<SplitDayPage> {
       plan.add(
         PlanExercise(
           exerciseId: item.exerciseId,
-          name: _names[item.exerciseId] ?? 'Exercise ${item.exerciseId}',
+          name: _nameOf(item.exerciseId),
           order: i,
           sets: item.sets,
         ),
@@ -107,6 +115,7 @@ class _SplitDayPageState extends State<SplitDayPage> {
                   ),
                 ],
                 const SizedBox(height: 16),
+                SplitDayMuscleSection(loads: _muscles),
                 if (_loading)
                   const Padding(
                     padding: EdgeInsets.symmetric(vertical: 24),
@@ -128,10 +137,7 @@ class _SplitDayPageState extends State<SplitDayPage> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(
-                                    _names[item.exerciseId] ??
-                                        'Exercise ${item.exerciseId}',
-                                  ),
+                                  Text(_nameOf(item.exerciseId)),
                                   ...[_targetSubtitle(item)]
                                       .whereType<Widget>(),
                                 ],
