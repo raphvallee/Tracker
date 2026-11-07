@@ -446,8 +446,9 @@ class _ExerciseLogCard extends StatelessWidget {
   final String title;
   final List<ActiveSet> sets;
 
-  /// Planned sets from the split day this session follows, used to show a
-  /// target summary and pre-fill the next set's reps. Empty for free-form.
+  /// Planned sets from the split day this session follows: a target summary
+  /// line, plus one input row per planned set that no working set has filled
+  /// yet. Empty for free-form.
   final List<PlannedSet> plannedSets;
 
   /// Passed through to [_AddSetForm]: a fixed plan exercise ([exerciseId]
@@ -456,20 +457,30 @@ class _ExerciseLogCard extends StatelessWidget {
   final String? exerciseName;
   final List<Exercise>? exercises;
 
-  /// Reps the next planned set targets, or null when every planned set has
-  /// been logged (or there is no plan).
-  int? get nextTargetReps {
-    final index = sets.length;
-    if (plannedSets.isEmpty || index >= plannedSets.length) return null;
-    return plannedSets[index].minReps;
-  }
-
   @override
   Widget build(BuildContext context) {
     final titleStyle = context.theme.typography.body.md.copyWith(
       fontWeight: FontWeight.w600,
     );
     final planSummary = plannedSetsSummary(plannedSets);
+    final id = exerciseId;
+    final name = exerciseName;
+    // Planned slots are filled by working sets only, in order: a warm-up never
+    // takes a slot, so the first N working sets fill the N planned rows.
+    final workingLogged = sets.where((set) => !set.isWarmup).length;
+    final openSlotRows = [
+      for (var i = workingLogged; i < plannedSets.length; i++)
+        if (id != null && name != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: _PlannedSetRow(
+              key: ValueKey('planned-$i'),
+              exerciseId: id,
+              exerciseName: name,
+              repsHint: plannedSets[i].repsLabel,
+            ),
+          ),
+    ];
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
       child: Column(
@@ -490,7 +501,7 @@ class _ExerciseLogCard extends StatelessWidget {
               ),
             ),
           const SizedBox(height: 8),
-          if (sets.isEmpty)
+          if (sets.isEmpty && plannedSets.isEmpty)
             Text(
               'No sets yet',
               style: context.theme.typography.body.xs.copyWith(
@@ -499,12 +510,12 @@ class _ExerciseLogCard extends StatelessWidget {
             )
           else
             for (final set in sets) _SetTile(set: set),
+          ...openSlotRows,
           const FDivider(),
           _AddSetForm(
             exerciseId: exerciseId,
             exerciseName: exerciseName,
             exercises: exercises,
-            nextTargetReps: nextTargetReps,
           ),
         ],
       ),
@@ -586,15 +597,175 @@ class _SetTile extends StatelessWidget {
   }
 }
 
+/// A typed set entry after validation: weight in display units, reps.
+typedef _SetEntry = ({double weight, double reps});
+
+/// Weight and reps inputs with their validation, shared by the planned-set rows
+/// and the extra-set form. The owning State decides which exercise and set type
+/// a valid entry is logged as.
+mixin _SetEntryMixin<T extends StatefulWidget> on State<T> {
+  final _weight = TextEditingController();
+  final _reps = TextEditingController();
+  String? _weightError;
+  String? _repsError;
+
+  @override
+  void initState() {
+    super.initState();
+    _weight.addListener(() => setState(() => _weightError = null));
+    _reps.addListener(() => setState(() => _repsError = null));
+  }
+
+  @override
+  void dispose() {
+    _weight.dispose();
+    _reps.dispose();
+    super.dispose();
+  }
+
+  /// Weight and reps fields side by side. [repsHint] shows a planned target as
+  /// hint text only; the reps field stays empty until the user types.
+  Widget _entryFields({String? repsHint}) {
+    return Row(
+      children: <Widget>[
+        Expanded(
+          child: FTextField(
+            control: FTextFieldControl.managed(controller: _weight),
+            keyboardType: const TextInputType.numberWithOptions(
+              decimal: true,
+              signed: true,
+            ),
+            inputFormatters: [DecimalInputFormatter(allowNegative: true)],
+            label: Text('Weight (${weightUnitOf(context).symbol})'),
+            error: _weightError == null ? null : Text(_weightError!),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: FTextField(
+            control: FTextFieldControl.managed(controller: _reps),
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            inputFormatters: [DecimalInputFormatter()],
+            label: const Text('Reps'),
+            hint: repsHint,
+            error: _repsError == null ? null : Text(_repsError!),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Validates the typed weight and reps, showing inline errors. Returns the
+  /// entry, or null when it is not loggable.
+  _SetEntry? _readEntry() {
+    final weightError = requiredWeight(_weight.text);
+    final repsError = requiredReps(_reps.text);
+    // Values keep the typed digits (never rounded): the input formatter caps
+    // both fields at two decimal places, and the parse truncates pasted or
+    // hand-set values the same way.
+    final weight = parseDecimal(_weight.text, allowNegative: true);
+    final reps = parseDecimal(_reps.text);
+    if (weightError != null ||
+        repsError != null ||
+        weight == null ||
+        reps == null) {
+      setState(() {
+        _weightError = weightError;
+        _repsError = repsError;
+      });
+      return null;
+    }
+    if (reps < 1) {
+      // Below one rep is never a loggable set - surface an explicit error
+      // instead of silently doing nothing.
+      setState(() {
+        _weightError = null;
+        _repsError = 'Must be at least 1';
+      });
+      return null;
+    }
+    return (weight: weight, reps: reps);
+  }
+
+  /// Confirms a negative weight, then logs the entry. Clears the reps field
+  /// but keeps the weight for the next set. Returns whether it was logged.
+  Future<bool> _logEntry(
+    _SetEntry entry, {
+    required int exerciseId,
+    required String exerciseName,
+    required SetType type,
+  }) async {
+    final confirmed = await confirmWeightEntry(context, entry.weight);
+    if (!mounted || !confirmed) return false;
+    context.read<WorkoutCubit>().logSet(
+      exerciseId: exerciseId,
+      exerciseName: exerciseName,
+      weight: kilogramsFromDisplay(context, entry.weight),
+      reps: entry.reps,
+      type: type,
+    );
+    _reps.clear();
+    return true;
+  }
+}
+
+/// One planned working set: weight and reps inputs, with the planned target
+/// as the reps hint. Logging it turns the slot into a logged-set tile.
+class _PlannedSetRow extends StatefulWidget {
+  const _PlannedSetRow({
+    super.key,
+    required this.exerciseId,
+    required this.exerciseName,
+    required this.repsHint,
+  });
+
+  final int exerciseId;
+  final String exerciseName;
+
+  /// The planned target, e.g. `10` for fixed reps or `8-12` for a range.
+  final String repsHint;
+
+  @override
+  State<_PlannedSetRow> createState() => _PlannedSetRowState();
+}
+
+class _PlannedSetRowState extends State<_PlannedSetRow>
+    with _SetEntryMixin<_PlannedSetRow> {
+  Future<void> _log() async {
+    final entry = _readEntry();
+    if (entry == null) return;
+    await _logEntry(
+      entry,
+      exerciseId: widget.exerciseId,
+      exerciseName: widget.exerciseName,
+      type: SetType.working,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Bottom-aligned so the log button sits level with the inputs, not the
+    // field labels above them.
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: <Widget>[
+        Expanded(child: _entryFields(repsHint: widget.repsHint)),
+        const SizedBox(width: 8),
+        AppIconButton(
+          icon: FLucideIcons.check,
+          tooltip: 'Log set',
+          onPress: _log,
+        ),
+      ],
+    );
+  }
+}
+
 /// Inline editor: pick an exercise (either fixed by the plan or via a dropdown
 /// over [_ExerciseRepository]) and enter weight + reps with a warm-up toggle.
+/// Also the "extra set" entry under a planned exercise.
 class _AddSetForm extends StatefulWidget {
-  const _AddSetForm({
-    this.exerciseId,
-    this.exerciseName,
-    this.exercises,
-    this.nextTargetReps,
-  });
+  const _AddSetForm({this.exerciseId, this.exerciseName, this.exercises});
 
   /// When set, the exercise is fixed (plan-driven) and no dropdown is shown.
   final int? exerciseId;
@@ -604,46 +775,19 @@ class _AddSetForm extends StatefulWidget {
   /// instead (free-form logging).
   final List<Exercise>? exercises;
 
-  /// Reps targeted by the next planned set, pre-filled into the reps field.
-  final int? nextTargetReps;
-
   @override
   State<_AddSetForm> createState() => _AddSetFormState();
 }
 
-class _AddSetFormState extends State<_AddSetForm> {
-  final _weight = TextEditingController();
-  final _reps = TextEditingController();
+class _AddSetFormState extends State<_AddSetForm>
+    with _SetEntryMixin<_AddSetForm> {
   bool _warmup = false;
   int? _selectedId;
-  String? _weightError;
-  String? _repsError;
 
   @override
   void initState() {
     super.initState();
     _selectedId = widget.exerciseId;
-    _reps.text = widget.nextTargetReps?.toString() ?? '';
-    _weight.addListener(() => setState(() => _weightError = null));
-    _reps.addListener(() => setState(() => _repsError = null));
-  }
-
-  @override
-  void didUpdateWidget(covariant _AddSetForm oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    // Follow the plan: when the next planned target moves (e.g. after logging
-    // a set) and the field is empty, pre-fill it with the new target.
-    if (widget.nextTargetReps != oldWidget.nextTargetReps &&
-        _reps.text.isEmpty) {
-      _reps.text = widget.nextTargetReps?.toString() ?? '';
-    }
-  }
-
-  @override
-  void dispose() {
-    _weight.dispose();
-    _reps.dispose();
-    super.dispose();
   }
 
   @override
@@ -655,34 +799,7 @@ class _AddSetFormState extends State<_AddSetForm> {
           _exerciseDropdown(),
           const SizedBox(height: 8),
         ],
-        Row(
-          children: <Widget>[
-            Expanded(
-              child: FTextField(
-                control: FTextFieldControl.managed(controller: _weight),
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                  signed: true,
-                ),
-                inputFormatters: [DecimalInputFormatter(allowNegative: true)],
-                label: Text('Weight (${weightUnitOf(context).symbol})'),
-                error: _weightError == null ? null : Text(_weightError!),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: FTextField(
-                control: FTextFieldControl.managed(controller: _reps),
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                inputFormatters: [DecimalInputFormatter()],
-                label: const Text('Reps'),
-                error: _repsError == null ? null : Text(_repsError!),
-              ),
-            ),
-          ],
-        ),
+        _entryFields(),
         const SizedBox(height: 8),
         Row(
           children: <Widget>[
@@ -713,57 +830,25 @@ class _AddSetFormState extends State<_AddSetForm> {
   }
 
   Future<void> _add() async {
-    final weightError = requiredWeight(_weight.text);
-    final repsError = requiredReps(_reps.text);
-    // Values keep the typed digits (never rounded): the input formatter caps
-    // both fields at two decimal places, and the parse truncates pasted or
-    // hand-set values the same way.
-    final weight = parseDecimal(_weight.text, allowNegative: true);
-    final reps = parseDecimal(_reps.text);
-    if (weightError != null ||
-        repsError != null ||
-        weight == null ||
-        reps == null) {
-      setState(() {
-        _weightError = weightError;
-        _repsError = repsError;
-      });
-      return;
-    }
-    if (reps < 1) {
-      // Below one rep is never a loggable set - surface an explicit error
-      // instead of silently doing nothing.
-      setState(() {
-        _weightError = null;
-        _repsError = 'Must be at least 1';
-      });
-      return;
-    }
+    final entry = _readEntry();
     final id = _selectedId;
-    if (id == null || id <= 0) return;
-
-    // Resolve the display name: fixed by the plan, or looked up from the
-    // dropdown's exercise list.
-    String name = widget.exerciseName ?? '';
-    if (name.isEmpty && widget.exercises != null) {
-      for (final e in widget.exercises!) {
-        if (e.id == id) {
-          name = e.title;
-          break;
-        }
-      }
-    }
-    final confirmed = await confirmWeightEntry(context, weight);
-    if (!mounted || !confirmed) return;
-    context.read<WorkoutCubit>().logSet(
+    if (entry == null || id == null || id <= 0) return;
+    final logged = await _logEntry(
+      entry,
       exerciseId: id,
-      exerciseName: name,
-      weight: kilogramsFromDisplay(context, weight),
-      reps: reps,
+      exerciseName: _exerciseName(id),
       type: _warmup ? SetType.warmup : SetType.working,
     );
-    _reps.clear();
-    _warmup = false;
-    setState(() {});
+    if (logged && mounted) setState(() => _warmup = false);
+  }
+
+  /// Display name: fixed by the plan, or looked up in the dropdown's list.
+  String _exerciseName(int id) {
+    final fixed = widget.exerciseName ?? '';
+    if (fixed.isNotEmpty) return fixed;
+    for (final e in widget.exercises ?? const <Exercise>[]) {
+      if (e.id == id) return e.title;
+    }
+    return '';
   }
 }
