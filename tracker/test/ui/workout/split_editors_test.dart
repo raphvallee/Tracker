@@ -409,4 +409,34 @@ void main() {
     await tester.pumpAndSettle();
     expect(await result, isNull);
   });
+
+  testWidgets('planned sets are spaced apart, not flush', (tester) async {
+    await pumpApp(tester);
+    pushEditor(
+      tester,
+      WorkoutSplitDay(
+        title: 'Push',
+        exercises: [
+          ExerciseItem(
+            exerciseId: 1,
+            order: 0,
+            sets: [
+              for (var i = 0; i < 3; i++) PlannedSet(order: i, minReps: 8),
+            ],
+          ),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // The set's grid row excludes the row's bottom padding, so the distance
+    // between consecutive grid rows is the visible gap between sets.
+    Rect gridRowOf(int set) => tester.getRect(
+      find.descendant(of: setRow(0, set), matching: find.byType(Row)).first,
+    );
+
+    final gap = gridRowOf(1).top - gridRowOf(0).bottom;
+    expect(gap, greaterThanOrEqualTo(4));
+    expect(gridRowOf(2).top - gridRowOf(1).bottom, closeTo(gap, 0.01));
+  });
 }
