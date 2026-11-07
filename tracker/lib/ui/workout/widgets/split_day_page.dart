@@ -6,6 +6,7 @@ import 'package:tracker/routing/tab_navigation.dart';
 import 'package:tracker/domain/models/gym.dart';
 import 'package:tracker/domain/models/workout_split.dart';
 import 'package:tracker/ui/core/ui/custom_app_bar.dart';
+import 'package:tracker/ui/core/ui/swipeable_text.dart';
 import 'package:tracker/ui/workout/view_models/workout_cubit.dart';
 
 import 'gym_picker.dart';
@@ -137,7 +138,7 @@ class _SplitDayPageState extends State<SplitDayPage> {
                             ),
                             const SizedBox(width: 8),
                             Expanded(
-                              child: Text(
+                              child: SwipeableText(
                                 _names[item.exerciseId] ??
                                     'Exercise ${item.exerciseId}',
                                 style: context.theme.typography.body.md,
