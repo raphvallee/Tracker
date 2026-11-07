@@ -48,6 +48,21 @@ void main() {
     expect(find.textContaining('reps'), findsNothing);
   });
 
+  testWidgets('heading shows only the split title', (tester) async {
+    final day = WorkoutSplitDay(
+      title: 'Push Day',
+      description: '',
+      order: 0,
+      exercises: [ExerciseItem(exerciseId: 1, order: 0)],
+    );
+    await pumpAppPage(tester, SplitDayPage(splitTitle: 'PPL', day: day));
+
+    expect(find.text('PPL'), findsOneWidget);
+    expect(find.textContaining('PPL ·'), findsNothing);
+    // The day title stays in the app bar only.
+    expect(find.text('Push Day'), findsOneWidget);
+  });
+
   testWidgets('order sits left of the name and set count right of it', (
     tester,
   ) async {
