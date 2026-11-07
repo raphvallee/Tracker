@@ -74,11 +74,7 @@ class _SplitDayPageState extends State<SplitDayPage> {
         ),
       );
     }
-    cubit.startPlanWorkout(
-      title: '${widget.splitTitle} · ${widget.day.title}',
-      exercises: plan,
-      gym: gym,
-    );
+    cubit.startPlanWorkout(title: _title, exercises: plan, gym: gym);
     HomePageSingleton().changeTab(TabName.currentWorkout);
   }
 
@@ -86,27 +82,20 @@ class _SplitDayPageState extends State<SplitDayPage> {
   Widget build(BuildContext context) {
     return CustomScrollView(
       slivers: <Widget>[
-        CustomAppBar(context, title: widget.day.title),
+        CustomAppBar(context, title: _title),
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
-                Text(
-                  '${widget.splitTitle} · ${widget.day.title}',
-                  style: context.theme.typography.body.xl.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
                 if (widget.day.description.isNotEmpty) ...[
-                  const SizedBox(height: 4),
                   Text(
                     widget.day.description,
                     style: context.theme.typography.body.sm,
                   ),
+                  const SizedBox(height: 16),
                 ],
-                const SizedBox(height: 16),
                 if (_loading)
                   const Padding(
                     padding: EdgeInsets.symmetric(vertical: 24),
@@ -182,6 +171,9 @@ class _SplitDayPageState extends State<SplitDayPage> {
   }
 
   List<ExerciseItem> get items => widget.day.exercises;
+
+  /// App bar title: the split and the day, e.g. "Push Pull Legs · Push Day".
+  String get _title => '${widget.splitTitle} · ${widget.day.title}';
 
   Widget? _targetSubtitle(ExerciseItem item) {
     // Planned sets are the source of truth; legacy items (saved before sets
