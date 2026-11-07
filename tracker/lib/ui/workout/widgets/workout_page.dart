@@ -484,7 +484,7 @@ class _ExerciseLogCard extends StatelessWidget {
           ),
           if (plannedSets.isNotEmpty) ...<Widget>[
             const SizedBox(height: 4),
-            PlannedSetsView(sets: plannedSets, captionPrefix: 'Planned: '),
+            PlannedSetsView(sets: plannedSets),
           ],
           const SizedBox(height: 8),
           if (sets.isEmpty)

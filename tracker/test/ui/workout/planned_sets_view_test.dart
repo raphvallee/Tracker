@@ -4,20 +4,13 @@ import 'package:forui/forui.dart';
 import 'package:tracker/domain/models/workout_split.dart';
 import 'package:tracker/ui/workout/widgets/planned_sets_view.dart';
 
-Future<void> _pump(
-  WidgetTester tester,
-  List<PlannedSet> sets, {
-  String captionPrefix = '',
-}) async {
+Future<void> _pump(WidgetTester tester, List<PlannedSet> sets) async {
   await tester.pumpWidget(
     MaterialApp(
       builder: (context, child) =>
           FTheme(data: FTheme.neutral.light.touch, child: child!),
       home: Scaffold(
-        body: SizedBox(
-          width: 200,
-          child: PlannedSetsView(sets: sets, captionPrefix: captionPrefix),
-        ),
+        body: SizedBox(width: 200, child: PlannedSetsView(sets: sets)),
       ),
     ),
   );
@@ -25,14 +18,11 @@ Future<void> _pump(
 
 void main() {
   group('PlannedSetsView', () {
-    testWidgets('shows the count and one tile per identical set', (
-      tester,
-    ) async {
+    testWidgets('shows one tile per identical set', (tester) async {
       await _pump(tester, [
         for (var i = 0; i < 3; i++)
           PlannedSet(order: i, minReps: 8, maxReps: 12),
       ]);
-      expect(find.text('3 sets'), findsOneWidget);
       expect(find.text('8-12'), findsNWidgets(3));
       expect(find.text('reps'), findsNWidgets(3));
     });
@@ -42,26 +32,22 @@ void main() {
         PlannedSet(order: 0, minReps: 10),
         PlannedSet(order: 1, minReps: 8, maxReps: 12),
       ]);
-      expect(find.text('2 sets'), findsOneWidget);
       final first = tester.getTopLeft(find.text('10'));
       final second = tester.getTopLeft(find.text('8-12'));
       expect(first.dx, lessThan(second.dx));
     });
 
-    testWidgets('uses singular labels for one set of one rep', (tester) async {
+    testWidgets('uses the singular unit for one rep', (tester) async {
       await _pump(tester, [PlannedSet(order: 0, minReps: 1)]);
-      expect(find.text('1 set'), findsOneWidget);
       expect(find.text('rep'), findsOneWidget);
     });
 
-    testWidgets('prefixes the caption and wraps without overflow', (
-      tester,
-    ) async {
-      await _pump(tester, captionPrefix: 'Planned: ', [
+    testWidgets('wraps many tiles without overflow', (tester) async {
+      await _pump(tester, [
         for (var i = 0; i < 8; i++)
           PlannedSet(order: i, minReps: 10, maxReps: 15),
       ]);
-      expect(find.text('Planned: 8 sets'), findsOneWidget);
+      expect(find.text('10-15'), findsNWidgets(8));
       expect(tester.takeException(), isNull);
     });
   });

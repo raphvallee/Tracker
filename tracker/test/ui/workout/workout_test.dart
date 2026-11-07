@@ -450,7 +450,6 @@ void main() {
 
       // The planned sets render as tiles, and the reps field is pre-filled
       // with the first planned set's target.
-      expect(find.text('Planned: 2 sets'), findsOneWidget);
       expect(
         find.descendant(
           of: find.byType(PlannedSetsView),
