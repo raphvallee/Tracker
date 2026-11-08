@@ -88,22 +88,4 @@ void main() {
       reason: 'the focused field must keep a visible gap above the keyboard',
     );
   });
-
-  testWidgets('without the keyboard-aware reveal the field stays hidden', (
-    tester,
-  ) async {
-    await _pumpScrolledBehindKeyboard(tester, keyboardAwareReveal: false);
-
-    final screenHeight =
-        tester.view.physicalSize.height / tester.view.devicePixelRatio;
-
-    await tester.tap(find.byKey(_fieldKey));
-    await tester.pumpAndSettle();
-
-    expect(
-      tester.getBottomRight(find.byKey(_fieldKey)).dy,
-      greaterThanOrEqualTo(screenHeight - _keyboardHeight),
-      reason: 'documents the unfixed behavior this suite guards against',
-    );
-  });
 }

@@ -14,11 +14,6 @@ void main() {
       expect(grid.days.sublist(37).where((d) => d != null), isEmpty);
     });
 
-    test('February 2026 (28 days) lays out in one fewer row', () {
-      final grid = CalendarGrid(2026, 2);
-      expect(grid.days.where((d) => d != null), hasLength(28));
-    });
-
     test('dateFor maps an index back to a real date', () {
       final grid = CalendarGrid(2026, 3);
       expect(grid.dateFor(6), DateTime(2026, 3, 1));

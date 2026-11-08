@@ -1,31 +1,11 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tracker/domain/models/workout_session.dart';
 import 'package:tracker/domain/models/workout_set.dart';
-import 'package:tracker/ui/history/widgets/calendar/history_calendar.dart';
 import 'package:tracker/ui/history/widgets/session_detail_page.dart';
 
 import '../../../testing/test_helpers.dart';
 
 void main() {
-  testWidgets('calendar keeps a bounded internal day list', (tester) async {
-    final sessions = List.generate(
-      8,
-      (index) =>
-          WorkoutSession(title: 'Workout $index', startTime: DateTime.now()),
-    );
-
-    await pumpAppPage(
-      tester,
-      Scaffold(
-        body: HistoryCalendar(sessions: sessions, gymNames: const {}),
-      ),
-    );
-
-    expect(find.byType(ListView), findsOneWidget);
-    expect(find.text('Workout 0'), findsOneWidget);
-  });
-
   group('SessionDetailPage UI', () {
     testWidgets('renders header, stats and every set with warmup marker', (
       tester,

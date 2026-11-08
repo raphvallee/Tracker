@@ -65,17 +65,4 @@ void main() {
       expect(sessionRepo.calls, 2);
     },
   );
-
-  test(
-    'no repository wired: load() is a no-op and the state stays initial',
-    () async {
-      final cubit = FeedCubit();
-      addTearDown(cubit.close);
-
-      cubit.load();
-      await Future<void>.delayed(const Duration(milliseconds: 50));
-
-      expect(cubit.state.status, FeedStatus.loading);
-    },
-  );
 }

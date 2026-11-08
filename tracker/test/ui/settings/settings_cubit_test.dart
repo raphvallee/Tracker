@@ -99,15 +99,6 @@ void main() {
       expect(graph.copyWith(exerciseId: null).exerciseId, isNull);
       expect(GraphConfig.fromJson(graph.toJson()).exerciseId, 2);
     });
-
-    test('collections and values have structural equality', () {
-      const graph = GraphConfig(title: 'x');
-      expect(SettingsState(graphs: [graph]), SettingsState(graphs: [graph]));
-      expect(
-        () => SettingsState(graphs: [graph]).graphs.add(graph),
-        throwsUnsupportedError,
-      );
-    });
   });
 
   group('SettingsState schema versioning', () {

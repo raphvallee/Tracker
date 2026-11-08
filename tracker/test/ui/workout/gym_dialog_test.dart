@@ -23,28 +23,17 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('shows no name error when the dialog opens', (tester) async {
+  testWidgets('the name error shows only after Save and typing clears it', (
+    tester,
+  ) async {
     await openNewGymDialog(tester);
-
     expect(find.text('New Gym'), findsOneWidget);
     expect(find.text(emptyError), findsNothing);
-  });
 
-  testWidgets('Save with an empty name shows the name error', (tester) async {
-    await openNewGymDialog(tester);
-
-    await tester.tap(find.text('Save'));
-    await tester.pumpAndSettle();
-
-    expect(find.text(emptyError), findsOneWidget);
-    expect(find.text('New Gym'), findsOneWidget);
-  });
-
-  testWidgets('typing a name clears the error', (tester) async {
-    await openNewGymDialog(tester);
     await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();
     expect(find.text(emptyError), findsOneWidget);
+    expect(find.text('New Gym'), findsOneWidget);
 
     await tester.enterText(
       find.widgetWithText(FTextField, 'Gym name'),

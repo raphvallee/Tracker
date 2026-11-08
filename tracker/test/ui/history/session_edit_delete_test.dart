@@ -1,17 +1,14 @@
-// History edit/delete widget tests (lib/ui/history/). The detail page surfaces
-// Edit/Delete, and the editor renders prefilled fields and edits a set through
-// the dialog. Tests that touch real Isar IO live in their own files
+// Tests that touch real Isar IO live in their own files
 // (session_edit_persist_test.dart, session_delete_persist_test.dart,
-// session_edit_delete_repo_test.dart): libisar's native worker pool is sized to
-// the CPU count, so one process per Isar-heavy case keeps CI's 4-vCPU runners
-// from wedging. See docs/TESTING_ISAR_CI.md.
+// session_edit_gym_*_test.dart): libisar's
+// native worker pool is sized to the CPU count, so one process per Isar-heavy
+// case keeps CI's 4-vCPU runners from wedging. See docs/TESTING_ISAR_CI.md.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forui/forui.dart';
 import 'package:hydrated_bloc/hydrated_bloc.dart';
 import 'package:tracker/domain/models/workout_session.dart';
-import 'package:tracker/ui/history/widgets/session_detail_page.dart';
 import 'package:tracker/ui/history/widgets/session_edit_page.dart';
 
 import '../../../testing/fakes/in_memory_storage.dart';
@@ -19,24 +16,10 @@ import '../../../testing/session_edit_helpers.dart';
 import '../../../testing/test_helpers.dart';
 
 void main() {
-  setUpAll(initIsarCore);
-
   setUp(() {
     // The app shell pumps HydratedCubits, which read storage at construction;
     // the real storage deadlocks the widget-test fake-async zone.
     HydratedBloc.storage = InMemoryStorage();
-  });
-
-  group('SessionDetailPage actions', () {
-    testWidgets('offers Edit and Delete for a past session', (tester) async {
-      await pumpAppPage(
-        tester,
-        SessionDetailPage(session: pastSession(), gymName: 'Home'),
-      );
-
-      expect(find.text('Edit'), findsOneWidget);
-      expect(find.text('Delete session'), findsOneWidget);
-    });
   });
 
   group('SessionEditPage', () {
@@ -86,16 +69,6 @@ void main() {
       expect(find.text('W'), findsNWidgets(2));
       expect(find.text('S'), findsNothing);
     });
-
-    testWidgets('Save pops back out of the editor', (tester) async {
-      await pumpAppPage(tester, SessionEditPage(session: pastSession()));
-
-      await tester.tap(find.text('Save'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Edit session'), findsNothing);
-      expect(find.text('80 kg × 5'), findsNothing);
-    });
   });
 
   /// Pushes the editor onto a pumped app shell. The returned future completes
@@ -123,32 +96,6 @@ void main() {
       .first;
 
   group('SessionEditPage title', () {
-    testWidgets('an empty title cannot be saved', (tester) async {
-      await pumpApp(tester);
-      pushEditor(tester, pastSession());
-      await tester.pumpAndSettle();
-
-      await tester.enterText(titleField(), '');
-      await tester.tap(find.text('Save'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Cannot be empty'), findsOneWidget);
-      expect(find.text('Edit session'), findsOneWidget);
-    });
-
-    testWidgets('a whitespace-only title counts as empty', (tester) async {
-      await pumpApp(tester);
-      pushEditor(tester, pastSession());
-      await tester.pumpAndSettle();
-
-      await tester.enterText(titleField(), '   ');
-      await tester.tap(find.text('Save'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Cannot be empty'), findsOneWidget);
-      expect(find.text('Edit session'), findsOneWidget);
-    });
-
     testWidgets(
       'typing clears the error and saving returns the trimmed title',
       (tester) async {

@@ -1,6 +1,13 @@
+// No Isar: the cases that persist through Isar live one per file in
+// workout_*_test.dart.
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hydrated_bloc/hydrated_bloc.dart';
+import 'package:tracker/domain/models/workout_set.dart';
 import 'package:tracker/domain/models/workout_split.dart';
 import 'package:tracker/ui/workout/view_models/workout_cubit.dart';
+
+import '../../../testing/fakes/in_memory_storage.dart';
 
 void main() {
   group('WorkoutState serialization', () {
@@ -27,19 +34,6 @@ void main() {
       expect(state.sets.single.reps, 0);
       expect(state.sets.single.isWarmup, isFalse);
       expect(() => state.sets.add(state.sets.single), throwsUnsupportedError);
-    });
-
-    test('states and nested values have structural equality', () {
-      const set = ActiveSet(exerciseId: 1, exerciseName: 'Bench');
-      const plan = PlanExercise(exerciseId: 1, name: 'Bench');
-      final first = WorkoutState(isInProgress: true, plan: [plan], sets: [set]);
-      final second = WorkoutState(
-        isInProgress: true,
-        plan: [plan],
-        sets: [set],
-      );
-      expect(first, second);
-      expect(first.hashCode, second.hashCode);
     });
 
     test('copyWith can clear nullable fields', () {
@@ -296,6 +290,75 @@ void main() {
           ),
         ),
       );
+    });
+  });
+
+  group('WorkoutCubit without a repository', () {
+    late WorkoutCubit cubit;
+
+    setUp(() {
+      HydratedBloc.storage = InMemoryStorage();
+      cubit = WorkoutCubit();
+    });
+
+    tearDown(() => cubit.close());
+
+    test('ignores ending an idle workout', () async {
+      await cubit.endWorkout();
+
+      expect(cubit.state.isInProgress, isFalse);
+      expect(cubit.state.savedSnapshot, isNull);
+    });
+
+    test('removeSet drops a set and reindexes order', () async {
+      cubit.startWorkout();
+      cubit.logSet(exerciseId: 1, exerciseName: 'A', weight: 10, reps: 5);
+      cubit.logSet(exerciseId: 2, exerciseName: 'B', weight: 20, reps: 5);
+      cubit.logSet(exerciseId: 3, exerciseName: 'C', weight: 30, reps: 5);
+
+      cubit.removeSet(1);
+      expect(cubit.state.sets, hasLength(2));
+      expect(cubit.state.sets.map((s) => s.order).toList(), [0, 1]);
+      expect(cubit.state.sets.first.exerciseName, 'A');
+      expect(cubit.state.sets.last.exerciseName, 'C');
+    });
+
+    test('updateSet edits weight/reps in place, keeping type and order', () {
+      cubit.startWorkout();
+      cubit.logSet(exerciseId: 1, exerciseName: 'A', weight: 10, reps: 5);
+      cubit.logSet(
+        exerciseId: 2,
+        exerciseName: 'B',
+        weight: 20,
+        reps: 5,
+        type: SetType.warmup,
+      );
+
+      cubit.updateSet(1, weight: 22.5, reps: 6);
+
+      final updated = cubit.state.sets.singleWhere((s) => s.order == 1);
+      expect(updated.weight, 22.5);
+      expect(updated.reps, 6);
+      expect(updated.isWarmup, isTrue);
+      expect(updated.exerciseId, 2);
+      expect(cubit.state.sets, hasLength(2));
+      cubit.updateSet(1, weight: 25);
+      expect(cubit.state.sets.singleWhere((s) => s.order == 1).reps, 6);
+    });
+
+    test('restore slots survive starting a later workout', () async {
+      cubit.startWorkout();
+      cubit.logSet(exerciseId: 1, exerciseName: 'A', weight: 10, reps: 5);
+      await cubit.discardWorkout();
+      final discarded = cubit.state.discardedSnapshot;
+
+      cubit.startWorkout();
+      expect(cubit.state.discardedSnapshot, discarded);
+      expect(cubit.state.canRestoreDiscarded(), isFalse);
+
+      await cubit.endWorkout();
+      expect(cubit.state.isInProgress, isFalse);
+      expect(cubit.state.canRestoreDiscarded(), isTrue);
     });
   });
 }

@@ -116,13 +116,34 @@ class ScreenshotRecorder {
     }
   }
 
-  /// Rewritten in full after every capture so it exists even if a later size
-  /// run crashes the suite.
+  /// Rewritten after every capture so it exists even if a later size run
+  /// crashes the suite. Each sweep size runs in its own process, so entries
+  /// other processes already wrote are kept (minus files this run replaced);
+  /// run-visual-tests.ps1 runs the sizes one at a time so writes never race.
   Future<void> _writeManifest(Directory dir) async {
     final manifest = File('${dir.path}${Platform.pathSeparator}manifest.json');
+    final mine = {for (final entry in _entries) entry['file']};
+    final others = <Object?>[];
+    if (manifest.existsSync()) {
+      try {
+        final previous = jsonDecode(await manifest.readAsString());
+        if (previous is Map && previous['entries'] is List) {
+          for (final entry in previous['entries'] as List) {
+            if (entry is Map && !mine.contains(entry['file'])) {
+              others.add(entry);
+            }
+          }
+        }
+      } on FormatException {
+        // A torn write from a concurrent run: start the index over.
+      }
+    }
     const encoder = JsonEncoder.withIndent('  ');
     await manifest.writeAsString(
-      encoder.convert({'outputDir': dir.path, 'entries': _entries}),
+      encoder.convert({
+        'outputDir': dir.path,
+        'entries': [...others, ..._entries],
+      }),
       flush: true,
     );
     if (!_manifestAnnounced) {

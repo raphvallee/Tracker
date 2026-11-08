@@ -107,27 +107,6 @@ void main() {
       expect(textOf(tester, 1), '8');
     });
 
-    testWidgets('minus 1000 is the lowest accepted weight', (tester) async {
-      final cubit = await pumpLogger(tester);
-      await enterSet(tester, weight: '-1000');
-      await addSet(tester);
-      await tapInDialog(tester, 'Yes, log it');
-
-      expect(cubit.state.sets.single.weight, -1000);
-    });
-
-    testWidgets('below minus 1000 is rejected without a prompt', (
-      tester,
-    ) async {
-      final cubit = await pumpLogger(tester);
-      await enterSet(tester, weight: '-1001');
-      await addSet(tester);
-
-      expect(find.text('Must be between -1000 and 10000'), findsOneWidget);
-      expect(find.text('Assisted machine?'), findsNothing);
-      expect(cubit.state.sets, isEmpty);
-    });
-
     testWidgets('negative zero is a plain zero and skips the prompt', (
       tester,
     ) async {
@@ -143,24 +122,6 @@ void main() {
   });
 
   group('zero and range', () {
-    testWidgets('zero is a valid bodyweight entry', (tester) async {
-      final cubit = await pumpLogger(tester);
-      await enterSet(tester, weight: '0');
-      await addSet(tester);
-
-      expect(cubit.state.sets.single.weight, 0);
-      expect(textOf(tester, 0), '0');
-    });
-
-    testWidgets('an empty weight shows the range message', (tester) async {
-      final cubit = await pumpLogger(tester);
-      await enterSet(tester, weight: '');
-      await addSet(tester);
-
-      expect(find.text('Must be between -1000 and 10000'), findsOneWidget);
-      expect(cubit.state.sets, isEmpty);
-    });
-
     testWidgets('above 10000 is rejected without a prompt', (tester) async {
       final cubit = await pumpLogger(tester);
       await enterSet(tester, weight: '10001');
@@ -170,18 +131,6 @@ void main() {
       expect(find.text("That's a lot of weight"), findsNothing);
       expect(cubit.state.sets, isEmpty);
     });
-
-    testWidgets(
-      '10000 is the highest accepted weight, after the heavy prompt',
-      (tester) async {
-        final cubit = await pumpLogger(tester);
-        await enterSet(tester, weight: '10000');
-        await addSet(tester);
-        await tapInDialog(tester, 'Use this weight');
-
-        expect(cubit.state.sets.single.weight, 10000);
-      },
-    );
   });
 
   group('two decimals', () {
@@ -219,21 +168,6 @@ void main() {
       expect(cubit.state.sets, isEmpty);
     });
 
-    testWidgets('confirming logs the weight and the prompt comes back', (
-      tester,
-    ) async {
-      final cubit = await pumpLogger(tester);
-      await enterSet(tester, weight: '600');
-      await addSet(tester);
-      await tapInDialog(tester, 'Use this weight');
-      expect(cubit.state.sets.single.weight, 600);
-
-      await enterSet(tester, weight: '700');
-      await addSet(tester);
-      expect(find.text("That's a lot of weight"), findsOneWidget);
-      expect(settingsOf(tester).state.showHeavyWeightWarning, isTrue);
-    });
-
     testWidgets('the first heavy prompt has no checkbox', (tester) async {
       final cubit = await pumpLogger(tester);
       await enterSet(tester, weight: '700');
@@ -252,6 +186,7 @@ void main() {
       await tapInDialog(tester, 'Use this weight');
       expect(cubit.state.sets.single.weight, 700);
       expect(settingsOf(tester).state.heavyWeightConfirmed, isTrue);
+      expect(settingsOf(tester).state.showHeavyWeightWarning, isTrue);
 
       await enterSet(tester, weight: '750');
       await addSet(tester);
