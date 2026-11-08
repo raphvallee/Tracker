@@ -55,7 +55,8 @@ class _SplitDayPageState extends State<SplitDayPage> {
     final repo = RepositoryScope.maybeOf(context);
     final gyms = (await repo?.gyms.getAll()) ?? const <Gym>[];
     if (!context.mounted) return;
-    final gym = await promptGym(context, gyms);
+    final pick = await promptGym(context, gyms);
+    if (pick == null) return;
 
     final plan = <PlanExercise>[];
     final items = widget.day.exercises;
@@ -73,7 +74,7 @@ class _SplitDayPageState extends State<SplitDayPage> {
     cubit.startPlanWorkout(
       title: '${widget.splitTitle} · ${widget.day.title}',
       exercises: plan,
-      gym: gym,
+      gym: pick.gym,
     );
     HomePageSingleton().changeTab(TabName.currentWorkout);
   }

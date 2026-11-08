@@ -117,8 +117,9 @@ class BuildStartWorkoutButton extends StatelessWidget {
     final repo = RepositoryScope.maybeOf(context);
     final gyms = (await repo?.gyms.getAll()) ?? const <Gym>[];
     if (!context.mounted) return;
-    final gym = await promptGym(context, gyms);
-    cubit.startWorkout(gym: gym);
+    final pick = await promptGym(context, gyms);
+    if (pick == null) return;
+    cubit.startWorkout(gym: pick.gym);
   }
 
   @override
