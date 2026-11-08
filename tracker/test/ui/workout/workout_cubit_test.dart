@@ -346,6 +346,71 @@ void main() {
       expect(cubit.state.sets.singleWhere((s) => s.order == 1).reps, 6);
     });
 
+    test('updateSet can flip the set type alone', () {
+      cubit.startWorkout();
+      cubit.logSet(exerciseId: 1, exerciseName: 'A', weight: 10, reps: 5);
+
+      cubit.updateSet(0, type: SetType.warmup);
+
+      final updated = cubit.state.sets.single;
+      expect(updated.isWarmup, isTrue);
+      expect(updated.weight, 10);
+      expect(updated.reps, 5);
+    });
+
+    test('addExercise appends a card once per exercise', () {
+      cubit.startWorkout();
+
+      expect(cubit.addExercise(exerciseId: 1, name: 'Bench Press'), isTrue);
+      expect(cubit.addExercise(exerciseId: 2, name: 'Squat'), isTrue);
+      expect(cubit.addExercise(exerciseId: 1, name: 'Bench Press'), isFalse);
+
+      expect(cubit.state.planTitle, isNull);
+      expect(cubit.state.plan.map((e) => (e.exerciseId, e.order)).toList(), [
+        (1, 0),
+        (2, 1),
+      ]);
+    });
+
+    test('addExercise skips an exercise that already has sets', () {
+      cubit.startWorkout();
+      cubit.logSet(exerciseId: 3, exerciseName: 'Row', weight: 50, reps: 8);
+
+      expect(cubit.addExercise(exerciseId: 3, name: 'Row'), isFalse);
+      expect(cubit.state.plan, isEmpty);
+    });
+
+    test('removeExercise drops its card and sets and reindexes both', () {
+      cubit.startWorkout();
+      cubit.addExercise(exerciseId: 1, name: 'A');
+      cubit.addExercise(exerciseId: 2, name: 'B');
+      cubit.addExercise(exerciseId: 3, name: 'C');
+      cubit.logSet(exerciseId: 1, exerciseName: 'A', weight: 10, reps: 5);
+      cubit.logSet(exerciseId: 2, exerciseName: 'B', weight: 20, reps: 5);
+      cubit.logSet(exerciseId: 3, exerciseName: 'C', weight: 30, reps: 5);
+      cubit.logSet(exerciseId: 2, exerciseName: 'B', weight: 25, reps: 5);
+
+      cubit.removeExercise(2);
+
+      expect(cubit.state.plan.map((e) => (e.exerciseId, e.order)).toList(), [
+        (1, 0),
+        (3, 1),
+      ]);
+      expect(cubit.state.sets.map((s) => (s.exerciseId, s.order)).toList(), [
+        (1, 0),
+        (3, 1),
+      ]);
+    });
+
+    test('free workout cards survive hydration', () {
+      cubit.startWorkout();
+      cubit.addExercise(exerciseId: 1, name: 'Bench Press');
+
+      final restored = WorkoutState.fromJson(cubit.state.toJson());
+      expect(restored.planTitle, isNull);
+      expect(restored.plan.single.name, 'Bench Press');
+    });
+
     test('restore slots survive starting a later workout', () async {
       cubit.startWorkout();
       cubit.logSet(exerciseId: 1, exerciseName: 'A', weight: 10, reps: 5);

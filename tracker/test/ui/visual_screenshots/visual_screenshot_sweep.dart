@@ -405,6 +405,30 @@ Future<void> captureScreensAt(
     await recorder.capture('Workout tab (idle)');
   });
 
+  await guarded('Workout tab (free workout)', () async {
+    cubit.startWorkout();
+    cubit.addExercise(exerciseId: fixtures.benchId, name: 'Bench Press');
+    cubit.addExercise(
+      exerciseId: fixtures.inclineId,
+      name: 'Incline Bench Press',
+    );
+    cubit.logSet(
+      exerciseId: fixtures.benchId,
+      exerciseName: 'Bench Press',
+      weight: 60,
+      reps: 10,
+      type: SetType.warmup,
+    );
+    cubit.logSet(
+      exerciseId: fixtures.benchId,
+      exerciseName: 'Bench Press',
+      weight: 80,
+      reps: 8,
+    );
+    await settle();
+    await recorder.capture('Workout tab (free workout)');
+  });
+
   // Fire any pending hydration-debounce timers before the binding checks
   // for leaked timers, and restore the platform override before the
   // foundation invariant check (addTearDown runs too late for both).

@@ -16,6 +16,7 @@ import 'package:tracker/domain/models/workout_session.dart';
 import 'package:tracker/domain/models/workout_set.dart';
 import 'package:tracker/main.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
+import 'package:tracker/ui/core/ui/set_type_chip.dart';
 import 'package:tracker/ui/settings/view_models/settings_cubit.dart';
 import 'package:tracker/ui/workout/view_models/workout_cubit.dart';
 
@@ -29,13 +30,13 @@ void main() {
     HydratedBloc.storage = InMemoryStorage();
   });
 
-  testWidgets('free-form logging keeps the warm-up toggle and add button', (
+  testWidgets('free workout adds exercise cards and logs sets per card', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(800, 1000);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
-    // A free workout loads its exercise dropdown from the repository, so
+    // A free workout picks its exercises from the repository, so
     // pump the real shell scoped to a test Isar with one seeded exercise
     // (pumpApp has no RepositoryScope). Real Isar IO only progresses inside
     // tester.runAsync (same concession as pumpPersistenceApp), and there is
@@ -98,30 +99,34 @@ void main() {
     tester
         .widget<FBottomNavigationBar>(find.byType(FBottomNavigationBar))
         .onChange!(2);
-    await pumpUntil(find.text('Log a set'));
+    await pumpUntil(find.text('Add exercise'));
 
-    // Free-form logging keeps its own affordances: the exercise dropdown,
-    // the warm-up toggle and the Add set button (no planned hints). (The
-    // exercise dropdown must match FSelect via a predicate: FSelect's
-    // constructor redirects to a private subclass, so byType never matches.
-    // It renders an internal read-only field too, so the form shows three
-    // FTextFields: exercise, weight, reps.)
-    final exerciseDropdown = find.byWidgetPredicate((w) => w is FSelect<int>);
-    expect(find.text('Add set'), findsOneWidget);
-    expect(find.byType(FCheckbox), findsOneWidget);
-    expect(exerciseDropdown, findsOneWidget);
-    expect(find.byType(FTextField), findsNWidgets(3));
-    final repsField = find
-        .descendant(
-          of: find.byType(FTextField).at(2),
-          matching: find.byType(EditableText),
-        )
-        .first;
+    // A free workout starts with no cards: exercises are added one at a time
+    // through the picker, and each gets its own card of set rows.
+    expect(find.text('Add an exercise to start logging sets.'), findsOneWidget);
+    expect(find.byType(FTextField), findsNothing);
+    expect(find.text('Add set'), findsNothing);
+
+    Future<void> pickBenchPress() async {
+      await tester.tap(find.text('Add exercise'));
+      await pumpUntil(find.text('Bench Press').hitTestable());
+      await tester.tap(find.text('Bench Press'));
+    }
+
+    await pickBenchPress();
+    await pumpUntil(find.text('Add set'));
+    await tester.pumpAndSettle();
+
+    expect(cubit.state.plan.single.exerciseId, exerciseId);
+    expect(find.text('1. '), findsOneWidget);
+    expect(find.text('Bench Press'), findsOneWidget);
+    expect(find.text('Add an exercise to start logging sets.'), findsNothing);
+    expect(find.byType(FTextField), findsNWidgets(2));
+    expect(find.byType(SetTypeChip), findsOneWidget);
     expect(
-      tester.widget<FTextField>(find.byType(FTextField).at(2)).hint,
+      tester.widget<FTextField>(find.byType(FTextField).at(1)).hint,
       'Reps',
     );
-    expect(tester.widget<EditableText>(repsField).controller.text, '');
 
     tester
         .widget<FButton>(
@@ -132,48 +137,28 @@ void main() {
         )
         .onPress!();
     await tester.pump();
-    expect(find.byType(FTextField), findsNWidgets(5));
+    expect(find.byType(FTextField), findsNWidgets(4));
     final addedWeightText = find
         .descendant(
-          of: find.byType(FTextField).at(3),
+          of: find.byType(FTextField).at(2),
           matching: find.byType(EditableText),
         )
         .first;
     expect(tester.widget<EditableText>(addedWeightText).controller.text, '');
     expect(cubit.state.sets, isEmpty);
 
-    // Pick the exercise through the dropdown's open picker (hit-testing the
-    // popover's animated overlay is unreliable under the test zone, so
-    // invoke the tile's press handler directly), then log a warm-up set via
-    // the kept controls.
-    await tester.tap(exerciseDropdown.first);
-    await pumpUntil(find.text('Bench Press').hitTestable());
-    tilePress() => tester
-        .widget<FItem>(
-          find
-              .ancestor(
-                of: find.text('Bench Press'),
-                matching: find.byType(FItem),
-              )
-              .first,
-        )
-        .onPress!;
-    tilePress()();
-    // The tile's press hides the popover (auto-hide) before lifting the
-    // selection; pump the hide animation to completion so the selection
-    // lands and no animation timer outlives the test.
-    for (var i = 0; i < 30; i++) {
-      await tester.pump(const Duration(milliseconds: 100));
-      if (find
-          .ancestor(of: find.text('Bench Press'), matching: find.byType(FItem))
-          .evaluate()
-          .isEmpty) {
-        break;
-      }
-    }
+    // The row's W/S chip is its warm-up toggle: flip it before typing, then
+    // log the row.
+    await tester.tap(find.byType(SetTypeChip).first);
     await tester.pump();
-
+    expect(find.text('W'), findsOneWidget);
     final weightField = find
+        .descendant(
+          of: find.byType(FTextField).at(0),
+          matching: find.byType(EditableText),
+        )
+        .first;
+    final repsField = find
         .descendant(
           of: find.byType(FTextField).at(1),
           matching: find.byType(EditableText),
@@ -181,12 +166,6 @@ void main() {
         .first;
     await tester.enterText(weightField, '50');
     await tester.enterText(repsField, '8');
-    await tester.ensureVisible(find.byType(FCheckbox));
-    await tester.tap(find.byType(FCheckbox));
-    // Forui tappables (checkbox included) defer their press callbacks
-    // through 100ms press/up timers; pump past them so the toggle lands and
-    // no timer outlives the test.
-    await tester.pump(const Duration(milliseconds: 300));
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pumpAndSettle();
 
@@ -198,7 +177,9 @@ void main() {
     expect(find.text('50 kg × 8'), findsNothing);
     expect(tester.widget<EditableText>(weightField).controller.text, '50');
     expect(tester.widget<EditableText>(repsField).controller.text, '8');
-    expect(tester.widget<FCheckbox>(find.byType(FCheckbox)).value, isFalse);
+    // The next blank row logs a working set again.
+    expect(find.text('W'), findsOneWidget);
+    expect(find.text('S'), findsOneWidget);
 
     tester
         .widget<FButton>(
@@ -209,10 +190,10 @@ void main() {
         )
         .onPress!();
     await tester.pumpAndSettle();
-    expect(find.byType(FTextField), findsNWidgets(7));
+    expect(find.byType(FTextField), findsNWidgets(6));
     final nextWeightText = find
         .descendant(
-          of: find.byType(FTextField).at(3),
+          of: find.byType(FTextField).at(2),
           matching: find.byType(EditableText),
         )
         .first;
@@ -230,64 +211,64 @@ void main() {
             .width -
         24;
     final bandEnd = rowWidth * 0.635 * 0.75;
-    final fieldRect = tester.getRect(find.byType(FTextField).at(1));
+    final fieldRect = tester.getRect(find.byType(FTextField).at(0));
 
     final bandGesture = await tester.startGesture(
-      tester.getCenter(find.byType(FTextField).at(1)),
+      tester.getCenter(find.byType(FTextField).at(0)),
     );
     await bandGesture.moveBy(Offset(-bandEnd / 2, 0));
     await tester.pump();
     final halfBandTravel =
-        fieldRect.left - tester.getRect(find.byType(FTextField).at(1)).left;
+        fieldRect.left - tester.getRect(find.byType(FTextField).at(0)).left;
     expect(halfBandTravel, lessThan(bandEnd / 2));
-    final cancelStartRect = tester.getRect(find.byType(FTextField).at(1));
+    final cancelStartRect = tester.getRect(find.byType(FTextField).at(0));
     await bandGesture.up();
     await tester.pump();
-    expect(tester.getRect(find.byType(FTextField).at(1)), cancelStartRect);
+    expect(tester.getRect(find.byType(FTextField).at(0)), cancelStartRect);
     await tester.pump(const Duration(milliseconds: 30));
-    final earlySpring = tester.getRect(find.byType(FTextField).at(1)).left;
+    final earlySpring = tester.getRect(find.byType(FTextField).at(0)).left;
     expect(earlySpring, greaterThan(cancelStartRect.left));
     expect(earlySpring, lessThan(fieldRect.left));
     await tester.pump(const Duration(milliseconds: 30));
-    final laterSpring = tester.getRect(find.byType(FTextField).at(1)).left;
+    final laterSpring = tester.getRect(find.byType(FTextField).at(0)).left;
     expect(laterSpring, greaterThan(earlySpring));
     expect(laterSpring, lessThan(fieldRect.left));
     await tester.pumpAndSettle();
-    expect(tester.getRect(find.byType(FTextField).at(1)), fieldRect);
+    expect(tester.getRect(find.byType(FTextField).at(0)), fieldRect);
     expect(find.text('Delete this set?'), findsNothing);
     expect(cubit.state.sets, hasLength(1));
 
     final trackGesture = await tester.startGesture(
-      tester.getCenter(find.byType(FTextField).at(1)),
+      tester.getCenter(find.byType(FTextField).at(0)),
     );
     await trackGesture.moveBy(Offset(-bandEnd - 10, 0));
     await tester.pump();
-    final atBandEnd = tester.getRect(find.byType(FTextField).at(1)).left;
+    final atBandEnd = tester.getRect(find.byType(FTextField).at(0)).left;
     expect(fieldRect.left - atBandEnd, lessThan(bandEnd));
     await trackGesture.moveBy(const Offset(-30, 0));
     await tester.pump();
     expect(
-      tester.getRect(find.byType(FTextField).at(1)).left,
+      tester.getRect(find.byType(FTextField).at(0)).left,
       closeTo(atBandEnd - 30, 6),
     );
     await trackGesture.cancel();
     await tester.pumpAndSettle();
-    expect(tester.getRect(find.byType(FTextField).at(1)), fieldRect);
+    expect(tester.getRect(find.byType(FTextField).at(0)), fieldRect);
     expect(cubit.state.sets, hasLength(1));
 
     await tester.timedDrag(
-      find.byType(FTextField).at(1),
+      find.byType(FTextField).at(0),
       Offset(-rowWidth * 0.6, 0),
       const Duration(milliseconds: 200),
     );
     await tester.pumpAndSettle();
     expect(find.text('Delete this set?'), findsNothing);
-    expect(tester.getRect(find.byType(FTextField).at(1)), fieldRect);
+    expect(tester.getRect(find.byType(FTextField).at(0)), fieldRect);
     expect(cubit.state.sets, hasLength(1));
 
-    final rowRect = tester.getRect(find.byType(FTextField).at(1));
+    final rowRect = tester.getRect(find.byType(FTextField).at(0));
     await tester.timedDrag(
-      find.byType(FTextField).at(1),
+      find.byType(FTextField).at(0),
       Offset(-rowWidth * 0.7, 0),
       const Duration(milliseconds: 200),
     );
@@ -298,13 +279,13 @@ void main() {
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
     expect(cubit.state.sets, hasLength(1));
-    expect(tester.getRect(find.byType(FTextField).at(1)), rowRect);
+    expect(tester.getRect(find.byType(FTextField).at(0)), rowRect);
     expect(
       tester
           .widget<EditableText>(
             find
                 .descendant(
-                  of: find.byType(FTextField).at(1),
+                  of: find.byType(FTextField).at(0),
                   matching: find.byType(EditableText),
                 )
                 .first,
@@ -315,7 +296,7 @@ void main() {
     );
 
     await tester.timedDrag(
-      find.byType(FTextField).at(1),
+      find.byType(FTextField).at(0),
       Offset(-rowWidth * 1.1, 0),
       const Duration(milliseconds: 200),
     );
@@ -324,13 +305,13 @@ void main() {
     await tester.tap(find.widgetWithText(FButton, 'Delete'));
     await tester.pumpAndSettle();
     expect(cubit.state.sets, isEmpty);
-    expect(find.byType(FTextField), findsNWidgets(5));
+    expect(find.byType(FTextField), findsNWidgets(4));
     expect(
       tester
           .widget<EditableText>(
             find
                 .descendant(
-                  of: find.byType(FTextField).at(1),
+                  of: find.byType(FTextField).at(0),
                   matching: find.byType(EditableText),
                 )
                 .first,
@@ -344,7 +325,7 @@ void main() {
           .widget<EditableText>(
             find
                 .descendant(
-                  of: find.byType(FTextField).at(3),
+                  of: find.byType(FTextField).at(2),
                   matching: find.byType(EditableText),
                 )
                 .first,
@@ -356,40 +337,55 @@ void main() {
 
     expect(find.byIcon(FLucideIcons.trash2), findsNWidgets(2));
     await tester.timedDrag(
-      find.byType(FTextField).at(1),
+      find.byType(FTextField).at(0),
       Offset(-rowWidth * 0.7, 0),
       const Duration(milliseconds: 200),
     );
     await tester.pumpAndSettle();
     expect(find.text('Delete this set?'), findsNothing);
-    expect(find.byType(FTextField), findsNWidgets(3));
+    expect(find.byType(FTextField), findsNWidgets(2));
 
     expect(find.byIcon(FLucideIcons.trash2), findsNothing);
-    final loggingRowRect = tester.getRect(find.byType(FTextField).at(1));
+    final loggingRowRect = tester.getRect(find.byType(FTextField).at(0));
     final gesture = await tester.startGesture(
-      tester.getCenter(find.byType(FTextField).at(1)),
+      tester.getCenter(find.byType(FTextField).at(0)),
     );
     await gesture.moveBy(const Offset(-200, 0));
     await tester.pump();
-    final draggedRect = tester.getRect(find.byType(FTextField).at(1));
+    final draggedRect = tester.getRect(find.byType(FTextField).at(0));
     expect(draggedRect.left, greaterThan(loggingRowRect.left - 60));
     expect(draggedRect.left, lessThan(loggingRowRect.left - 20));
     expect(find.byIcon(FLucideIcons.trash2), findsNothing);
     await gesture.up();
     await tester.pumpAndSettle();
-    expect(tester.getRect(find.byType(FTextField).at(1)), loggingRowRect);
+    expect(tester.getRect(find.byType(FTextField).at(0)), loggingRowRect);
     expect(find.text('Delete this set?'), findsNothing);
     expect(cubit.state.sets, isEmpty);
 
     await tester.timedDrag(
-      find.byType(FTextField).at(1),
+      find.byType(FTextField).at(0),
       Offset(-rowWidth * 1.1, 0),
       const Duration(milliseconds: 200),
     );
     await tester.pumpAndSettle();
     expect(find.text('Delete this set?'), findsNothing);
-    expect(tester.getRect(find.byType(FTextField).at(1)), loggingRowRect);
+    expect(tester.getRect(find.byType(FTextField).at(0)), loggingRowRect);
     expect(cubit.state.sets, isEmpty);
-    expect(find.byType(FTextField), findsNWidgets(3));
+    expect(find.byType(FTextField), findsNWidgets(2));
+
+    // Picking an exercise that already has a card says so instead of adding
+    // a second one.
+    await pickBenchPress();
+    await pumpUntil(find.text('Bench Press is already in this workout'));
+    expect(cubit.state.plan, hasLength(1));
+    // Let the toast expire so no timer outlives the test.
+    await tester.pump(const Duration(seconds: 4));
+    await tester.pumpAndSettle();
+
+    // A card without sets is removed at once.
+    await tester.tap(find.byIcon(FLucideIcons.x));
+    await tester.pumpAndSettle();
+    expect(cubit.state.plan, isEmpty);
+    expect(find.text('Add an exercise to start logging sets.'), findsOneWidget);
   });
 }

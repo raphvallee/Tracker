@@ -1,11 +1,13 @@
 // No Isar here: the cubit's persistence and the repository-backed free-form
 // flow live one per file in workout_*_test.dart (docs/TESTING_ISAR_CI.md).
 
+import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forui/forui.dart';
 import 'package:hydrated_bloc/hydrated_bloc.dart';
 import 'package:tracker/domain/models/workout_split.dart';
+import 'package:tracker/ui/core/ui/set_type_chip.dart';
 import 'package:tracker/ui/workout/view_models/workout_cubit.dart';
 
 import '../../../testing/fakes/in_memory_storage.dart';
@@ -272,6 +274,210 @@ void main() {
       await tester.pumpAndSettle();
       expect(cubit.state.sets, hasLength(1));
       expect(find.text('Must be at least 1'), findsOneWidget);
+    });
+  });
+
+  group('Free workout cards', () {
+    Future<WorkoutCubit> pumpFree(
+      WidgetTester tester, {
+      void Function(WorkoutCubit cubit)? seed,
+    }) async {
+      tester.view.physicalSize = const Size(800, 1400);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      final cubit = await pumpApp(tester);
+      cubit.startWorkout();
+      seed?.call(cubit);
+      tester
+          .widget<FBottomNavigationBar>(find.byType(FBottomNavigationBar))
+          .onChange!(2);
+      await tester.pumpAndSettle();
+      return cubit;
+    }
+
+    void logBench(WorkoutCubit cubit, double weight) => cubit.logSet(
+      exerciseId: 1,
+      exerciseName: 'Bench Press',
+      weight: weight,
+      reps: 5,
+    );
+
+    Finder input(int index) => find
+        .descendant(
+          of: find.byType(FTextField).at(index),
+          matching: find.byType(EditableText),
+        )
+        .first;
+
+    String textOf(WidgetTester tester, int index) =>
+        tester.widget<EditableText>(input(index)).controller.text;
+
+    Future<void> commit(WidgetTester tester) async {
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('each exercise gets its own card, in logged order', (
+      tester,
+    ) async {
+      await pumpFree(
+        tester,
+        seed: (cubit) {
+          cubit.addExercise(exerciseId: 1, name: 'Bench Press');
+          logBench(cubit, 80);
+          // Sets logged without a card (older saved sessions) get one too.
+          cubit.logSet(
+            exerciseId: 2,
+            exerciseName: 'Squat',
+            weight: 100,
+            reps: 5,
+          );
+        },
+      );
+
+      expect(find.text('Free workout'), findsOneWidget);
+      expect(find.text('1. '), findsOneWidget);
+      expect(find.text('Bench Press'), findsOneWidget);
+      expect(find.text('2. '), findsOneWidget);
+      expect(find.text('Squat'), findsOneWidget);
+      // One logged row plus one blank row per card.
+      expect(find.byType(FTextField), findsNWidgets(8));
+      expect(find.text('Add set'), findsNWidgets(2));
+      expect(find.text('Add exercise'), findsOneWidget);
+      expect(find.byType(FCheckbox), findsNothing);
+      // FSelect redirects to a private subclass: match it by predicate.
+      expect(find.byWidgetPredicate((w) => w is FSelect<int>), findsNothing);
+      expect(textOf(tester, 0), '80');
+      expect(textOf(tester, 4), '100');
+    });
+
+    testWidgets('a set typed in a lower blank row fills the first one', (
+      tester,
+    ) async {
+      final cubit = await pumpFree(
+        tester,
+        seed: (cubit) => cubit.addExercise(exerciseId: 1, name: 'Bench Press'),
+      );
+      await tester.tap(find.text('Add set'));
+      await tester.pumpAndSettle();
+      expect(find.byType(FTextField), findsNWidgets(4));
+
+      await tester.enterText(input(2), '60');
+      await tester.enterText(input(3), '5');
+      await commit(tester);
+
+      expect(cubit.state.sets, hasLength(1));
+      expect(find.byType(FTextField), findsNWidgets(4));
+      expect(
+        [for (var i = 0; i < 4; i++) textOf(tester, i)],
+        ['60', '5', '', ''],
+      );
+
+      // Leaving the logged row again must not log it twice.
+      await tester.enterText(input(1), '5');
+      await commit(tester);
+      expect(cubit.state.sets, hasLength(1));
+    });
+
+    testWidgets('clearing a logged row shifts the later sets up', (
+      tester,
+    ) async {
+      final cubit = await pumpFree(
+        tester,
+        seed: (cubit) {
+          cubit.addExercise(exerciseId: 1, name: 'Bench Press');
+          for (final weight in [60.0, 70.0, 80.0]) {
+            logBench(cubit, weight);
+          }
+        },
+      );
+      expect(find.byType(FTextField), findsNWidgets(8));
+
+      await tester.enterText(input(2), '');
+      await tester.enterText(input(3), '');
+      await commit(tester);
+
+      expect(cubit.state.sets.map((s) => s.weight).toList(), [60, 80]);
+      expect(find.byType(FTextField), findsNWidgets(6));
+      expect(
+        [for (var i = 0; i < 6; i++) textOf(tester, i)],
+        ['60', '5', '80', '5', '', ''],
+      );
+    });
+
+    testWidgets('the set chip toggles warm-up before or after logging', (
+      tester,
+    ) async {
+      final cubit = await pumpFree(
+        tester,
+        seed: (cubit) => cubit.addExercise(exerciseId: 1, name: 'Bench Press'),
+      );
+      Finder chip(int row) => find.byType(SetTypeChip).at(row);
+
+      // Before typing: the blank row logs as a warm-up.
+      await tester.tap(chip(0));
+      await tester.pump();
+      expect(find.text('W'), findsOneWidget);
+      await tester.enterText(input(0), '40');
+      await tester.enterText(input(1), '10');
+      await commit(tester);
+      expect(cubit.state.sets.single.isWarmup, isTrue);
+
+      // On a logged row: flips the logged set.
+      await tester.tap(chip(0));
+      await tester.pumpAndSettle();
+      expect(cubit.state.sets.single.isWarmup, isFalse);
+
+      // A mouse click blurs the typed row first, logging it, and the toggle
+      // then lands on the logged set.
+      await tester.enterText(input(2), '60');
+      await tester.enterText(input(3), '8');
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(location: tester.getCenter(chip(1)));
+      await mouse.down(tester.getCenter(chip(1)));
+      await mouse.up();
+      await tester.pumpAndSettle();
+      expect(cubit.state.sets, hasLength(2));
+      expect(cubit.state.sets.last.weight, 60);
+      expect(cubit.state.sets.last.isWarmup, isTrue);
+      expect(find.text('W'), findsOneWidget);
+      // Move the mouse off and let the chip's hover tooltip timers run out.
+      await mouse.removePointer();
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('removing an exercise with sets asks first', (tester) async {
+      final cubit = await pumpFree(
+        tester,
+        seed: (cubit) {
+          cubit.addExercise(exerciseId: 1, name: 'Bench Press');
+          logBench(cubit, 80);
+        },
+      );
+
+      await tester.tap(find.byIcon(FLucideIcons.x));
+      await tester.pumpAndSettle();
+      expect(find.text('Remove Bench Press?'), findsOneWidget);
+      expect(
+        find.text('This will delete its 1 set from this workout.'),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(cubit.state.sets, hasLength(1));
+
+      await tester.tap(find.byIcon(FLucideIcons.x));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FButton, 'Remove'));
+      await tester.pumpAndSettle();
+      expect(cubit.state.sets, isEmpty);
+      expect(cubit.state.plan, isEmpty);
+      expect(find.text('Bench Press'), findsNothing);
+      expect(
+        find.text('Add an exercise to start logging sets.'),
+        findsOneWidget,
+      );
     });
   });
 

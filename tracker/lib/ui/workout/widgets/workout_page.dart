@@ -13,6 +13,7 @@ import 'package:tracker/domain/models/workout_set.dart';
 import 'package:tracker/domain/models/workout_split.dart';
 import 'package:tracker/ui/core/ui/app_dialog.dart';
 import 'package:tracker/ui/core/ui/custom_app_bar.dart';
+import 'package:tracker/ui/core/ui/custom_route.dart';
 import 'package:tracker/ui/core/ui/decimal_input_formatter.dart';
 import 'package:tracker/ui/core/ui/icon_button.dart';
 import 'package:tracker/ui/core/ui/keyboard_inset.dart';
@@ -25,6 +26,7 @@ import 'package:tracker/ui/workout/view_models/workout_cubit.dart';
 import 'package:tracker/utils/decimal_input.dart';
 import 'package:tracker/utils/form_validators.dart';
 
+import 'exercise_picker_page.dart';
 import 'gym_picker.dart';
 
 class WorkoutPage extends StatelessWidget {
@@ -183,18 +185,44 @@ class _InProgressView extends StatelessWidget {
           children: <Widget>[
             _WorkoutHeader(presentation: presentation.header),
             const SizedBox(height: 16),
-            if (presentation.plan.isEmpty)
-              const _FreeFormPanel()
-            else
-              for (final entry in presentation.plan)
+            if (presentation.isFree) ...[
+              for (final (index, entry) in presentation.exercises.indexed)
+                _ExerciseLogCard(
+                  key: ValueKey('free-${entry.exercise.exerciseId}'),
+                  orderNumber: index,
+                  exerciseId: entry.exercise.exerciseId,
+                  exerciseName: entry.exercise.name,
+                  planned: false,
+                  sets: entry.sets,
+                  onRemove: () => _removeExercise(context, entry),
+                ),
+              if (presentation.exercises.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Text(
+                    'Add an exercise to start logging sets.',
+                    textAlign: TextAlign.center,
+                    style: context.theme.typography.body.sm.copyWith(
+                      color: context.theme.colors.mutedForeground,
+                    ),
+                  ),
+                ),
+              FButton(
+                variant: .outline,
+                onPress: () => _addExercise(context),
+                prefix: const Icon(FLucideIcons.plus),
+                child: const Text('Add exercise'),
+              ),
+            ] else
+              for (final entry in presentation.exercises)
                 _ExerciseLogCard(
                   key: ValueKey('plan-${entry.exercise.order}'),
                   orderNumber: entry.exercise.order,
-                  title: entry.exercise.name,
-                  sets: entry.sets,
-                  plannedSets: entry.exercise.sets,
                   exerciseId: entry.exercise.exerciseId,
                   exerciseName: entry.exercise.name,
+                  planned: true,
+                  sets: entry.sets,
+                  plannedSets: entry.exercise.sets,
                 ),
             const SizedBox(height: 24),
             FButton(
@@ -217,6 +245,47 @@ class _InProgressView extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _addExercise(BuildContext context) async {
+    // Leaving a typed row is what logs it: do that before the picker covers
+    // the card.
+    FocusManager.instance.primaryFocus?.unfocus();
+    final exercise = await pushTo<Exercise>(
+      context,
+      const ExercisePickerPage(),
+    );
+    if (exercise == null || !context.mounted) return;
+    final added = context.read<WorkoutCubit>().addExercise(
+      exerciseId: exercise.id,
+      name: exercise.title,
+    );
+    if (!added) {
+      showFToast(
+        context: context,
+        title: Text('${exercise.title} is already in this workout'),
+        duration: const Duration(seconds: 3),
+      );
+    }
+  }
+
+  Future<void> _removeExercise(
+    BuildContext context,
+    _ExerciseEntry entry,
+  ) async {
+    if (entry.sets.isNotEmpty) {
+      final confirmed = await showConfirmDialog(
+        context,
+        title: 'Remove ${entry.exercise.name}?',
+        message:
+            'This will delete its ${plural('set', entry.sets.length)} from '
+            'this workout.',
+        confirmLabel: 'Remove',
+        destructive: true,
+      );
+      if (!confirmed || !context.mounted) return;
+    }
+    context.read<WorkoutCubit>().removeExercise(entry.exercise.exerciseId);
   }
 
   Future<void> _confirmEnd(
@@ -306,26 +375,46 @@ class _InProgressView extends StatelessWidget {
   }
 }
 
+typedef _ExerciseEntry = ({PlanExercise exercise, List<ActiveSet> sets});
+
 class _WorkoutPresentation {
   const _WorkoutPresentation({
     required this.header,
-    required this.plan,
+    required this.isFree,
+    required this.exercises,
     required this.setCount,
   });
 
   final _WorkoutHeaderData header;
-  final List<({PlanExercise exercise, List<ActiveSet> sets})> plan;
+
+  /// A free workout has no split day behind it: its exercise cards are the
+  /// ones the user added along the way.
+  final bool isFree;
+  final List<_ExerciseEntry> exercises;
   final int setCount;
 
   static _WorkoutPresentation fromState(WorkoutState state) {
+    final isFree = state.planTitle == null;
+    final grouped = state.setsByExercise;
+    final listed = {for (final exercise in state.plan) exercise.exerciseId};
     return _WorkoutPresentation(
       header: _WorkoutHeaderData.fromState(state),
-      plan: [
+      isFree: isFree,
+      exercises: [
         for (final exercise in state.plan)
-          (
-            exercise: exercise,
-            sets: state.setsByExercise[exercise.exerciseId] ?? const [],
-          ),
+          (exercise: exercise, sets: grouped[exercise.exerciseId] ?? const []),
+        // Free sets without a card of their own (sessions saved before free
+        // workouts kept their exercises) still get one, in logged order.
+        if (isFree)
+          for (final MapEntry(key: id, value: sets) in grouped.entries)
+            if (!listed.contains(id))
+              (
+                exercise: PlanExercise(
+                  exerciseId: id,
+                  name: sets.first.exerciseName,
+                ),
+                sets: sets,
+              ),
       ],
       setCount: state.sets.length,
     );
@@ -417,26 +506,27 @@ class _WorkoutHeader extends StatelessWidget {
 class _ExerciseLogCard extends StatelessWidget {
   const _ExerciseLogCard({
     super.key,
-    this.orderNumber,
-    required this.title,
+    required this.orderNumber,
+    required this.exerciseId,
+    required this.exerciseName,
+    required this.planned,
     required this.sets,
     this.plannedSets = const [],
-    this.exerciseId,
-    this.exerciseName,
-    this.exercises,
+    this.onRemove,
   });
 
-  final int? orderNumber;
+  final int orderNumber;
 
-  final String title;
+  final int exerciseId;
+  final String exerciseName;
+
+  final bool planned;
 
   final List<ActiveSet> sets;
 
   final List<PlannedSet> plannedSets;
 
-  final int? exerciseId;
-  final String? exerciseName;
-  final List<Exercise>? exercises;
+  final VoidCallback? onRemove;
 
   @override
   Widget build(BuildContext context) {
@@ -453,18 +543,25 @@ class _ExerciseLogCard extends StatelessWidget {
             children: <Widget>[
               Row(
                 children: <Widget>[
-                  if (orderNumber != null)
-                    Text('${orderNumber! + 1}. ', style: titleStyle),
-                  Expanded(child: Text(title, style: titleStyle)),
+                  Text('${orderNumber + 1}. ', style: titleStyle),
+                  Expanded(child: Text(exerciseName, style: titleStyle)),
+                  if (onRemove != null)
+                    AppIconButton(
+                      icon: FLucideIcons.x,
+                      tooltip: 'Remove exercise',
+                      onPress: onRemove,
+                      size: .sm,
+                      compact: true,
+                    ),
                 ],
               ),
               const SizedBox(height: 12),
               _SetEditor(
-                sets: sets,
-                plannedSets: plannedSets,
                 exerciseId: exerciseId,
                 exerciseName: exerciseName,
-                exercises: exercises,
+                planned: planned,
+                sets: sets,
+                plannedSets: plannedSets,
               ),
             ],
           ),
@@ -474,58 +571,22 @@ class _ExerciseLogCard extends StatelessWidget {
   }
 }
 
-class _FreeFormPanel extends StatefulWidget {
-  const _FreeFormPanel();
-
-  @override
-  State<_FreeFormPanel> createState() => _FreeFormPanelState();
-}
-
-class _FreeFormPanelState extends State<_FreeFormPanel> {
-  List<Exercise> _exercises = const [];
-  bool _didLoad = false;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (!_didLoad) {
-      _didLoad = true;
-      _load();
-    }
-  }
-
-  Future<void> _load() async {
-    final repo = RepositoryScope.maybeOf(context);
-    final list = await repo?.exercises.getAll() ?? const <Exercise>[];
-    if (!mounted) return;
-    setState(() => _exercises = list);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return BlocBuilder<WorkoutCubit, WorkoutState>(
-      builder: (context, state) => _ExerciseLogCard(
-        title: 'Log a set',
-        sets: state.sets,
-        exercises: _exercises,
-      ),
-    );
-  }
-}
-
 class _SetEditor extends StatefulWidget {
   const _SetEditor({
-    this.exerciseId,
-    this.exerciseName,
-    this.exercises,
+    required this.exerciseId,
+    required this.exerciseName,
+    required this.planned,
     this.sets = const [],
     this.plannedSets = const [],
   });
 
-  final int? exerciseId;
-  final String? exerciseName;
+  final int exerciseId;
+  final String exerciseName;
 
-  final List<Exercise>? exercises;
+  /// Planned cards follow their split day: one row per planned set with the
+  /// target reps as hints. Free cards keep a blank row ready, toggle warm-up
+  /// per row and delete rows by swiping.
+  final bool planned;
 
   final List<ActiveSet> sets;
 
@@ -543,6 +604,19 @@ class _Row {
   double? lastWeightKg;
   double? lastReps;
 
+  /// The set type a blank free row logs with; a logged row shows its set's.
+  bool warmup = false;
+
+  void clear() {
+    weight.clear();
+    reps.clear();
+    weightError = null;
+    repsError = null;
+    lastWeightKg = null;
+    lastReps = null;
+    warmup = false;
+  }
+
   void dispose() {
     weight.dispose();
     reps.dispose();
@@ -551,27 +625,28 @@ class _Row {
 
 class _SetEditorState extends State<_SetEditor> {
   final List<_Row> _rows = [];
-  bool _warmup = false;
-  int? _selectedId;
-  String? _exerciseError;
 
   int _extraEmptyRows = 0;
-
-  bool get _planned => widget.exerciseId != null;
 
   int get _emptyRowCount => _extraEmptyRows + 1;
 
   int get _plannedBaseCount =>
       widget.plannedSets.isEmpty ? 1 : widget.plannedSets.length;
 
-  int get _rowCount => _planned
+  int get _rowCount => widget.planned
       ? math.max(_plannedBaseCount, widget.sets.length) + _extraEmptyRows
       : widget.sets.length + _emptyRowCount;
+
+  /// The exercise's sets as the cubit holds them right now. Handlers read
+  /// these rather than [_SetEditor.sets]: the blur a tap causes can log a
+  /// set before this card is rebuilt with it.
+  List<ActiveSet> get _liveSets =>
+      context.read<WorkoutCubit>().state.setsByExercise[widget.exerciseId] ??
+      const [];
 
   @override
   void initState() {
     super.initState();
-    _selectedId = widget.exerciseId;
     _reconcile();
   }
 
@@ -616,21 +691,10 @@ class _SetEditorState extends State<_SetEditor> {
 
   @override
   Widget build(BuildContext context) {
-    final plannedRows = _planned && widget.plannedSets.isNotEmpty;
+    final plannedRows = widget.planned && widget.plannedSets.isNotEmpty;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        if (!_planned) ...[
-          _exerciseDropdown(),
-          if (_exerciseError != null)
-            Text(
-              _exerciseError!,
-              style: context.theme.typography.body.sm.copyWith(
-                color: context.theme.colors.error,
-              ),
-            ),
-          const SizedBox(height: 8),
-        ],
         for (var i = 0; i < _rows.length; i++) ...[
           // The inter-row spacing lives outside the swipe wrapper so the
           // delete background it reveals matches the field row's height
@@ -641,34 +705,17 @@ class _SetEditorState extends State<_SetEditor> {
                 padding: .value(EdgeInsets.symmetric(vertical: 10)),
               ),
             ),
-          Focus(
-            // The row commits when focus leaves any of its fields; the
-            // wrapper must not capture focus or participate in traversal.
-            canRequestFocus: false,
-            skipTraversal: true,
-            onFocusChange: (focused) {
-              if (!focused) _commitRow(i);
-            },
-            child: !_planned
-                ? _SwipeToDelete(
-                    canDelete: _canSwipeDelete(i),
-                    onConfirm: () => _confirmSwipeDelete(i),
-                    onConfirmed: () => _onSwipeDismissed(i),
-                    child: _buildRow(context, i, plannedRows),
-                  )
-                : _buildRow(context, i, plannedRows),
+          // Keyed by the row itself: a commit can move its row up to the
+          // slot the new set lands in, and the fields (focus included) must
+          // move along with it.
+          KeyedSubtree(
+            key: ObjectKey(_rows[i]),
+            child: _rowFrame(context, i, plannedRows),
           ),
         ],
         const SizedBox(height: 4),
         Row(
           children: <Widget>[
-            if (!_planned) ...[
-              FCheckbox(
-                label: const Text('Warm-up'),
-                value: _warmup,
-                onChange: (v) => setState(() => _warmup = v),
-              ),
-            ],
             const Spacer(),
             FButton(
               variant: .ghost,
@@ -682,6 +729,27 @@ class _SetEditorState extends State<_SetEditor> {
     );
   }
 
+  Widget _rowFrame(BuildContext context, int index, bool plannedRows) {
+    final row = _rows[index];
+    return Focus(
+      // The row commits when focus leaves any of its fields; the
+      // wrapper must not capture focus or participate in traversal.
+      canRequestFocus: false,
+      skipTraversal: true,
+      onFocusChange: (focused) {
+        if (!focused) _commitRow(row);
+      },
+      child: widget.planned
+          ? _buildRow(context, index, plannedRows)
+          : _SwipeToDelete(
+              canDelete: _canSwipeDelete(index),
+              onConfirm: () => _confirmSwipeDelete(row),
+              onConfirmed: () => _onSwipeDismissed(row),
+              child: _buildRow(context, index, plannedRows),
+            ),
+    );
+  }
+
   Widget _buildRow(BuildContext context, int index, bool plannedRows) {
     final row = _rows[index];
     final repHint = plannedRows && index < widget.plannedSets.length
@@ -691,16 +759,20 @@ class _SetEditorState extends State<_SetEditor> {
       children: <Widget>[
         SizedBox(
           width: 28,
-          child: index < widget.sets.length
-              ? Center(
-                  child: SetTypeChip(isWarmup: widget.sets[index].isWarmup),
-                )
-              : Text(
-                  'Set',
-                  style: context.theme.typography.body.xs.copyWith(
-                    color: context.theme.colors.mutedForeground,
-                  ),
-                ),
+          child: widget.planned
+              ? index < widget.sets.length
+                    ? Center(
+                        child: SetTypeChip(
+                          isWarmup: widget.sets[index].isWarmup,
+                        ),
+                      )
+                    : Text(
+                        'Set',
+                        style: context.theme.typography.body.xs.copyWith(
+                          color: context.theme.colors.mutedForeground,
+                        ),
+                      )
+              : _setTypeToggle(index),
         ),
         const SizedBox(width: 8),
         Expanded(
@@ -713,12 +785,11 @@ class _SetEditorState extends State<_SetEditor> {
             inputFormatters: [DecimalInputFormatter(allowNegative: true)],
             hint: weightUnitOf(context).symbol,
             error: row.weightError == null ? null : Text(row.weightError!),
-            // Free rows sit inside a Dismissible: turning the selection
-            // affordances off keeps the text field from claiming horizontal
-            // drags in the gesture arena, so the swipe-to-delete gesture
-            // stays reachable. The values are short numbers nobody selects
-            // by hand inside the row.
-            enableInteractiveSelection: !_planned,
+            // Free rows sit inside the swipe-to-delete wrapper: turning the
+            // selection affordances off keeps a horizontal swipe from also
+            // dragging a selection across the field. The values are short
+            // numbers nobody selects by hand inside the row.
+            enableInteractiveSelection: false,
           ),
         ),
         const SizedBox(width: 6),
@@ -736,7 +807,7 @@ class _SetEditorState extends State<_SetEditor> {
             inputFormatters: [DecimalInputFormatter()],
             hint: repHint,
             error: row.repsError == null ? null : Text(row.repsError!),
-            enableInteractiveSelection: !_planned,
+            enableInteractiveSelection: false,
             textInputAction: TextInputAction.done,
             onSubmit: (_) => FocusScope.of(context).unfocus(),
           ),
@@ -745,20 +816,46 @@ class _SetEditorState extends State<_SetEditor> {
     );
   }
 
-  Widget _exerciseDropdown() {
-    final exercises = widget.exercises ?? const <Exercise>[];
-    return FSelect<int>(
-      label: const Text('Exercise'),
-      items: {for (final e in exercises) e.title: e.id},
-      control: FSelectControl<int>.lifted(
-        value: _selectedId,
-        onChange: (v) => setState(() {
-          _selectedId = v;
-          _exerciseError = null;
-        }),
+  /// The free row's W/S chip doubles as its warm-up toggle. A blank row's
+  /// chip is dimmed: it previews the type the row will log with.
+  Widget _setTypeToggle(int index) {
+    final row = _rows[index];
+    final logged = index < widget.sets.length ? widget.sets[index] : null;
+    final chip = SetTypeChip(isWarmup: logged?.isWarmup ?? row.warmup);
+    return FTooltip(
+      tipBuilder: (_, _) => const Text('Toggle warm-up'),
+      child: Semantics(
+        button: true,
+        label: 'Toggle warm-up',
+        child: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => _toggleWarmup(row),
+            child: Center(
+              child: logged == null ? Opacity(opacity: 0.5, child: chip) : chip,
+            ),
+          ),
+        ),
       ),
-      forceErrorText: _exerciseError,
     );
+  }
+
+  void _toggleWarmup(_Row row) {
+    final index = _rows.indexOf(row);
+    if (index < 0) return;
+    // A mouse click blurs the typed row first, and that blur may already
+    // have logged it: then the toggle flips the logged set's type.
+    final sets = _liveSets;
+    if (index < sets.length) {
+      final set = sets[index];
+      context.read<WorkoutCubit>().updateSet(
+        set.order,
+        type: set.isWarmup ? SetType.working : SetType.warmup,
+      );
+      return;
+    }
+    setState(() => row.warmup = !row.warmup);
   }
 
   void _addEmptyRow() {
@@ -780,12 +877,13 @@ class _SetEditorState extends State<_SetEditor> {
     return _extraEmptyRows > 0;
   }
 
-  Future<bool> _confirmSwipeDelete(int index) async {
+  Future<bool> _confirmSwipeDelete(_Row row) async {
+    final index = _rows.indexOf(row);
     // Double guard: the gesture never reaches here for an undeletable row,
     // but a stale gesture must not remove one either.
-    if (!_canSwipeDelete(index)) return false;
-    final row = _rows[index];
-    final mapped = index < widget.sets.length ? widget.sets[index] : null;
+    if (index < 0 || !_canSwipeDelete(index)) return false;
+    final sets = _liveSets;
+    final mapped = index < sets.length ? sets[index] : null;
     final hasContent =
         row.weight.text.trim().isNotEmpty || row.reps.text.trim().isNotEmpty;
     if (mapped == null && !hasContent) {
@@ -800,22 +898,19 @@ class _SetEditorState extends State<_SetEditor> {
     );
   }
 
-  void _onSwipeDismissed(int index) {
-    final mapped = index < widget.sets.length ? widget.sets[index] : null;
+  void _onSwipeDismissed(_Row row) {
+    final index = _rows.indexOf(row);
+    if (index < 0) return;
+    final sets = _liveSets;
+    final mapped = index < sets.length ? sets[index] : null;
     if (mapped != null) {
-      for (var j = index; j < widget.sets.length; j++) {
-        _rows[j]
-          ..weight.clear()
-          ..reps.clear()
-          ..lastWeightKg = null
-          ..lastReps = null;
-      }
-      context.read<WorkoutCubit>().removeSet(mapped.order);
-      setState(() {});
+      _removeLoggedSet(index, sets, mapped);
       return;
     }
     setState(() {
       _rows.removeAt(index);
+      // The row's fields unmount with the next frame; release them after.
+      WidgetsBinding.instance.addPostFrameCallback((_) => row.dispose());
       if (_extraEmptyRows > 0) _extraEmptyRows--;
       // Typed values can live in the always-available row; dropping it must
       // not leave the form with no logging row at all.
@@ -823,17 +918,23 @@ class _SetEditorState extends State<_SetEditor> {
     });
   }
 
-  String _nameFor(int id) {
-    if (widget.exerciseName?.isNotEmpty ?? false) return widget.exerciseName!;
-    for (final e in widget.exercises ?? const <Exercise>[]) {
-      if (e.id == id) return e.title;
+  /// Rows map to sets by position, so removing a logged set shifts every
+  /// later set up one row. Clear the rows from [index] on, so the next
+  /// reconcile refills them from the shifted sets instead of leaving the
+  /// last one behind as a stale copy of the set it held.
+  void _removeLoggedSet(int index, List<ActiveSet> sets, ActiveSet mapped) {
+    for (var j = index; j < sets.length; j++) {
+      _rows[j].clear();
     }
-    return '';
+    context.read<WorkoutCubit>().removeSet(mapped.order);
+    setState(() {});
   }
 
-  Future<void> _commitRow(int index) async {
-    final row = _rows[index];
-    final mapped = index < widget.sets.length ? widget.sets[index] : null;
+  Future<void> _commitRow(_Row row) async {
+    var index = _rows.indexOf(row);
+    if (index < 0) return;
+    var sets = _liveSets;
+    final mapped = index < sets.length ? sets[index] : null;
 
     final weightText = row.weight.text.trim();
     final repsText = row.reps.text.trim();
@@ -841,9 +942,10 @@ class _SetEditorState extends State<_SetEditor> {
       row.weightError = null;
       row.repsError = null;
       if (mapped != null) {
-        context.read<WorkoutCubit>().removeSet(mapped.order);
+        _removeLoggedSet(index, sets, mapped);
+      } else {
+        setState(() {});
       }
-      setState(() {});
       return;
     }
 
@@ -868,12 +970,6 @@ class _SetEditorState extends State<_SetEditor> {
       return;
     }
 
-    final id = mapped?.exerciseId ?? _selectedId;
-    if (id == null || id <= 0) {
-      setState(() => _exerciseError = 'Pick an exercise first');
-      return;
-    }
-
     final kilograms = kilogramsFromDisplay(context, weightDisplay);
     if (mapped != null &&
         _sameKg(mapped.weight, kilograms) &&
@@ -890,22 +986,31 @@ class _SetEditorState extends State<_SetEditor> {
 
     // The modal blocks other edits, but the session may still have been ended
     // or restored underneath: re-read the mapping before writing.
+    index = _rows.indexOf(row);
+    if (index < 0) return;
     final cubit = context.read<WorkoutCubit>();
-    final target = index < widget.sets.length ? widget.sets[index] : null;
+    sets = _liveSets;
+    final target = index < sets.length ? sets[index] : null;
     if (target != null) {
       if (!_sameKg(target.weight, kilograms) || target.reps != reps) {
         cubit.updateSet(target.order, weight: kilograms, reps: reps);
       }
     } else {
+      // The new set is appended after the logged ones. Move a row typed
+      // further down up to that slot, or the set would show in the first
+      // blank row and leave this one behind as a stale copy.
+      if (index > sets.length) {
+        _rows.insert(sets.length, _rows.removeAt(index));
+      }
       cubit.logSet(
-        exerciseId: id,
-        exerciseName: _nameFor(id),
+        exerciseId: widget.exerciseId,
+        exerciseName: widget.exerciseName,
         weight: kilograms,
         reps: reps,
-        type: !_planned && _warmup ? SetType.warmup : SetType.working,
+        type: !widget.planned && row.warmup ? SetType.warmup : SetType.working,
       );
-      if (!_planned) {
-        _warmup = false;
+      row.warmup = false;
+      if (!widget.planned) {
         if (_extraEmptyRows > 0) _extraEmptyRows--;
       } else if (index >= _plannedBaseCount && _extraEmptyRows > 0) {
         _extraEmptyRows--;
@@ -1273,8 +1378,9 @@ class _SwipeToDeleteState extends State<_SwipeToDelete>
                     opacity: 1 - dismissProgress,
                     child: Transform.translate(
                       offset: Offset(_offset, 0),
+                      // Matches the FCard surface the rows sit on.
                       child: ColoredBox(
-                        color: context.theme.colors.background,
+                        color: context.theme.colors.card,
                         child: widget.child,
                       ),
                     ),

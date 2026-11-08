@@ -280,6 +280,28 @@ Future<void> sweepSize(WidgetTester tester, String label, Size size) async {
   );
   _mark('done @ $label');
 
+  // A free workout builds its exercise cards as they are added.
+  cubit.startWorkout();
+  cubit.addExercise(exerciseId: sweepFixtures.benchId, name: 'Bench Press');
+  cubit.addExercise(
+    exerciseId: sweepFixtures.inclineId,
+    name: 'Incline Bench Press',
+  );
+  cubit.logSet(
+    exerciseId: sweepFixtures.benchId,
+    exerciseName: 'Bench Press',
+    weight: 60,
+    reps: 10,
+    type: SetType.warmup,
+  );
+  cubit.logSet(
+    exerciseId: sweepFixtures.benchId,
+    exerciseName: 'Bench Press',
+    weight: 80,
+    reps: 8,
+  );
+  await visit('WorkoutPage (free workout)', const WorkoutPage());
+
   // Fire any pending hydration-debounce timers before the binding checks for
   // leaked timers, and restore the platform override before the foundation
   // invariant check (addTearDown runs too late for both).
