@@ -86,15 +86,15 @@ class _HistoryPageState extends State<HistoryPage> {
             child: FTabs(
               children: [
                 .entry(
-                  label: const Text('List'),
-                  child: _sessionList(context, sessions),
-                ),
-                .entry(
                   label: const Text('Calendar'),
                   child: HistoryCalendar(
                     sessions: sessions,
                     gymNames: _gymNames,
                   ),
+                ),
+                .entry(
+                  label: const Text('List'),
+                  child: _sessionList(context, sessions),
                 ),
               ],
             ),
