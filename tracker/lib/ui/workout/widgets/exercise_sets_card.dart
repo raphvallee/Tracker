@@ -284,64 +284,115 @@ class _SetEditorState extends State<_SetEditor> {
     final repHint = plannedRows && index < widget.plannedSets.length
         ? widget.plannedSets[index].repsLabel
         : 'Reps';
-    return Row(
+    final times = Text(
+      '×',
+      style: context.theme.typography.body.sm.copyWith(
+        color: context.theme.colors.mutedForeground,
+      ),
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        SizedBox(
-          width: 28,
-          child: widget.planned
-              ? index < widget.sets.length
-                    ? Center(
-                        child: SetTypeChip(
-                          isWarmup: widget.sets[index].isWarmup,
-                        ),
-                      )
-                    : Text(
-                        'Set',
-                        style: context.theme.typography.body.xs.copyWith(
-                          color: context.theme.colors.mutedForeground,
-                        ),
-                      )
-              : _setTypeToggle(index),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: FTextField(
-            control: FTextFieldControl.managed(controller: row.weight),
-            keyboardType: const TextInputType.numberWithOptions(
-              decimal: true,
-              signed: true,
+        Row(
+          children: <Widget>[
+            SizedBox(
+              width: 28,
+              child: widget.planned
+                  ? index < widget.sets.length
+                        ? Center(
+                            child: SetTypeChip(
+                              isWarmup: widget.sets[index].isWarmup,
+                            ),
+                          )
+                        : Text(
+                            'Set',
+                            style: context.theme.typography.body.xs.copyWith(
+                              color: context.theme.colors.mutedForeground,
+                            ),
+                          )
+                  : _setTypeToggle(index),
             ),
-            inputFormatters: [DecimalInputFormatter(allowNegative: true)],
-            hint: weightUnitOf(context).symbol,
-            error: row.weightError == null ? null : Text(row.weightError!),
-            // Free rows sit inside the swipe-to-delete wrapper: turning the
-            // selection affordances off keeps a horizontal swipe from also
-            // dragging a selection across the field. The values are short
-            // numbers nobody selects by hand inside the row.
-            enableInteractiveSelection: false,
-          ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: FTextField(
+                control: FTextFieldControl.managed(controller: row.weight),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                  signed: true,
+                ),
+                inputFormatters: [DecimalInputFormatter(allowNegative: true)],
+                hint: weightUnitOf(context).symbol,
+                // The empty error turns the border red without taking any space:
+                // the message is drawn under its field by _rowErrors.
+                error: row.weightError == null ? null : const SizedBox(),
+                style: const .delta(errorPadding: .value(EdgeInsets.zero)),
+                // Free rows sit inside the swipe-to-delete wrapper: turning the
+                // selection affordances off keeps a horizontal swipe from also
+                // dragging a selection across the field. The values are short
+                // numbers nobody selects by hand inside the row.
+                enableInteractiveSelection: false,
+              ),
+            ),
+            const SizedBox(width: 6),
+            times,
+            const SizedBox(width: 6),
+            Expanded(
+              child: FTextField(
+                control: FTextFieldControl.managed(controller: row.reps),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                inputFormatters: [DecimalInputFormatter()],
+                hint: repHint,
+                error: row.repsError == null ? null : const SizedBox(),
+                style: const .delta(errorPadding: .value(EdgeInsets.zero)),
+                enableInteractiveSelection: false,
+                textInputAction: TextInputAction.done,
+                onSubmit: (_) => FocusScope.of(context).unfocus(),
+              ),
+            ),
+          ],
         ),
-        const SizedBox(width: 6),
-        Text(
-          '×',
-          style: context.theme.typography.body.sm.copyWith(
-            color: context.theme.colors.mutedForeground,
-          ),
-        ),
-        const SizedBox(width: 6),
-        Expanded(
-          child: FTextField(
-            control: FTextFieldControl.managed(controller: row.reps),
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            inputFormatters: [DecimalInputFormatter()],
-            hint: repHint,
-            error: row.repsError == null ? null : Text(row.repsError!),
-            enableInteractiveSelection: false,
-            textInputAction: TextInputAction.done,
-            onSubmit: (_) => FocusScope.of(context).unfocus(),
-          ),
-        ),
+        _rowErrors(context, row, times),
       ],
+    );
+  }
+
+  /// Each error sits under its own field, in a row that mirrors the field
+  /// row's columns. It lives outside the field row: a field that grows to
+  /// show its own error would pull the pair out of line.
+  Widget _rowErrors(BuildContext context, _Row row, Widget times) {
+    if (row.weightError == null && row.repsError == null) {
+      return const SizedBox.shrink();
+    }
+    final style = context.theme.textFieldStyles.md.errorTextStyle.base;
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          const SizedBox(width: 28 + 8),
+          Expanded(
+            child: row.weightError == null
+                ? const SizedBox.shrink()
+                : Text(row.weightError!, style: style),
+          ),
+          const SizedBox(width: 6),
+          Visibility(
+            visible: false,
+            maintainSize: true,
+            maintainAnimation: true,
+            maintainState: true,
+            child: times,
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: row.repsError == null
+                ? const SizedBox.shrink()
+                : Text(row.repsError!, style: style),
+          ),
+        ],
+      ),
     );
   }
 
