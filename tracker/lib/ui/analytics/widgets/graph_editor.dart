@@ -18,8 +18,6 @@ import 'package:tracker/utils/form_validators.dart';
 /// with no blur. No field is autofocused so the keyboard does not pop up when
 /// the sheet opens.
 abstract final class GraphEditor {
-  /// Shows the editor, resolving with the saved [GraphConfig] or null when
-  /// dismissed.
   static Future<GraphConfig?> show(
     BuildContext context, {
     GraphConfig? initial,
@@ -28,8 +26,6 @@ abstract final class GraphEditor {
     context: context,
     isScrollControlled: true,
     backgroundColor: context.theme.colors.background,
-    // Keep a 5px gutter on each side: the narrower sheet is centered and
-    // the dimmed barrier shows through, so the page stays a little visible.
     constraints: BoxConstraints(
       maxWidth: MediaQuery.sizeOf(context).width - 10,
     ),
@@ -74,14 +70,9 @@ class _GraphEditorSheetState extends State<_GraphEditorSheet> {
   late GraphMetric _metric;
   late GraphTimeframe _timeframe;
 
-  /// Whether the user has manually edited the title. When false the title is
-  /// either empty or auto-generated from the selected exercise, so picking a
-  /// different exercise regenerates it to mirror the new choice.
   bool _titleEditedByUser = false;
   String? _titleError;
 
-  /// Whether the exercise picker route is already being opened, used to guard
-  /// against double-taps firing the push twice.
   bool _isPicking = false;
 
   @override
@@ -94,8 +85,6 @@ class _GraphEditorSheetState extends State<_GraphEditorSheet> {
     _metric = initial?.metric ?? GraphMetric.best1rm;
     _timeframe = initial?.timeframe ?? GraphTimeframe.all;
     _exerciseDisplay = TextEditingController(text: _exerciseValueLabel);
-    // A persisted title is treated as a manual choice and preserved when the
-    // exercise changes. A fresh (empty) title is auto-named from the exercise.
     _titleEditedByUser = initial != null && initial.title.isNotEmpty;
     // Clear the empty-title error once the title has actual text. The
     // controller also notifies on selection changes (e.g. when focusing the
@@ -140,9 +129,6 @@ class _GraphEditorSheetState extends State<_GraphEditorSheet> {
     );
   }
 
-  /// Opens the full-screen exercise picker over the sheet. When the user picks
-  /// an exercise (or "All exercises") the sheet is updated and the title is
-  /// auto-named to mirror the choice unless the user customized it manually.
   Future<void> _pickExercise() async {
     if (_isPicking) return;
     _isPicking = true;
@@ -295,13 +281,6 @@ class _GraphEditorSheetState extends State<_GraphEditorSheet> {
     ),
   );
 
-  /// The exercise selector: a single read-only input row showing the chosen
-  /// exercise (or "All exercises") with a chevron. Tapping *anywhere* on the
-  /// field opens the full-screen picker instead of expanding inline, so the
-  /// sheet never layout-shifts or forces a scroll inside its limited height.
-  /// The "Exercise" caption comes from the field's own label (like the Title
-  /// field above it), so no separate section heading is drawn - that only
-  /// duplicated the word.
   Widget _exerciseSection(FThemeData theme) => Padding(
     padding: const EdgeInsets.symmetric(horizontal: 16),
     child: Semantics(

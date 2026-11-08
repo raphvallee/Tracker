@@ -12,12 +12,6 @@ import 'package:tracker/ui/settings/view_models/settings_cubit.dart';
 import 'package:tracker/ui/workout/widgets/exercise_picker_page.dart';
 import 'package:tracker/utils/form_validators.dart';
 
-/// Split day editor (Plan.md §1.3.1.1 / §1.3.1.1.1): configure a day's title,
-/// description and ordered exercise list (add / remove / reorder). Every
-/// exercise carries at least one planned set; each exercise's sets are edited
-/// inline on this page - fixed reps or a min-max rep range per set, with new
-/// sets pre-filled from the workout defaults in Settings. Pops the edited
-/// [WorkoutSplitDay] so the parent split editor can store it.
 class SplitDayEditorPage extends StatefulWidget {
   const SplitDayEditorPage({super.key, required this.day});
 
@@ -35,8 +29,6 @@ class _SplitDayEditorPageState extends State<SplitDayEditorPage> {
   bool _didLoad = false;
   String? _titleError;
 
-  /// Snapshot of the day as seeded; compared against the live draft to
-  /// detect unsaved changes when the user tries to leave without saving.
   WorkoutSplitDay? _initial;
 
   /// Cached dirty flag driving [PopScope.canPop]. Kept in sync through
@@ -61,9 +53,6 @@ class _SplitDayEditorPageState extends State<SplitDayEditorPage> {
     _dirty = false;
   }
 
-  /// A normalized copy of the current draft, used as the dirty-check
-  /// baseline. Normalization mirrors [_save] (trimmed texts, reindexed
-  /// orders) so only content differences read as unsaved changes.
   WorkoutSplitDay _snapshot() => WorkoutSplitDay(
     title: _title.text.trim(),
     description: _description.text.trim(),
@@ -77,12 +66,8 @@ class _SplitDayEditorPageState extends State<SplitDayEditorPage> {
     ],
   );
 
-  /// True when the draft differs from what was seeded (see [_initial]):
-  /// title, description, exercises, or their planned sets.
   bool get _hasUnsavedChanges => _dirty;
 
-  /// Recomputes the dirty flag and rebuilds only when it flips, so per-
-  /// keystroke rebuilds do not disturb the set rows' editing state.
   void _refreshPopGuard() {
     final initial = _initial;
     final dirty = initial != null && !splitDayPlanEquals(_snapshot(), initial);
@@ -91,10 +76,6 @@ class _SplitDayEditorPageState extends State<SplitDayEditorPage> {
     }
   }
 
-  /// Returns a copy of [item] with its set list guaranteed non-empty. Items
-  /// that already carry sets pass through with a copied list; legacy items
-  /// synthesize `targetSets` fixed sets of `targetReps` when given, or sets
-  /// from the configured default rep mode otherwise.
   ExerciseItem _withSeededSets(ExerciseItem item) {
     if (item.sets.isNotEmpty) {
       return ExerciseItem(
@@ -127,8 +108,6 @@ class _SplitDayEditorPageState extends State<SplitDayEditorPage> {
     );
   }
 
-  /// A set created from the workout defaults in Settings: fixed reps or a
-  /// rep range, depending on the configured default rep mode.
   PlannedSet _defaultSet(int order) {
     final fixed = _settings.defaultRepMode == RepMode.fixed;
     return PlannedSet(
@@ -169,8 +148,6 @@ class _SplitDayEditorPageState extends State<SplitDayEditorPage> {
     final exercise = await pushTo(context, const ExercisePickerPage());
     if (exercise != null && mounted) {
       setState(() {
-        // Mandatory sets: a new exercise starts with one set from the
-        // configured default rep mode in Settings.
         _items.add(
           ExerciseItem(
             exerciseId: exercise.id,
@@ -187,10 +164,8 @@ class _SplitDayEditorPageState extends State<SplitDayEditorPage> {
     setState(() {
       final sets = _items[exerciseIndex].sets;
       if (sets.isEmpty) {
-        // No previous set: fall back to the configured default rep mode.
         sets.add(_defaultSet(0));
       } else {
-        // Match the previous set's rep mode and values.
         final last = sets.last;
         sets.add(
           PlannedSet(
@@ -205,15 +180,11 @@ class _SplitDayEditorPageState extends State<SplitDayEditorPage> {
   }
 
   void _removeSet(int exerciseIndex, int setIndex) {
-    // Mandatory sets: never remove an exercise's last remaining set.
     if (_items[exerciseIndex].sets.length <= 1) return;
     setState(() => _items[exerciseIndex].sets.removeAt(setIndex));
     _refreshPopGuard();
   }
 
-  /// Commits an edited set into [_items] without a parent rebuild: the row
-  /// owns its text fields, so rebuilding the list would be redundant (and
-  /// could disturb focus while typing).
   void _onSetChanged(int exerciseIndex, int setIndex, PlannedSet set) {
     _items[exerciseIndex].sets[setIndex] = set;
     // The row owns its text fields, so only refresh the PopScope discard
@@ -221,7 +192,6 @@ class _SplitDayEditorPageState extends State<SplitDayEditorPage> {
     _refreshPopGuard();
   }
 
-  /// Normalizes a degenerate range (max <= min) to a fixed set.
   PlannedSet _normalizedSet(PlannedSet set, int order) {
     final degenerate = set.maxReps != null && set.maxReps! <= set.minReps;
     return PlannedSet(
@@ -261,9 +231,6 @@ class _SplitDayEditorPageState extends State<SplitDayEditorPage> {
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      // Guard back navigation (app-bar chevron and system back) so a day
-      // with unsaved changes asks before being thrown away. Done pops the
-      // edited day through _save, which is not intercepted.
       canPop: !_hasUnsavedChanges,
       onPopInvokedWithResult: (didPop, _) async {
         if (didPop) return;
@@ -281,9 +248,6 @@ class _SplitDayEditorPageState extends State<SplitDayEditorPage> {
           ),
           SliverToBoxAdapter(
             child: Padding(
-              // Bottom padding tracks the keyboard (plus the reveal gap) so
-              // the fields and the planned-set editors can scroll above it
-              // (shell no longer resizes for the keyboard).
               padding: EdgeInsets.fromLTRB(
                 16,
                 16,
@@ -308,7 +272,6 @@ class _SplitDayEditorPageState extends State<SplitDayEditorPage> {
                   FTextField(
                     control: FTextFieldControl.managed(
                       controller: _description,
-                      // Refresh the PopScope discard guard on edits.
                       onChange: (_) => _refreshPopGuard(),
                     ),
                     label: const Text('Description (optional)'),
@@ -363,9 +326,6 @@ class _SplitDayEditorPageState extends State<SplitDayEditorPage> {
     );
   }
 
-  /// One exercise: an orderable header row plus its planned sets, edited
-  /// inline beneath it. Header, caption and set rows all use [_gridRow], so
-  /// their columns line up vertically.
   Widget _buildExerciseBlock(int i) {
     final item = _items[i];
     final theme = context.theme;
@@ -432,25 +392,11 @@ class _SplitDayEditorPageState extends State<SplitDayEditorPage> {
   }
 }
 
-/// Shared column grid for the split day editor: the exercise header, the
-/// sets caption and every set row use the same leading column and two icon
-/// columns, so all columns line up vertically. The page's 16 margin is the
-/// grid's outer edge (rows add none of their own), which puts the right
-/// icon column flush with the Add-exercise button.
 const _gridLeading = 44.0;
 
-/// Width of one right-aligned icon cell, and the gap between the two cells.
-/// Tighter than a full touch square so the rep fields gain width; the cells
-/// right-align their glyphs, so every row's icons - and both trash glyphs -
-/// line up with the Add-exercise button's right edge on the content margin.
 const _gridIcon = 28.0;
 const _gridIconGap = 6.0;
 
-/// Builds one row of the grid: a fixed-width leading cell (grip / set label),
-/// the stretchable content, and up to two fixed-width icon cells whose
-/// glyphs are right-aligned. No horizontal padding of its own: the enclosing
-/// page already pads 16, so the last icon's right edge lands exactly on the
-/// same margin as the Add-exercise button.
 Widget _gridRow({
   required Widget leading,
   required Widget child,
@@ -480,7 +426,6 @@ Widget _gridRow({
   );
 }
 
-/// A compact icon button for one of the grid's icon cells.
 Widget _gridIconButton({
   required IconData icon,
   required String tooltip,
@@ -495,9 +440,6 @@ Widget _gridIconButton({
   );
 }
 
-/// One planned set, edited inline: fixed reps, or a min-max rep range after
-/// toggling. Text changes commit straight into the editor's draft data;
-/// invalid input shows an error and keeps the last valid value.
 class _SetRow extends StatefulWidget {
   const _SetRow({
     super.key,
@@ -511,14 +453,10 @@ class _SetRow extends StatefulWidget {
 
   final PlannedSet set;
 
-  /// 1-based position used for the row label (tracks list positions, so it
-  /// stays correct after deletions even before the next save reindexes).
   final int setNumber;
 
-  /// Settings default used to pre-fill the max when switching to a range.
   final int defaultRangeMax;
 
-  /// False disables removal (the exercise's last mandatory set).
   final bool canDelete;
   final ValueChanged<PlannedSet> onChanged;
   final VoidCallback onDelete;
@@ -534,9 +472,6 @@ class _SetRowState extends State<_SetRow> {
   String? _minError;
   String? _maxError;
 
-  /// Last valid range max shown by this row, so toggling range -> fixed ->
-  /// range restores it. Memory only: never persisted, and cleared when the
-  /// row starts representing another set.
   int? _rememberedMax;
 
   /// The set object this row last showed or reported. The parent swaps in a
@@ -583,8 +518,6 @@ class _SetRowState extends State<_SetRow> {
     super.dispose();
   }
 
-  /// Validates the current fields and commits the set when valid. Empty
-  /// fields are tolerated while typing (no commit, no error).
   void _commit() {
     final minText = _min.text.trim();
     final maxText = _max.text.trim();
@@ -617,8 +550,6 @@ class _SetRowState extends State<_SetRow> {
     );
   }
 
-  /// Switches between fixed reps and a rep range. Leaving a range remembers
-  /// its max; entering one restores that max (see [_rangeMaxFor]).
   void _toggleMode() {
     final min = int.tryParse(_min.text.trim()) ?? widget.set.minReps;
     if (_isRange) {
@@ -639,9 +570,6 @@ class _SetRowState extends State<_SetRow> {
     }
   }
 
-  /// The max for a range starting at [min]: the remembered max while it still
-  /// sits above min, otherwise the Settings default (raised to min + 2 when
-  /// needed).
   int _rangeMaxFor(int min) {
     final remembered = _rememberedMax;
     if (remembered != null && remembered > min) return remembered;
@@ -650,7 +578,6 @@ class _SetRowState extends State<_SetRow> {
     return max;
   }
 
-  /// Hands [set] to the editor and records it as the set this row shows.
   void _report(PlannedSet set) {
     _rowSet = set;
     widget.onChanged(set);

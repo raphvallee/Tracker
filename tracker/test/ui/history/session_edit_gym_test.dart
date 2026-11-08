@@ -25,7 +25,6 @@ void main() {
       )
       .first;
 
-  /// The gym lookups resolve in real time, so poll until [text] renders.
   Future<void> waitForText(WidgetTester tester, String text) =>
       waitForRealIo(tester, () async => find.text(text).evaluate().isNotEmpty);
 
@@ -36,11 +35,10 @@ void main() {
       final seeded = await pumpPersistenceApp(tester, 'session_edit_gym_early');
       await tester.tap(find.text('Edit'));
       await settleSessionFlow(tester);
-      // The gym lookup is real Isar IO and cannot have resolved yet.
       expect(find.text('Loading...'), findsOneWidget);
 
       await tester.enterText(titleField(), 'Pull');
-      await tester.tap(find.text('Save')); // editor header action
+      await tester.tap(find.text('Save'));
       await settleSessionFlow(tester);
 
       final id = seeded.session.id;
@@ -68,7 +66,7 @@ void main() {
       expect(find.text('Home'), findsOneWidget);
 
       await tester.enterText(titleField(), 'Pull');
-      await tester.tap(find.text('Save')); // editor header action
+      await tester.tap(find.text('Save'));
       await settleSessionFlow(tester);
 
       final id = seeded.session.id;
@@ -88,18 +86,17 @@ void main() {
       await settleSessionFlow(tester);
       await waitForText(tester, 'Home');
 
-      // Opening the picker loads the gym list (real IO) before the sheet shows.
       await tester.tap(find.text('Home'));
       await settleSessionFlow(tester);
       await waitForText(tester, 'Which gym?');
-      await settleSessionFlow(tester); // let the sheet finish sliding in
+      await settleSessionFlow(tester);
       expect(find.text('Which gym?'), findsOneWidget);
       await tester.tap(find.text('Other gym'));
       await settleSessionFlow(tester);
       expect(find.text('Other gym'), findsOneWidget);
 
       await tester.enterText(titleField(), 'Pull');
-      await tester.tap(find.text('Save')); // editor header action
+      await tester.tap(find.text('Save'));
       await settleSessionFlow(tester);
 
       final id = seeded.session.id;

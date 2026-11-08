@@ -8,11 +8,6 @@ import 'package:tracker/ui/core/ui/weight_format.dart';
 import 'package:tracker/ui/history/widgets/calendar/history_calendar.dart';
 import 'package:tracker/ui/history/widgets/session_detail_page.dart';
 
-/// History overview (Plan.md §1.2) + calendar (Plan.md §2.5).
-///
-/// Toggles between a chronological session list and an interactive month
-/// calendar; either way a session resolves to its full [SessionDetailPage]
-/// (Checkpoint 5).
 class HistoryPage extends StatefulWidget {
   const HistoryPage({super.key});
 

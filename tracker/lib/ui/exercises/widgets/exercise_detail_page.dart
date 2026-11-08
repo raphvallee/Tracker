@@ -12,9 +12,6 @@ import 'package:tracker/ui/core/ui/repository_scope.dart';
 import 'package:tracker/ui/core/ui/weight_format.dart';
 import 'package:tracker/ui/exercises/widgets/new_exercise_page.dart';
 
-/// Individual exercise view (Plan.md §1.4.1.1): profile rows plus a
-/// performance-history section (Milestone 6) charting the best normalized
-/// working-set 1RM per session over time, with warm-ups excluded (§2.1).
 class ExerciseDetailPage extends StatefulWidget {
   const ExerciseDetailPage({super.key, required this.exercise});
 
@@ -28,7 +25,6 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage> {
   Map<int, double> _multipliers = const {};
   bool _didLoad = false;
   final AnalyticsService _analytics = AnalyticsService();
-  // Local copy so an edit from the editor page refreshes this view.
   late Exercise _exercise = widget.exercise;
   AnalyticsSnapshot _snapshot = AnalyticsSnapshot(
     best1rm: const [],
@@ -42,7 +38,6 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // RepositoryScope is an inherited widget, so read it after initState.
     if (!_didLoad) {
       _didLoad = true;
       _load();
@@ -154,8 +149,6 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  // IntrinsicHeight + stretch equalizes card heights when one
-                  // label wraps to two lines at narrow widths.
                   IntrinsicHeight(
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -260,7 +253,6 @@ class _InfoRow extends StatelessWidget {
   }
 }
 
-/// Shared movement-pattern display names (avoids duplicating the switch).
 class MovementPatternLabel {
   static String label(MovementPattern m) => switch (m) {
     MovementPattern.unspecified => 'Unspecified',

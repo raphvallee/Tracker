@@ -1,5 +1,3 @@
-// Driver for history_calendar_device_test.dart. Writes the raw FrameTiming
-// summaries to build/history_calendar_benchmark.json (build/ is gitignored).
 // ignore_for_file: avoid_print
 
 import 'dart:convert';

@@ -1,10 +1,7 @@
-/// Metric rendered by a user-defined feed graph.
 enum GraphMetric { best1rm, peakWeight, volume }
 
-/// Date range used by a user-defined feed graph.
 enum GraphTimeframe { all, last30Days, last90Days, lastYear }
 
-/// Persisted configuration for one user-defined feed graph.
 class GraphConfig {
   const GraphConfig({
     required this.title,

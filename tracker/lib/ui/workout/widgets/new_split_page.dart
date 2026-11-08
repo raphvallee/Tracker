@@ -15,14 +15,9 @@ import 'package:tracker/utils/form_validators.dart';
 
 import 'split_day_editor_page.dart';
 
-/// Split CRUD editor (Plan.md §1.3.1). Handles both creating a new split and
-/// editing an existing one ([split] null → create). Configures the split's
-/// title/description and its ordered list of days; each day opens
-/// [SplitDayEditorPage].
 class SplitEditorPage extends StatefulWidget {
   const SplitEditorPage({super.key, this.split});
 
-  /// The split being edited, or null to create a new one.
   final WorkoutSplit? split;
 
   @override
@@ -35,18 +30,12 @@ class _SplitEditorPageState extends State<SplitEditorPage> {
   List<WorkoutSplitDay> _days = [];
   bool _saving = false;
 
-  /// Split-name error, set only by [_save]; typing in the name field clears it.
   String? _titleError;
 
-  /// Snapshot of the split as loaded; compared against the live draft to
-  /// detect unsaved changes when the user tries to leave without saving.
-  /// For a new split this is the pristine empty draft.
   WorkoutSplit? _initial;
 
   bool get _isNew => widget.split == null;
 
-  /// True when the draft differs from what was loaded (see [_initial]):
-  /// title, description, days, or their exercise plans.
   bool get _hasUnsavedChanges {
     final initial = _initial;
     if (initial == null) return false;
@@ -82,9 +71,6 @@ class _SplitEditorPageState extends State<SplitEditorPage> {
     _initial = _snapshot();
   }
 
-  /// A normalized copy of the current draft, used as the dirty-check
-  /// baseline. Normalization mirrors [_save] (trimmed texts, reindexed
-  /// orders) so only content differences read as unsaved changes.
   WorkoutSplit _snapshot() => WorkoutSplit(
     title: _title.text.trim(),
     description: _description.text.trim(),
@@ -162,8 +148,6 @@ class _SplitEditorPageState extends State<SplitEditorPage> {
       },
     );
     if (template != null && mounted) {
-      // Applying a template overwrites the typed title and the configured
-      // days; confirm first when the draft already has unsaved changes.
       if (_hasUnsavedChanges) {
         final confirmed = await showConfirmDialog(
           context,
@@ -309,9 +293,6 @@ class _SplitEditorPageState extends State<SplitEditorPage> {
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      // Guard back navigation (app-bar chevron and system back) so an edit
-      // split with unsaved changes asks before being thrown away. Save pops
-      // with a result through _save, which is not intercepted.
       canPop: !_hasUnsavedChanges,
       onPopInvokedWithResult: (didPop, _) async {
         if (didPop) return;
@@ -329,9 +310,6 @@ class _SplitEditorPageState extends State<SplitEditorPage> {
           ),
           SliverToBoxAdapter(
             child: Padding(
-              // Bottom padding tracks the keyboard (plus the reveal gap) so
-              // the fields and the trailing "Add day" action scroll above it
-              // (shell no longer resizes for the keyboard).
               padding: EdgeInsets.fromLTRB(
                 16,
                 16,
@@ -344,7 +322,6 @@ class _SplitEditorPageState extends State<SplitEditorPage> {
                   FTextField(
                     control: FTextFieldControl.managed(
                       controller: _title,
-                      // Typing clears the error; only Save raises it again.
                       onChange: (_) => setState(() => _titleError = null),
                     ),
                     label: const Text('Split name'),
@@ -361,7 +338,6 @@ class _SplitEditorPageState extends State<SplitEditorPage> {
                   FTextField(
                     control: FTextFieldControl.managed(
                       controller: _description,
-                      // Rebuild so the PopScope discard guard tracks edits.
                       onChange: (_) => setState(() {}),
                     ),
                     label: const Text('Description (optional)'),

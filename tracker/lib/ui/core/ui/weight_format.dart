@@ -19,12 +19,8 @@ String formatWeight(BuildContext context, double kilograms) {
   return '${formatDecimal(value)} ${weightUnitOf(context).symbol}';
 }
 
-/// Formats performed reps for display: whole reps without a decimal point
-/// (`5`), fractional reps with up to two (`3.5`, `3.25`).
 String formatReps(double reps) => formatDecimal(reps);
 
-/// Formats a number with at most [maxDecimalPlaces] places and no trailing
-/// zeros: `80` → "80", `82.5` → "82.5", `3.25` → "3.25".
 String formatDecimal(double value) {
   if (value == value.roundToDouble()) return value.toStringAsFixed(0);
   return value
@@ -46,6 +42,4 @@ List<ProgressionPoint> displayProgressionPoints(
   ];
 }
 
-/// Counted noun for UI labels: `plural('set', 3)` → "3 sets", `plural('set', 1)`
-/// → "1 set" (plain concatenation would render "1 sets").
 String plural(String noun, int n) => n == 1 ? '1 $noun' : '$n ${noun}s';

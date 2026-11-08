@@ -1,7 +1,3 @@
-// New split editor: the split-name error is validated only on Save, never
-// while the page is idle, and typing clears it. No Isar here - an empty name
-// is rejected before the repository is touched.
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forui/forui.dart';
 import 'package:tracker/ui/workout/widgets/new_split_page.dart';

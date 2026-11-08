@@ -8,9 +8,6 @@ import 'package:tracker/ui/core/ui/line_chart.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
 import 'package:tracker/ui/core/ui/weight_format.dart';
 
-/// General progression analytics (Plan.md §2.4): overall strength and volume
-/// trends across all exercises, normalized by gym multipliers (§2.3) with
-/// warm-up sets excluded (§2.1).
 class ProgressionPage extends StatefulWidget {
   const ProgressionPage({super.key});
 
@@ -125,8 +122,6 @@ class _ProgressionPageState extends State<ProgressionPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        // IntrinsicHeight + stretch equalizes card heights when one label
-        // wraps to two lines at narrow widths.
         IntrinsicHeight(
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,

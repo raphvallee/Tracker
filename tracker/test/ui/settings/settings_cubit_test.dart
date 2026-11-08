@@ -1,7 +1,3 @@
-// Unit tests for settings (lib/pages/settings/) - pure: weight unit conversion
-// and SettingsState JSON round-trip. The SettingsCubit (HydratedCubit) and
-// SettingsPage widget are integration tests: test/integration/settings_test.dart.
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tracker/domain/models/graph_config.dart';
 import 'package:tracker/domain/models/weight_unit.dart';

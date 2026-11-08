@@ -1,8 +1,5 @@
 import 'package:flutter/material.dart';
 
-/// Visibility contract for pages hosted by the persistent tab navigators.
-/// Inactive pages stay mounted to preserve their nested route stack, but should
-/// pause live subscriptions and resume them when [isActive] becomes true.
 class TabVisibilityScope extends InheritedWidget {
   const TabVisibilityScope({
     required this.index,
@@ -34,9 +31,6 @@ class HomePageSingleton {
 
   Function? indexSetState;
 
-  /// Tab name -> nested-navigator index. Only the forward direction is used
-  /// (previously quiver's BiMap, which was overkill and the sole reason for
-  /// the dependency).
   static const Map<TabName, int> _tabIndexes = {
     TabName.feed: 0,
     TabName.history: 1,

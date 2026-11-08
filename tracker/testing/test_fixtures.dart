@@ -1,7 +1,3 @@
-// Seeded fixtures shared by the layout-overflow and visual-screenshot sweeps:
-// real gyms/split/sessions with deliberately long titles and names designed to
-// stress tight card rows. Pure repository logic - no widget coupling.
-
 import 'package:tracker/data/repositories/tracker_repository.dart';
 import 'package:tracker/domain/models/exercise.dart';
 import 'package:tracker/domain/models/gym.dart';

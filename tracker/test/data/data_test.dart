@@ -1,8 +1,3 @@
-// Data/persistence integration tests. These open a real Isar DB in a throwaway
-// temp directory (no path_provider) and exercise CRUD through TrackerRepository,
-// plus Isar stream watchers. Covers: seed, exercise/gym/split/session CRUD,
-// embedded split days, and the exercise watcher.
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:isar_community/isar.dart';
 import 'package:tracker/data/repositories/tracker_repository.dart';
@@ -81,7 +76,6 @@ void main() {
       expect((await repo.exercises.getByTitle('bench press'))!.id, id);
       expect((await repo.exercises.getByTitle('BENCH PRESS'))!.id, id);
       expect(await repo.exercises.getByTitle('Squat'), isNull);
-      // Renaming must not collide with the exercise's own current title.
       expect(
         await repo.exercises.getByTitle('Bench Press', excludeId: id),
         isNull,
@@ -158,7 +152,6 @@ void main() {
         ],
       ),
     );
-    // A session with two sets of the same exercise still counts once.
     await repo.sessions.put(
       WorkoutSession(
         title: 'Bench day',
@@ -238,14 +231,12 @@ void main() {
       expect(fetched.splitDays.first.exercises, hasLength(2));
       expect(fetched.splitDays.first.exercises.first.exerciseId, 1);
       expect(fetched.splitDays.first.exercises.first.targetSets, 4);
-      // Nested planned sets round-trip, including fixed vs. range.
       final sets = fetched.splitDays.first.exercises.first.sets;
       expect(sets, hasLength(2));
       expect(sets[0].minReps, 8);
       expect(sets[0].maxReps, isNull);
       expect(sets[1].minReps, 8);
       expect(sets[1].maxReps, 12);
-      // Legacy items without sets persist with an empty list.
       expect(fetched.splitDays.first.exercises.last.sets, isEmpty);
 
       expect(await repo.splits.delete(id), isTrue);
@@ -293,7 +284,6 @@ void main() {
     expect(fetched.splitDays.single.exercises, hasLength(2));
     expect(fetched.splitDays.single.exercises[0].exerciseId, benchId);
 
-    // Reorder: squat becomes the first exercise of the day.
     fetched.splitDays.single.exercises = [
       ExerciseItem(exerciseId: squatId, order: 0),
       ExerciseItem(exerciseId: benchId, order: 1),
@@ -306,7 +296,6 @@ void main() {
         .toList();
     expect(orders, [(squatId, 0), (benchId, 1)]);
 
-    // Delete the split.
     expect(await repo.splits.delete(id), isTrue);
     expect(await repo.splits.getById(id), isNull);
   });

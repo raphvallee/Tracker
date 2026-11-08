@@ -1,6 +1,3 @@
-// Split editor tests for removing a day: the trash button asks first, cancel
-// keeps the day, and confirm removes it from the draft.
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hydrated_bloc/hydrated_bloc.dart';
 import 'package:tracker/domain/models/workout_split.dart';

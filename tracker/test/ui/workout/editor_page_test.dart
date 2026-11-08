@@ -1,7 +1,3 @@
-// The workout page (split list) renders the "Start Workout" button according
-// to the StartWorkoutPlacement setting: before the splits, after them, or not
-// at all.
-
 import 'dart:async';
 
 import 'package:flutter/material.dart';

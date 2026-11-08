@@ -1,12 +1,3 @@
-// Visual screenshot sweep: renders every app page, dialog and sheet at the
-// window sizes a Windows desktop session can hit and saves PNG captures to
-// `build/test_screenshots/` (plus a manifest.json index) so layouts can be
-// inspected visually — overflow, clipped text, misalignment, tofu glyphs.
-//
-// This is an inspection corpus, NOT baseline goldens (no comparison, files are
-// disposable). The sweep also doubles as a hardened layout-overflow regression
-// test: render exceptions are collected per page (with a `_FAIL` capture of
-// the offending screen) and fail the sweep at the end.
 // ignore_for_file: avoid_print
 
 import 'dart:async';
@@ -155,8 +146,6 @@ void main() {
         find.byType(Navigator).first,
       );
 
-      // Label of the screen being swept - failure attribution + _FAIL capture
-      // naming. Mutable, shared with the settle()/guarded() closures below.
       var current = 'app-start';
       final failures = <String>[];
 
@@ -184,16 +173,12 @@ void main() {
         }
       }
 
-      // Isar's `watch(fireImmediately: true)` initial results arrive through
-      // real-async windows; wait until the expected data is on screen before
-      // capturing (20 rounds ≈ 6 s cap, then capture whatever is there).
       Future<void> settleForData(bool Function() found) async {
         for (var i = 0; i < 20 && !found(); i++) {
           await settle();
         }
       }
 
-      // No on-stage loading spinner left (finders skip Offstage tabs).
       bool dataLoaded() => !tester.any(find.byType(FCircularProgress));
 
       void switchTab(int index) {
@@ -202,8 +187,6 @@ void main() {
             .onChange!(index);
       }
 
-      // Wraps an interactive step: hard failures (tap/expect) capture the
-      // broken screen, then rethrow to fail the test from the real cause.
       Future<void> guarded(String what, Future<void> Function() body) async {
         current = what;
         print('SCREENSHOT-SWEEP: $what @ $label');
@@ -254,8 +237,6 @@ void main() {
 
       await settle();
 
-      // Tab roots - real shell including the bottom bar. Tab switching via
-      // onChange (hit-testing is brittle under the Offstage navigators).
       await guarded('Feed tab', () async {
         await settleForData(dataLoaded);
         await recorder.capture('Feed tab');
@@ -290,7 +271,6 @@ void main() {
         await settle();
       });
 
-      // Pushed pages.
       await visit('Settings page', const SettingsPage());
       await visit(
         'Gyms page',
@@ -306,15 +286,11 @@ void main() {
       await visit(
         'Exercise detail page',
         ExerciseDetailPage(exercise: fixtures.bench),
-        // The page loads its summary async from Isar; wait for the chart to
-        // leave its empty state or the capture shows "0 Sessions".
         dataReady: () => !tester.any(find.text('No data yet')),
       );
       await visit(
         'Session detail page',
         SessionDetailPage(session: fixtures.session, gymName: 'Iron Temple'),
-        // Set rows fall back to "Exercise <id>" until the async name map
-        // resolves; gate on the real exercise name.
         dataReady: () => tester.any(find.text('Bench Press')),
       );
       await visit(
@@ -345,8 +321,6 @@ void main() {
         dataReady: () => tester.any(find.text('Bench Press')),
       );
 
-      // Dialogs and sheets. These open from the tab page's nested navigator
-      // (how the app really presents them), so pop via that navigator.
       final pageContext = tester.element(find.byType(FeedPage));
 
       Future<void> openAndClose(String what, Future<void> Function() open) =>
@@ -396,7 +370,6 @@ void main() {
         () => promptGym(pageContext, fixtures.allGyms),
       );
 
-      // End-workout confirmation dialog (on a pushed in-progress WorkoutPage).
       await guarded('End-workout dialog', () async {
         unawaited(pushTo<void>(navigator.context, const WorkoutPage()));
         // Two pumps: one frame starts the transition, the second advances
@@ -421,7 +394,7 @@ void main() {
         await settle();
         await tester.runAsync(cubit.endWorkout);
         await settle();
-        navigator.pop(); // the pushed WorkoutPage
+        navigator.pop();
         // Two pumps: one frame starts the transition, the second advances
         // the fake clock past it (a bare pump doesn't move the clock).
         await tester.pump();
@@ -429,7 +402,6 @@ void main() {
         await settle();
       });
 
-      // The session is ended now - the Workout tab shows its idle state.
       await guarded('Workout tab (idle)', () async {
         switchTab(2);
         await settle();

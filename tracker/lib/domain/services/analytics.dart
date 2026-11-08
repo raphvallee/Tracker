@@ -1,4 +1,3 @@
-/// Pure analytics for progression/multipliers (Plan.md §2.3, §2.4).
 library;
 
 import 'dart:math' as math;
@@ -7,8 +6,6 @@ import 'package:tracker/domain/models/workout_session.dart';
 import 'package:tracker/domain/models/workout_set.dart';
 import 'package:tracker/domain/models/graph_config.dart';
 
-/// Returns the beginning of the requested graph range, relative to the newest
-/// session. The all-time range returns null.
 DateTime? graphRangeStart(GraphTimeframe timeframe, DateTime newest) {
   switch (timeframe) {
     case GraphTimeframe.all:
@@ -83,7 +80,6 @@ String graphMetricUnit(GraphMetric metric) =>
 
 String graphMetricTitle(GraphConfig config) => config.title.trim();
 
-/// A graph-ready series for a persisted configuration.
 List<ProgressionPoint> graphPoints({
   required GraphConfig config,
   required List<WorkoutSession> sessions,
@@ -96,10 +92,6 @@ List<ProgressionPoint> graphPoints({
   timeframe: config.timeframe,
 );
 
-/// Scales a raw weight using an exercise override, then the gym fallback.
-///
-/// [exerciseMultipliers] is keyed by gym id and then exercise id. The optional
-/// positional [exerciseId] keeps existing callers source-compatible.
 double normalizedWeight(
   double raw,
   Map<int, double> multipliers,
@@ -142,9 +134,6 @@ class ExerciseSummary {
   final int sessionCount;
 }
 
-/// An immutable, internally consistent result of one analytics calculation.
-/// Lists and maps are defensive unmodifiable copies, so a snapshot can safely
-/// be retained by a widget between repository updates.
 class AnalyticsSnapshot {
   AnalyticsSnapshot({
     required List<ProgressionPoint> best1rm,
@@ -165,13 +154,9 @@ class AnalyticsSnapshot {
   final ExerciseSummary summary;
 }
 
-/// Memoizes snapshots by the complete session content, gym multipliers, and
-/// optional caller revision/filter. The content fingerprint means callers may
-/// safely reuse a service while repositories replace or mutate list instances.
 class AnalyticsService {
   final Map<_AnalyticsKey, AnalyticsSnapshot> _cache = {};
 
-  /// Computes all snapshot metrics in one pass over each session's sets.
   AnalyticsSnapshot _computeSnapshot({
     required List<WorkoutSession> sessions,
     required Map<int, double> multipliers,
@@ -273,13 +258,10 @@ class AnalyticsService {
     );
   }
 
-  /// Removes cached snapshots, allowing retained session data to be released.
   void clear() => _cache.clear();
 
-  /// Number of cached snapshots, exposed for diagnostics and tests.
   int get cacheSize => _cache.length;
 
-  /// Alias useful at call sites that treat this as a computation service.
   AnalyticsSnapshot compute({
     required List<WorkoutSession> sessions,
     required Map<int, double> multipliers,
@@ -494,9 +476,6 @@ ExerciseSummary exerciseSummary(
   return ExerciseSummary(best1rm: best, peakVolume: peak, sessionCount: count);
 }
 
-/// Estimates a gym-wide multiplier using the median ratio of shared exercises.
-/// The legacy calculation remains the default; pass [halfLife] to apply
-/// exponential recency weighting to observations.
 double? estimateGymMultiplier(
   List<WorkoutSession> sessions,
   int? primaryGymId,
@@ -515,9 +494,6 @@ double? estimateGymMultiplier(
   return _median(estimates.values.toList());
 }
 
-/// Returns one time-weighted multiplier per exercise shared by both gyms.
-/// Recent observations receive exponentially higher weight. A missing shared
-/// exercise can be represented by a movement fallback via [exercises].
 Map<int, double> estimateGymExerciseMultipliers(
   List<WorkoutSession> sessions,
   int? primaryGymId,

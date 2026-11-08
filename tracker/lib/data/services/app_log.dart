@@ -5,19 +5,9 @@ import 'package:flutter/foundation.dart' show visibleForTesting;
 
 import 'app_env.dart';
 
-/// Local-only ring-buffer logger.
-///
-/// Keeps the last [maxLines] entries in memory and mirrors them to
-/// `tracker.log` inside the app documents directory, so the upcoming
-/// "export data + logs" bug-report flow (Phase 6 of PRODUCTION_READINESS.md)
-/// can attach recent history. Nothing is ever uploaded off-device.
-///
-/// All app-level error channels - the run-zone, Flutter framework, platform
-/// dispatcher, and build-error widget - route through [error] in `main.dart`.
 class AppLog {
   AppLog._();
 
-  /// Maximum number of entries kept in the ring and mirrored to the file.
   static const int maxLines = 500;
 
   static final List<String> _buffer = <String>[];
@@ -27,21 +17,15 @@ class AppLog {
   /// a failed write must never break the chain (or crash the app).
   static Future<void> _pending = Future<void>.value();
 
-  /// Points the mirror file at [directoryPath] (the app documents directory).
-  /// Call once from `main()` before errors can occur. Entries logged before
-  /// init stay in the ring and land in the file on the first later flush.
   static void init(String directoryPath) {
     _file = File('$directoryPath/tracker.log');
   }
 
-  /// Errors and unexpected conditions - recorded in dev and prod.
   static void error(String tag, Object error, [StackTrace? stackTrace]) {
     _append('ERR $tag: $error');
     if (stackTrace != null) _append(stackTrace.toString(), indent: true);
   }
 
-  /// Development-only verbose logging; a no-op in prod builds
-  /// (`--dart-define=APP_ENV=prod`).
   static void debug(String message) {
     if (isProd) return;
     _append('DBG $message');
@@ -72,9 +56,6 @@ class AppLog {
     if (file == null) return;
     try {
       await file.create(recursive: true);
-      // Rewrite the whole ring each time: guarantees the file always matches
-      // the in-memory buffer (including ring evictions) with no append vs.
-      // truncate bookkeeping.
       await file.writeAsString('${_buffer.join('\n')}\n', flush: true);
     } on IOException {
       // Logging must never crash the app; drop the write and keep going.

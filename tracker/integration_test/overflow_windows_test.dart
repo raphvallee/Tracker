@@ -1,14 +1,3 @@
-// Real-window overflow sweep for the Windows desktop build.
-//
-// Unlike the widget-test sweep in `test/ui/layout_overflow_test.dart` (which
-// fakes the view), this drives the actual Windows window through the sizes a
-// desktop session hits - the 320x568 minimum set by `window_size`, a
-// snap-half 640x720, the 1280x720 default and the maximized frame - and
-// visits every tab, page, dialog and sheet at each size. RenderFlex/RenderBox
-// overflow throws through FlutterError and fails the test; the last "SWEEP:"
-// line names the offending screen.
-//
-// Run: `flutter test integration_test/overflow_windows_test.dart -d windows`
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
@@ -82,9 +71,6 @@ void main() {
     fixtures = await seedSweepFixtures(repo);
   });
 
-  // Resizes the real OS window and waits until the Flutter view reports a
-  // logical size near the request (title-bar chrome and DPI scaling shift the
-  // landed size; every distinct size still exercises a different layout).
   Future<void> resizeWindow(
     String label,
     double width,
@@ -122,9 +108,6 @@ void main() {
     }
   }
 
-  // Composition root wiring identical to main.dart (RepositoryProvider +
-  // RepositoryScope + MultiBlocProvider), with in-memory HydratedBloc storage
-  // so the real window's app state never leaks between sizes.
   Future<WorkoutCubit> pumpRealApp(WidgetTester tester) async {
     HydratedBloc.storage = InMemoryStorage();
     final cubit = WorkoutCubit(repository: repo);
@@ -154,7 +137,6 @@ void main() {
     debugDefaultTargetPlatformOverride = TargetPlatform.windows;
     addTearDown(() => debugDefaultTargetPlatformOverride = null);
 
-    // The maximized frame: the primary screen's work area (minus taskbar).
     final sizes = [..._sizes];
     final screens = await getScreenList();
     if (screens.isNotEmpty) {
@@ -207,8 +189,6 @@ void main() {
       );
       await settle(tester);
 
-      // Shell tab roots - the real app chrome (bottom bar + nested
-      // navigators) that the widget-test sweep never pumps.
       for (final tab in TabName.values) {
         _mark('tab ${tab.name} @ $label');
         HomePageSingleton().changeTab(tab);
@@ -273,7 +253,6 @@ void main() {
       );
       await visit('ExercisePickerPage', const ExercisePickerPage());
 
-      // Dialogs and sheets, opened from the Feed tab's nested navigator.
       HomePageSingleton().changeTab(TabName.feed);
       await settle(tester);
       final pageContext = tester.element(find.byType(FeedPage));
@@ -316,7 +295,6 @@ void main() {
         () => promptGym(pageContext, fixtures.allGyms),
       );
 
-      // End-workout confirmation dialog (in-progress WorkoutPage).
       _mark('End-workout dialog @ $label');
       unawaited(
         navigator.push(

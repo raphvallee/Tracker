@@ -2,9 +2,6 @@ import 'package:isar_community/isar.dart';
 
 part 'workout_split.g.dart';
 
-// After changing @collection/@embedded/@enumerated annotations, regenerate with:
-//   cd tracker && dart run build_runner build
-
 @collection
 class WorkoutSplit {
   WorkoutSplit({
@@ -62,38 +59,25 @@ class ExerciseItem {
   List<PlannedSet> sets;
 }
 
-/// One planned set of an [ExerciseItem]: either a fixed rep count
-/// ([maxReps] is null) or a rep range `minReps..maxReps`. Embedded, ordered
-/// by [order] within the exercise's set list.
 @embedded
 class PlannedSet {
   PlannedSet({this.order = 0, this.minReps = 0, this.maxReps});
 
   int order;
 
-  /// Fixed rep count, or the range minimum when [maxReps] is set.
   int minReps;
 
-  /// Range maximum; null means this is a fixed-reps set.
   int? maxReps;
 }
 
 extension PlannedSetX on PlannedSet {
-  /// Whether this set targets a rep range instead of a fixed rep count.
   bool get isRange => maxReps != null;
 
-  /// Human-readable rep target, e.g. `10` or `8-12`.
   String get repsLabel => maxReps == null ? '$minReps' : '$minReps-$maxReps';
 
-  /// Unit for [repsLabel]: singular only for a fixed target of exactly 1 rep.
   String get repsUnit => !isRange && minReps == 1 ? 'rep' : 'reps';
 }
 
-/// Whether two exercise lists are content-identical: same exercises in the
-/// same order with the same planned sets (rep values per set). Stale
-/// positional `order` fields are ignored - the editors re-index them on save
-/// - so a remove-then-re-add of an identical row does not read as a change.
-/// Used to detect unsaved changes when leaving a split editor without saving.
 bool exercisePlanEquals(List<ExerciseItem> a, List<ExerciseItem> b) {
   if (a.length != b.length) return false;
   for (var i = 0; i < a.length; i++) {
@@ -109,9 +93,6 @@ bool exercisePlanEquals(List<ExerciseItem> a, List<ExerciseItem> b) {
   return true;
 }
 
-/// Whether two split days are content-identical: same title, description and
-/// exercise plan (see [exercisePlanEquals]). Used to detect unsaved changes
-/// when leaving the split editor without saving.
 bool splitDayPlanEquals(WorkoutSplitDay a, WorkoutSplitDay b) =>
     a.title == b.title &&
     a.description == b.description &&

@@ -1,8 +1,3 @@
-// Split editor day reordering, widget-only (no Isar): dragging a day's grip
-// reorders the list, the draft becomes dirty (discard guard fires), a day
-// opened after a reorder is the right one, and a save hands back the days in
-// their new order. Persistence is covered in new_split_page_reorder_persist_test.dart.
-
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -43,14 +38,11 @@ void main() {
     );
   }
 
-  /// Day rows inside the split editor, in list order.
   Finder dayTitle(String title) => find.descendant(
     of: find.byType(SplitEditorPage),
     matching: find.text(title),
   );
 
-  /// Drags the grip of the day at [index] by [dy] pixels (negative = up),
-  /// in small steps so the reorder list sees a real drag gesture.
   Future<void> dragDay(WidgetTester tester, int index, double dy) async {
     final grip = find.byIcon(FLucideIcons.gripHorizontal).at(index);
     final gesture = await tester.startGesture(tester.getCenter(grip));
@@ -108,7 +100,6 @@ void main() {
     await dragDay(tester, 1, -120);
     await dragDay(tester, 0, 80);
 
-    // Back in the saved order: back pops without a confirmation.
     await tester.tap(find.byIcon(FLucideIcons.chevronLeft));
     await tester.pumpAndSettle();
     expect(find.text('Discard changes?'), findsNothing);
@@ -123,7 +114,6 @@ void main() {
     await tester.pumpAndSettle();
 
     await dragDay(tester, 2, -200);
-    // Legs is now first; tapping the top row must open Legs.
     expect(
       tester.getTopLeft(dayTitle('Legs')).dy,
       lessThan(tester.getTopLeft(dayTitle('Push')).dy),

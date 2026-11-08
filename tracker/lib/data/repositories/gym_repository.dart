@@ -2,8 +2,6 @@ import 'package:isar_community/isar.dart';
 
 import 'package:tracker/domain/models/gym.dart';
 
-/// Pages and cubits talk to these repositories, never to [Isar] directly.
-/// Each wraps the [Isar] collection query API for one entity.
 class GymRepository {
   GymRepository(this._isar);
 

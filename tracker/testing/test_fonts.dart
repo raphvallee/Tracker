@@ -1,17 +1,5 @@
-// Shared font loading for widget tests that render screenshots.
-//
-// The flutter test environment ships no real fonts: text falls back to the
-// blocky FlutterTest font and icon glyphs render as tofu boxes. This loader
-// registers the fonts the app actually renders with, resolved from the pub
-// cache and the Flutter SDK on disk (`Isolate.packageConfig` and
-// `resolvePackageUri` are unsupported in the test environment, so paths are
-// resolved directly).
-//
 // Must be invoked inside `tester.runAsync(...)` - engine font registration is
 // real async and never completes in the testWidgets fake-async zone.
-//
-// Each font is loaded individually guarded: a miss prints and continues, so
-// callers degrade to the wider default test font / tofu instead of failing.
 // ignore_for_file: avoid_print
 
 import 'dart:io';
@@ -29,7 +17,6 @@ Future<void> _load() async {
     return;
   }
 
-  // Inter: forui's bundled text face - the app's real text metrics.
   final foruiDir = _findPackageDir(hosted, 'forui-');
   final fontDir = foruiDir == null
       ? null
@@ -81,10 +68,6 @@ Future<void> _load() async {
   await _loadSdkFonts();
 }
 
-/// Fonts that ship with the Flutter SDK: MaterialIcons (injected by Material
-/// widgets - ReorderableListView drag handles, ExpansionTile chevrons) and
-/// Roboto (the ThemeData default family for widgets the ForUI bridge theme
-/// doesn't restyle).
 Future<void> _loadSdkFonts() async {
   final fontsDir = _sdkFontsDir();
   if (fontsDir == null) {
@@ -148,9 +131,6 @@ Directory? _sdkFontsDir() {
     );
     if (dir.existsSync()) return dir;
   }
-  // Fallback for exotic runners: flutter_tester lives at
-  // <sdk>/bin/cache/artifacts/engine/<host>/flutter_tester(.exe) - climb to
-  // the artifacts dir, which contains material_fonts/.
   var dir = File(Platform.resolvedExecutable).parent;
   for (var i = 0; i < 6; i++) {
     final candidate = Directory(

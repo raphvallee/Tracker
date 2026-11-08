@@ -4,8 +4,6 @@ import 'muscle.dart';
 
 part 'exercise.g.dart';
 
-// dart run build_runner build
-
 @collection
 class Exercise {
   Exercise({
@@ -30,7 +28,6 @@ class Exercise {
   MovementPattern movementPattern;
 }
 
-/// Primary movement category, used for categorized browsing and split design.
 enum MovementPattern { unspecified, push, pull, legs, core, fullBody }
 
 enum Equipment {

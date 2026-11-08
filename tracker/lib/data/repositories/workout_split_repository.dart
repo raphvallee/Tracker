@@ -2,8 +2,6 @@ import 'package:isar_community/isar.dart';
 
 import 'package:tracker/domain/models/workout_split.dart';
 
-/// Pages and cubits talk to these repositories, never to [Isar] directly.
-/// Each wraps the [Isar] collection query API for one entity.
 class WorkoutSplitRepository {
   WorkoutSplitRepository(this._isar);
 
@@ -20,8 +18,6 @@ class WorkoutSplitRepository {
   Future<bool> delete(int id) =>
       _isar.writeTxn(() => _isar.workoutSplits.delete(id));
 
-  /// Number of split templates referencing [exerciseId] in any day, used to
-  /// guard exercise deletion.
   Future<int> countReferencingSplits(int exerciseId) async {
     final splits = await _isar.workoutSplits
         .filter()

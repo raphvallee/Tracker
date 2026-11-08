@@ -1,16 +1,3 @@
-// Device benchmark for the History calendar (HistoryCalendar). Runs as an
-// integration test on a real device, meant for profile mode, and reports
-// FrameTiming build durations (UI thread: build + layout + paint). That is the
-// number a frame budget is checked against.
-//
-// The harness runs at the device's real screen size (no surface override), so
-// phone-sized devices are measured at phone layout.
-//
-// Run from tracker/ (writes build/history_calendar_benchmark.json):
-//   Android:  flutter drive --profile -d <android-device-id> \
-//               --driver=benchmark/drive/history_calendar_driver.dart \
-//               --target=benchmark/history_calendar_device_test.dart
-//   Windows:  same command with -d windows
 // ignore_for_file: avoid_print
 
 import 'package:flutter_test/flutter_test.dart';
@@ -107,8 +94,6 @@ void main() {
   }
 }
 
-/// Warms up, then records FrameTiming for [_iterations] runs of [run], prints
-/// the summary line, and fails if p95 frame build time is over budget.
 Future<void> _measure(
   IntegrationTestWidgetsFlutterBinding binding,
   String name,

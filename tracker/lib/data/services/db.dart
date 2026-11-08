@@ -9,10 +9,6 @@ import 'package:tracker/domain/models/workout_session_legacy.dart';
 import 'package:tracker/domain/models/workout_set.dart';
 import 'package:tracker/domain/models/workout_split.dart';
 
-/// Owns the single [Isar] instance for the app.
-///
-/// All collections must be registered here; the generated `*Schema` classes
-/// come from `dart run build_runner build`.
 class DbInstance {
   static Future<Isar> getIsar() async {
     final dir = await getApplicationDocumentsDirectory();

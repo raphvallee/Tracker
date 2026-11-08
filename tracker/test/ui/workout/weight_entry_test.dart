@@ -1,9 +1,3 @@
-// Weight rules on the current-workout set form: the -1000..10000 range, the
-// assisted-machine prompt for negative weights, the heavy-weight prompt above
-// 500 kg / 1000 lb, and the "Don't show this again" preference. See
-// lib/ui/core/ui/weight_confirmation.dart and utils/form_validators.dart.
-// In-memory storage only, so these are plain widget tests (no Isar).
-
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -60,8 +54,6 @@ void main() {
   }
 
   Future<void> addSet(WidgetTester tester) async {
-    // Planned logging has no Add button: the keyboard's done action on the
-    // focused reps field submits the row.
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pumpAndSettle();
   }
@@ -97,8 +89,6 @@ void main() {
 
       await tapInDialog(tester, 'Yes, log it');
       expect(cubit.state.sets.single.weight, -20);
-      // There is no rendered-set tile: the logged set keeps living in its
-      // input row, so the typed values stay editable.
       expect(textOf(tester, 0), '-20');
       expect(textOf(tester, 1), '8');
     });
@@ -312,8 +302,6 @@ void main() {
       expect(settingsOf(tester).state.showHeavyWeightWarning, isTrue);
       expect(cubit.state.sets.length, 1);
 
-      // Re-entering the text re-focuses the reps field, needed so the done
-      // action can reach the form after the dialog took focus away.
       await enterSet(tester, weight: '750');
       await addSet(tester);
       expect(find.text("That's a lot of weight"), findsOneWidget);

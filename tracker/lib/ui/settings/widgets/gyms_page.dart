@@ -10,9 +10,6 @@ import 'package:tracker/ui/core/ui/max_width.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
 import 'package:tracker/ui/workout/widgets/gym_picker.dart';
 
-/// Gym management (Plan.md §2.2 / §2.3): create/edit gyms, mark one as the
-/// primary baseline (multiplier locked to 1.0), and set or auto-estimate each
-/// gym's weight-equivalence multiplier from logged sessions.
 class GymsPage extends StatefulWidget {
   const GymsPage({super.key});
 

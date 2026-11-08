@@ -43,9 +43,9 @@ void main() {
     testWidgets('renders prefilled session fields and sets', (tester) async {
       await pumpAppPage(tester, SessionEditPage(session: pastSession()));
 
-      expect(find.text('Edit session'), findsOneWidget); // app bar title
-      expect(find.text('Save'), findsOneWidget); // app bar action
-      expect(find.text('Other gym'), findsOneWidget); // no repository in scope
+      expect(find.text('Edit session'), findsOneWidget);
+      expect(find.text('Save'), findsOneWidget);
+      expect(find.text('Other gym'), findsOneWidget);
       expect(find.text('80 kg × 5'), findsOneWidget);
       expect(find.text('60 kg × 8'), findsOneWidget);
       final title = find
@@ -62,12 +62,10 @@ void main() {
     ) async {
       await pumpAppPage(tester, SessionEditPage(session: pastSession()));
 
-      // Tap the 80 kg × 5 row to open the per-set editor.
       await tester.tap(find.text('80 kg × 5'));
       await tester.pumpAndSettle();
       expect(find.text('Edit set'), findsOneWidget);
 
-      // Weight and reps arrive prefilled; overwrite them and make warm-up.
       final fields = find.descendant(
         of: find.byType(FDialog),
         matching: find.byType(EditableText),
@@ -83,8 +81,6 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // The draft row re-renders with the new values (kg is the default
-      // test unit) and the W chip count follows the toggled type.
       expect(find.text('82.5 kg × 3'), findsOneWidget);
       expect(find.text('80 kg × 5'), findsNothing);
       expect(find.text('W'), findsNWidgets(2));

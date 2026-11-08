@@ -1,15 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
 
-/// Approximate SDK [ThemeData] from a Forui [FThemeData].
-///
-/// Forui 0.26's `FThemeData.toApproximateMaterialTheme()` returns
-/// `material_ui`'s `ThemeData`, which is a distinct type from Flutter SDK's
-/// `ThemeData` and cannot be passed to the SDK `MaterialApp` used here
-/// (switching the app root to `material_ui`'s `MaterialApp` is out of scope).
-/// This bridge maps the Forui palette onto the SDK `ColorScheme` so the
-/// remaining Material widgets (SliverAppBar, ExpansionTile,
-/// CircularProgressIndicator, ...) inherit the Forui palette.
 extension FThemeMaterialBridge on FThemeData {
   ThemeData toCustomMaterialTheme() {
     final textTheme = TextTheme(
@@ -428,10 +419,6 @@ extension FThemeMaterialBridge on FThemeData {
   }
 }
 
-/// Strengthens the bottom nav's inactive icon + label color: the inherited
-/// `mutedForeground` is too faint on the bar. One neutral step stronger per
-/// brightness (light #737373 → #525252, dark #A1A1A1 → #D4D4D4); the selected
-/// item keeps its primary color, so only the base is overridden.
 FThemeData strengthenNavLabels(FThemeData data) {
   final inactive = data.colors.brightness == Brightness.light
       ? const Color(0xFF525252)

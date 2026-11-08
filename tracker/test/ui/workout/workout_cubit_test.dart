@@ -1,8 +1,3 @@
-// Unit tests for WorkoutState (lib/pages/workout/workout_cubit.dart) - pure
-// JSON serialization, no Isar, no HydratedBloc. The WorkoutCubit flow (which
-// writes to Isar / HydratedStorage) is an integration test:
-// test/integration/workout_test.dart.
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tracker/domain/models/workout_split.dart';
 import 'package:tracker/ui/workout/view_models/workout_cubit.dart';
@@ -243,7 +238,6 @@ void main() {
             .canRestoreDiscarded(),
         isTrue,
       );
-      // Exactly at the window boundary is too late.
       expect(
         withDiscardAt(
           DateTime.now().subtract(WorkoutState.discardRestoreWindow),

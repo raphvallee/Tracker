@@ -5,11 +5,6 @@ import 'package:tracker/domain/models/muscle.dart';
 import 'package:tracker/ui/core/ui/custom_app_bar.dart';
 import 'package:tracker/ui/core/ui/keyboard_inset.dart';
 
-/// Result of picking an exercise for a feed graph.
-///
-/// [specific] is returned when a concrete exercise is chosen, [all] when the
-/// user opts for "All exercises", and [cancelled] when the picker is dismissed
-/// without a selection.
 enum PickKind { all, specific, cancelled }
 
 class GraphExercisePick {
@@ -23,12 +18,6 @@ class GraphExercisePick {
   final Exercise? exercise;
 }
 
-/// Full-screen exercise picker shown over the graph editor sheet.
-///
-/// It has a search bar at the top and muscle-group chips (Chest, Back,
-/// Shoulders, Legs, Arms, Abs) so the user can browse a large library without
-/// expanding anything inside the bottom sheet. Selecting an exercise (or "All
-/// exercises") pops a [GraphExercisePick] back to the sheet.
 class GraphExercisePickerPage extends StatefulWidget {
   const GraphExercisePickerPage({
     super.key,
@@ -102,8 +91,6 @@ class _GraphExercisePickerPageState extends State<GraphExercisePickerPage> {
     return CustomScrollView(
       slivers: <Widget>[
         CustomAppBar(context, title: 'Select exercise'),
-        // Search bar at the top of the list so it stays within reach while the
-        // user browses (mirrors ExercisePickerPage).
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),

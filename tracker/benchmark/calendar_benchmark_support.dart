@@ -1,7 +1,3 @@
-// Shared fixtures and host for the History calendar benchmarks. Used by the
-// widget-level harness (history_calendar_benchmark_test.dart) and the device
-// harness (history_calendar_device_test.dart).
-
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -13,21 +9,12 @@ import 'package:tracker/ui/history/widgets/calendar/history_calendar.dart';
 
 const List<int> sessionCounts = [500, 2000];
 
-/// Finds an icon-only [FButton] by its semantics tooltip (AppIconButton).
-///
-/// Material's `find.byTooltip` matched the old `Tooltip` widgets; since the
-/// Forui swap the tooltip lives on `FButton.semanticsTooltip` instead.
 Finder fButtonByTooltip(String tooltip) => find.byWidgetPredicate(
   (w) => w is FButton && w.semanticsTooltip == tooltip,
 );
 
-/// Frame budget the device harness enforces (p95 of UI-thread frame build).
-/// Overridable with --dart-define=CAL_BUDGET_MS when profiling on a throttled
-/// or slow device, where the 7ms gate for normal hardware does not apply.
 const int frameBudgetMs = int.fromEnvironment('CAL_BUDGET_MS', defaultValue: 7);
 
-/// Deterministic history: about one workout every other day, counting back
-/// from today, each with 4-12 sets.
 List<WorkoutSession> buildSessions(int count) {
   final random = Random(7);
   final today = DateTime.now();
@@ -64,12 +51,6 @@ List<WorkoutSession> buildSessions(int count) {
   return sessions;
 }
 
-/// Pumps the app-like shell once and returns the notifier that drives the
-/// calendar's sessions. A null value unmounts the calendar.
-///
-/// With [remountOnChange], every new list gets a new key, so a single pump
-/// unmounts the old calendar and mounts the new one (one measured frame per
-/// mount). Without it, a new list updates the existing calendar in place.
 Future<ValueNotifier<List<WorkoutSession>?>> pumpCalendarHost(
   WidgetTester tester, {
   List<WorkoutSession>? initial,
@@ -105,8 +86,6 @@ Future<ValueNotifier<List<WorkoutSession>?>> pumpCalendarHost(
   return sessions;
 }
 
-/// One user interaction: dispatch the tap, then render the frame it dirtied.
-/// flutter_test's tap does not render, so the pump is part of the interaction.
 Future<void> tapAndRender(WidgetTester tester, Finder finder) async {
   await tester.tap(finder);
   await tester.pump();
@@ -122,14 +101,11 @@ String selectionLabel(WidgetTester tester) => tester
     .map((text) => text.data ?? '')
     .firstWhere((text) => text.startsWith('Workouts'));
 
-/// Day cells of the month grid. They are the only InkWells with an 8px corner
-/// radius; the month nav buttons use the default shape.
 Finder dayCells() => find.byWidgetPredicate(
   (widget) =>
       widget is InkWell && widget.borderRadius == BorderRadius.circular(8),
 );
 
-/// Duration samples (microseconds) summarized in milliseconds.
 class BenchStats {
   BenchStats(List<int> micros) : _sorted = ([...micros]..sort());
 

@@ -41,14 +41,12 @@ void main() {
           ),
         );
         await settleSessionFlow(tester);
-        await tester.tap(find.text('Save')); // editor header action
+        await tester.tap(find.text('Save'));
         await settleSessionFlow(tester);
 
-        // The detail page applied the edit immediately.
         expect(find.text('90 kg × 5'), findsOneWidget);
         expect(find.text('80 kg × 5'), findsNothing);
 
-        // The save reached the repository: read the record back from Isar.
         final id = seeded.session.id;
         await waitForRealIo(tester, () async {
           final saved = await seeded.repo.sessions.getById(id);
@@ -76,7 +74,6 @@ void main() {
         await tester.tap(find.text('Edit'));
         await settleSessionFlow(tester);
 
-        // Rename the session so the save has an observable effect to wait on.
         final title = find
             .descendant(
               of: find.byType(FTextField),
@@ -96,7 +93,7 @@ void main() {
           ),
         );
         await settleSessionFlow(tester);
-        await tester.tap(find.text('Save')); // editor header action
+        await tester.tap(find.text('Save'));
         await settleSessionFlow(tester);
 
         final id = seeded.session.id;

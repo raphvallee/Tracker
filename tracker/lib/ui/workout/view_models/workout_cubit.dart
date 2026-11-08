@@ -9,12 +9,6 @@ import 'package:tracker/domain/models/workout_set.dart';
 import 'package:tracker/domain/models/workout_split.dart';
 import 'package:tracker/domain/services/analytics.dart';
 
-/// A single set logged during the in-progress workout.
-///
-/// Lives in the cubit-local [WorkoutState] (serialized for hydration so an
-/// active workout survives an app restart). It mirrors the persisted
-/// [WorkoutSet] but snapshots [exerciseName] so the UI can render set rows
-/// without a DB read. [order] preserves sequence.
 class ActiveSet {
   const ActiveSet({
     required this.exerciseId,
@@ -74,10 +68,6 @@ class ActiveSet {
       value is num ? value.toDouble() : double.tryParse('$value') ?? 0;
 }
 
-/// An exercise the user intends to do this session ("the split's exercises for
-/// today"). Captured at start so the active-workout screen can lay out the plan
-/// even after the underlying [WorkoutSplit] changes. Carries the planned sets
-/// so the session can pre-fill the add-set form from the plan.
 class PlanExercise {
   const PlanExercise({
     required this.exerciseId,
@@ -167,8 +157,6 @@ Map<int, List<ActiveSet>> _groupSets(List<ActiveSet> sets) {
   return grouped;
 }
 
-/// Shared defensive parsing for hydrated plan payloads (tolerates malformed
-/// entries from older or corrupted snapshots).
 List<PlanExercise> _parsePlan(Object? raw) => raw is List
     ? raw
           .whereType<Map>()
@@ -183,7 +171,6 @@ List<PlanExercise> _parsePlan(Object? raw) => raw is List
           .toList(growable: false)
     : const [];
 
-/// Shared defensive parsing for hydrated set payloads.
 List<ActiveSet> _parseSets(Object? raw) => raw is List
     ? raw
           .whereType<Map>()
@@ -201,13 +188,6 @@ List<ActiveSet> _parseSets(Object? raw) => raw is List
 final _setsByExerciseCache = Expando<Map<int, List<ActiveSet>>>();
 final _workingVolumeCache = Expando<double>();
 
-/// An immutable snapshot of a finished workout (just saved or just discarded),
-/// captured so the workout tab can offer to restore it as the in-progress
-/// session.
-///
-/// It carries the same payload as the hydrated [WorkoutState] minus the
-/// in-progress flag and transient error: restoring replays it verbatim,
-/// original start time included.
 class WorkoutSnapshot {
   const WorkoutSnapshot({
     required this.startTime,
@@ -244,11 +224,9 @@ class WorkoutSnapshot {
 
   final DateTime startTime;
 
-  /// Foreign key + display snapshot of the gym this session was logged at.
   final int? gymId;
   final String? gymName;
 
-  /// Title + ordered exercise plan if this session follows a split day.
   final String? planTitle;
   final List<PlanExercise> plan;
   final List<ActiveSet> sets;
@@ -361,12 +339,9 @@ class WorkoutState {
   final bool isInProgress;
   final DateTime? startTime;
 
-  /// Foreign key + display snapshot of the gym this session is logged at
-  /// (see Plan.md §2.2). Null if no gym was selected.
   final int? gymId;
   final String? gymName;
 
-  /// Title + ordered exercise plan if this session follows a split day.
   final String? planTitle;
 
   /// Set when the final Isar write in [WorkoutCubit.endWorkout] failed. Purely
@@ -374,15 +349,9 @@ class WorkoutState {
   /// restarted app never boots into a stale error banner.
   final String? saveError;
 
-  /// Snapshot of the last workout saved to history, so the workout tab can
-  /// always offer to restore it as the ongoing session (restoring takes the
-  /// session back out of history). [savedSessionId] is the Isar id of that
-  /// saved session. Serialized with hydration (schema v2) so it survives an
-  /// app restart.
   final WorkoutSnapshot? savedSnapshot;
   final int? savedSessionId;
 
-  /// When the last workout was saved; controls the restore window.
   final DateTime? savedAt;
 
   /// Snapshot of the last discarded workout and when it was discarded. Purely
@@ -392,11 +361,8 @@ class WorkoutState {
   final WorkoutSnapshot? discardedSnapshot;
   final DateTime? discardedAt;
 
-  /// How long a discarded workout stays restorable from the workout tab.
   static const Duration discardRestoreWindow = Duration(minutes: 15);
 
-  /// The last saved workout can always be restored, as long as no session is
-  /// in progress.
   bool canRestoreSaved({DateTime? now}) {
     if (isInProgress || savedSnapshot == null) return false;
     final at = now ?? DateTime.now();
@@ -404,10 +370,6 @@ class WorkoutState {
     return at.difference(savedAt!) < discardRestoreWindow;
   }
 
-  /// The last discarded workout is restorable only within
-  /// [discardRestoreWindow] of the discard, and only within this app run (the
-  /// snapshot is never hydrated). [now] defaults to the real wall clock; the
-  /// cubit passes its injectable clock.
   bool canRestoreDiscarded({DateTime? now}) {
     if (isInProgress || discardedSnapshot == null || discardedAt == null) {
       return false;
@@ -415,8 +377,6 @@ class WorkoutState {
     final at = now ?? DateTime.now();
     return at.difference(discardedAt!) < discardRestoreWindow;
   }
-
-  /// Sets logged so far this session, in [ActiveSet.order] sequence.
 
   /// Lazily groups the active sets for the presentation layer.
   ///
@@ -471,16 +431,13 @@ class WorkoutState {
     return true;
   }
 
-  /// Working-set volume for the live workout summary (warm-ups excluded).
   double get workingVolume => _workingVolumeCache[this] ??= sets
       .where((set) => !set.isWarmup)
       .fold<double>(0, (total, set) => total + set.weight * set.reps);
 
-  /// The resting (no workout) state - the app does not boot into a session.
   static WorkoutState initial() => WorkoutState(isInProgress: false);
 
   Map<String, dynamic> toJson() => {
-    // Hydrated-state schema version; see the comment on fromJson.
     'v': 2,
     'isInProgress': isInProgress,
     'startTime': startTime?.toIso8601String(),
@@ -550,13 +507,8 @@ class WorkoutCubit extends HydratedCubit<WorkoutState> {
     : _now = now ?? DateTime.now,
       super(WorkoutState.initial());
 
-  /// Reference for the workout flow; `endWorkout` persists a real
-  /// [WorkoutSession] (with sets + gym + duration) to Isar instead of doing its
-  /// own DB work. The cubit never opens a connection itself.
   final TrackerRepository? repository;
 
-  /// Injectable wall clock for the discard-restore window (tests). Other
-  /// timestamps keep [DateTime.now].
   final DateTime Function() _now;
 
   /// Begin a free-form workout (no split plan) at [startTime] now.
@@ -578,7 +530,6 @@ class WorkoutCubit extends HydratedCubit<WorkoutState> {
     );
   }
 
-  /// Begin a workout following a split day's exercise plan.
   void startPlanWorkout({
     required String title,
     required List<PlanExercise> exercises,
@@ -598,14 +549,10 @@ class WorkoutCubit extends HydratedCubit<WorkoutState> {
     );
   }
 
-  /// Select/change the gym for the active (or upcoming) session.
   void setGym(Gym gym) {
     emit(state.copyWith(gymId: gym.id, gymName: gym.name));
   }
 
-  /// Log one performed set, appending it in sequence. Reps may be fractional
-  /// (up to two decimal places); callers should pass a value already truncated
-  /// to that precision.
   void logSet({
     required int exerciseId,
     required String exerciseName,
@@ -627,8 +574,6 @@ class WorkoutCubit extends HydratedCubit<WorkoutState> {
     emit(state.copyWith(sets: sets));
   }
 
-  /// Remove the set at [order] and reindex the rest so [ActiveSet.order] stays
-  /// contiguous.
   void removeSet(int order) {
     var sets = state.sets.where((s) => s.order != order).toList();
     for (var i = 0; i < sets.length; i++) {
@@ -644,9 +589,6 @@ class WorkoutCubit extends HydratedCubit<WorkoutState> {
     emit(state.copyWith(sets: sets));
   }
 
-  /// Replace the weight and/or reps of the set at [order], keeping its
-  /// exercise, type and position. Used by the inline set rows when the user
-  /// retypes a logged set's values and leaves the row.
   void updateSet(int order, {double? weight, double? reps}) {
     emit(
       state.copyWith(
@@ -668,10 +610,6 @@ class WorkoutCubit extends HydratedCubit<WorkoutState> {
     );
   }
 
-  /// Abandon the workout without persisting anything. Nothing was saved to
-  /// Isar yet, so clearing the hydrated state is all that is needed - but the
-  /// session is first snapshotted into in-memory-only state so the workout tab
-  /// can offer to restore it for a short window (never across app restarts).
   Future<void> discardWorkout() async {
     final s = state;
     if (!s.isInProgress) return;
@@ -692,11 +630,6 @@ class WorkoutCubit extends HydratedCubit<WorkoutState> {
     );
   }
 
-  /// Finish the workout: writes a [WorkoutSession] to Isar (duration = now -
-  /// start) and resets to the idle state, keeping a snapshot of the saved
-  /// workout so it can always be restored from the workout tab (restoring
-  /// takes the session back out of history). When no repository is wired
-  /// (tests), it only resets state; the snapshot then has no history id.
   Future<void> endWorkout() async {
     final s = state;
     if (!s.isInProgress) return;
@@ -840,10 +773,6 @@ class WorkoutCubit extends HydratedCubit<WorkoutState> {
     );
   }
 
-  /// Restore the last discarded workout as the in-progress session. The
-  /// snapshot only lives in memory, so this is a no-op after an app restart.
-  /// When the [WorkoutState.discardRestoreWindow] has lapsed the stale
-  /// snapshot is dropped and nothing is restored.
   void restoreDiscardedWorkout() {
     final s = state;
     final snapshot = s.discardedSnapshot;
@@ -870,7 +799,6 @@ class WorkoutCubit extends HydratedCubit<WorkoutState> {
     );
   }
 
-  /// Restore the most recent restorable workout (saved first, then discarded).
   Future<void> restoreLastWorkout() async {
     final s = state;
     final now = _now();

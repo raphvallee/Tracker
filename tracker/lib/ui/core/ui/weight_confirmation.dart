@@ -4,13 +4,6 @@ import 'package:tracker/domain/models/weight_unit.dart';
 import 'package:tracker/ui/core/ui/weight_format.dart';
 import 'package:tracker/ui/settings/view_models/settings_cubit.dart';
 
-/// Asks the user to confirm a typed weight ([displayed], in the current unit)
-/// before a set is saved. Returns true when the set may be saved.
-///
-/// A negative weight must be an assisted machine. A weight above the unit's
-/// heavy threshold must be confirmed as real; only after the first confirmed
-/// heavy weight does the prompt offer "Don't show this again", and ticking it
-/// only saves the choice when the weight is actually used.
 Future<bool> confirmWeightEntry(BuildContext context, double displayed) async {
   if (displayed < 0) {
     final assisted = await showFDialog<bool>(

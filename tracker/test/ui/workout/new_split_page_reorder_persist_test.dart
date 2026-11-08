@@ -79,7 +79,6 @@ void main() {
     );
     await settleSessionFlow(tester);
 
-    // Move Pull above Push, then save.
     final grip = find.byIcon(FLucideIcons.gripHorizontal).at(1);
     final gesture = await tester.startGesture(tester.getCenter(grip));
     for (var i = 0; i < 10; i++) {
@@ -91,7 +90,6 @@ void main() {
     await tester.tap(find.text('Save'));
     await settleSessionFlow(tester);
 
-    // The save write lands in real IO: wait for it, then read it back.
     await waitForRealIo(tester, () async {
       final saved = await repo.splits.getById(seeded.id);
       return saved?.splitDays.map((d) => d.title).join(',') == 'Pull,Push,Legs';

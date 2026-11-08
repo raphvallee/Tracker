@@ -1,12 +1,3 @@
-// Interactive keyboard-reveal verification for the two flows called out in
-// Refine.md follow-up: (1) the add-graph sheet keeps its full card reachable
-// while the title is focused under the keyboard, and (2) the settings rep
-// range Min/Max inputs keep their 8px gap when the Max input is focused.
-//
-// Like visual_screenshots_test.dart this is an inspection capture (PNGs in
-// build/test_screenshots), plus hard geometry assertions so the keyboard
-// reveal and the input spacing cannot silently regress.
-
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
@@ -36,14 +27,11 @@ import '../../testing/test_helpers.dart';
 
 const double _keyboardHeight = 300;
 
-/// Phone viewport plus the sweep's minimum window size, where the keyboard
-/// leaves little room and the sheet must scroll.
 const List<(String, Size)> _sizes = [
   ('400x850-phone', Size(400, 850)),
   ('320x568-min', Size(320, 568)),
 ];
 
-/// The [FTextField] whose label text is exactly [label].
 Finder fieldWithLabel(String label) => find.byWidgetPredicate(
   (widget) =>
       widget is FTextField &&
@@ -134,8 +122,6 @@ void main() {
   }
 }
 
-/// Opens the add-graph sheet, focuses the title with the keyboard up, and
-/// checks the whole card stays reachable above the keyboard.
 Future<void> _addGraphSheetScenario(
   WidgetTester tester,
   ScreenshotRecorder recorder,
@@ -164,8 +150,6 @@ Future<void> _addGraphSheetScenario(
     reason: 'the focused title field must be fully visible above the keyboard',
   );
 
-  // The whole card must remain reachable: scroll to the Save button and
-  // confirm it clears the keyboard too.
   await tester.dragUntilVisible(
     find.text('Save'),
     find.descendant(
@@ -184,8 +168,6 @@ Future<void> _addGraphSheetScenario(
   await recorder.capture('add-graph sheet, scrolled to Save');
 }
 
-/// Focuses the rep-range Max input under the keyboard and checks the
-/// Min/Max inputs keep their 8px horizontal gap.
 Future<void> _settingsRepRangeScenario(
   WidgetTester tester,
   ScreenshotRecorder recorder,
@@ -238,7 +220,6 @@ Future<void> _openKeyboard(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
-/// Bottom edge of the faked keyboard, in logical pixels (devicePixelRatio 1).
 double _keyboardTop(WidgetTester tester) =>
     tester.view.physicalSize.height / tester.view.devicePixelRatio -
     _keyboardHeight;

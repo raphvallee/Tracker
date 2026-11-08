@@ -1,7 +1,3 @@
-// Settings integration tests (lib/pages/settings/): the SettingsCubit
-// (a HydratedCubit) and the SettingsPage widget. Pure weight-format / state
-// round-trip logic is unit-tested separately: test/unit/settings_test.dart.
-
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -99,7 +95,6 @@ void main() {
     expect(cubit.state.defaultRepRangeMin, 6);
     expect(cubit.state.defaultRepRangeMax, 9);
 
-    // A crossed range (min > max) is rejected: state unchanged, error shown.
     await tester.enterText(find.widgetWithText(FTextField, 'Min'), '15');
     await tester.pumpAndSettle();
     expect(cubit.state.defaultRepRangeMin, 6);

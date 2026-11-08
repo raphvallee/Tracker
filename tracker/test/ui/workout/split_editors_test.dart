@@ -1,8 +1,3 @@
-// Split day editor tests for the inline sets editing: legacy seeding, the
-// mandatory-set rule, adding sets with the configured defaults, and switching
-// a set between fixed reps and a rep range - all on the day editor page
-// itself (no sub-page, no dialog).
-
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -23,8 +18,6 @@ void main() {
     HydratedBloc.storage = InMemoryStorage();
   });
 
-  /// Pushes [page] onto the root navigator and returns the popped-value
-  /// future, so tests can assert on what the editor hands back.
   Future<WorkoutSplitDay?> pushEditor(
     WidgetTester tester,
     WorkoutSplitDay day,
@@ -80,7 +73,6 @@ void main() {
     final result = pushEditor(tester, day);
     await tester.pumpAndSettle();
 
-    // The seeded sets render inline as editable rows.
     expect(find.text('Set 1'), findsOneWidget);
     expect(find.text('Set 2'), findsOneWidget);
     expect(find.text('Set 3'), findsOneWidget);
@@ -120,19 +112,15 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // Mandatory sets: the only remaining set cannot be removed.
     expect(buttonIn(tester, setRow(0, 0), 'Remove set').onPress, isNull);
 
-    // Set 2 infers the rep range from set 1.
     await tester.tap(fButtonByTooltip('Add set'));
     await tester.pumpAndSettle();
     expect(fieldOf(tester, 0, 1).text, '8');
     expect(fieldOf(tester, 0, 1, index: 1).text, '12');
 
-    // With two sets, removal is enabled again.
     expect(buttonIn(tester, setRow(0, 1), 'Remove set').onPress, isNotNull);
 
-    // Switch set 2 to fixed reps (keeps the min).
     await tester.tap(
       find.descendant(
         of: setRow(0, 1),
@@ -146,7 +134,6 @@ void main() {
     );
     expect(fieldOf(tester, 0, 1).text, '8');
 
-    // Set 3 infers fixed reps from set 2.
     await tester.tap(fButtonByTooltip('Add set'));
     await tester.pumpAndSettle();
     expect(
@@ -182,7 +169,6 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // Bundled default mode is rep range: two fields, 8 and 12.
     expect(fieldOf(tester, 0, 0).text, '8');
     expect(fieldOf(tester, 0, 0, index: 1).text, '12');
 
@@ -217,7 +203,6 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // Fixed mode: a single reps field with the configured default reps.
     expect(
       find.descendant(of: setRow(0, 0), matching: find.byType(EditableText)),
       findsOneWidget,
@@ -252,7 +237,6 @@ void main() {
     await tester.tap(fButtonByTooltip('Use rep range'));
     await tester.pumpAndSettle();
 
-    // Range mode: two fields, max pre-filled from the Settings default.
     expect(fieldOf(tester, 0, 0).text, '10');
     expect(fieldOf(tester, 0, 0, index: 1).text, '12');
 
@@ -301,13 +285,11 @@ void main() {
     await tester.enterText(fields.at(1), '8');
     await tester.pumpAndSettle();
 
-    // Invalid input is flagged inline and never committed.
     expect(find.text('Must be at least the min'), findsOneWidget);
 
     await tester.tap(find.text('Done'));
     await tester.pumpAndSettle();
 
-    // The last valid value (12-12) is kept and collapses to a fixed set.
     final set = (await result)!.exercises.single.sets.single;
     expect(set.minReps, 12);
     expect(set.maxReps, isNull);
@@ -332,7 +314,6 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // Customize the range from 8-12 to 5-9.
     final fields = find.descendant(
       of: setRow(0, 0),
       matching: find.byType(EditableText),
@@ -341,12 +322,10 @@ void main() {
     await tester.enterText(fields.at(1), '9');
     await tester.pumpAndSettle();
 
-    // Fixed reps keep the min.
     await tester.tap(fButtonByTooltip('Use fixed reps'));
     await tester.pumpAndSettle();
     expect(fieldOf(tester, 0, 0).text, '5');
 
-    // Back to a range: 5-9 again, not the Settings default 8-12.
     await tester.tap(fButtonByTooltip('Use rep range'));
     await tester.pumpAndSettle();
     expect(fieldOf(tester, 0, 0).text, '5');
@@ -379,7 +358,6 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // Remember 5-9, then leave the range.
     final fields = find.descendant(
       of: setRow(0, 0),
       matching: find.byType(EditableText),
@@ -390,11 +368,9 @@ void main() {
     await tester.tap(fButtonByTooltip('Use fixed reps'));
     await tester.pumpAndSettle();
 
-    // Raise the fixed reps past the remembered max of 9.
     await tester.enterText(fields.at(0), '10');
     await tester.pumpAndSettle();
 
-    // 9 no longer sits above the min: the default max 12 applies.
     await tester.tap(fButtonByTooltip('Use rep range'));
     await tester.pumpAndSettle();
     expect(fieldOf(tester, 0, 0).text, '10');
@@ -430,7 +406,6 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // Set 1 remembers max 9.
     await tester.enterText(
       find
           .descendant(of: setRow(0, 0), matching: find.byType(EditableText))
@@ -439,7 +414,6 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // Removing set 1 shifts set 2 into row 0, which must not inherit 9.
     await tester.tap(
       find.descendant(
         of: setRow(0, 0),
@@ -468,16 +442,13 @@ void main() {
     final result = pushEditor(tester, WorkoutSplitDay(title: 'Push'));
     await tester.pumpAndSettle();
 
-    // Make the draft dirty: edit the title.
     await tester.enterText(find.widgetWithText(FTextField, 'Day name'), 'Pull');
     await tester.pumpAndSettle();
 
-    // Back navigation is now intercepted by the discard confirmation.
     await tester.tap(find.byIcon(FLucideIcons.chevronLeft));
     await tester.pumpAndSettle();
     expect(find.text('Discard changes?'), findsOneWidget);
 
-    // Cancel keeps the editor (and its draft) on screen: Done still saves.
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Done'));
@@ -493,7 +464,6 @@ void main() {
     final result = pushEditor(tester, WorkoutSplitDay(title: 'Push'));
     await tester.pumpAndSettle();
 
-    // No edits: back pops immediately, no dialog.
     await tester.tap(find.byIcon(FLucideIcons.chevronLeft));
     await tester.pumpAndSettle();
 
@@ -502,8 +472,6 @@ void main() {
   });
 
   testWidgets('set edits mark the day dirty too', (tester) async {
-    // An uncommitted (invalid) keystroke is not a change: back pops
-    // immediately.
     await pumpApp(tester);
     var result = pushEditor(
       tester,
@@ -531,7 +499,6 @@ void main() {
     expect(find.text('Discard changes?'), findsNothing);
     expect(await result, isNull);
 
-    // A committed valid change makes the editor dirty.
     result = pushEditor(
       tester,
       WorkoutSplitDay(
@@ -579,8 +546,6 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // The set's grid row excludes the row's bottom padding, so the distance
-    // between consecutive grid rows is the visible gap between sets.
     Rect gridRowOf(int set) => tester.getRect(
       find.descendant(of: setRow(0, set), matching: find.byType(Row)).first,
     );
