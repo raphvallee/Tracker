@@ -340,15 +340,15 @@ void main() {
       expect(find.text('Bench Press'), findsOneWidget);
       expect(find.text('2. '), findsOneWidget);
       expect(find.text('Squat'), findsOneWidget);
-      // One logged row plus one blank row per card.
-      expect(find.byType(FTextField), findsNWidgets(8));
+      // One logged row per card, and no blank row after it.
+      expect(find.byType(FTextField), findsNWidgets(4));
       expect(find.text('Add set'), findsNWidgets(2));
       expect(find.text('Add exercise'), findsOneWidget);
       expect(find.byType(FCheckbox), findsNothing);
       // FSelect redirects to a private subclass: match it by predicate.
       expect(find.byWidgetPredicate((w) => w is FSelect<int>), findsNothing);
       expect(textOf(tester, 0), '80');
-      expect(textOf(tester, 4), '100');
+      expect(textOf(tester, 2), '100');
     });
 
     testWidgets('a set typed in a lower blank row fills the first one', (
@@ -391,17 +391,17 @@ void main() {
           }
         },
       );
-      expect(find.byType(FTextField), findsNWidgets(8));
+      expect(find.byType(FTextField), findsNWidgets(6));
 
       await tester.enterText(input(2), '');
       await tester.enterText(input(3), '');
       await commit(tester);
 
       expect(cubit.state.sets.map((s) => s.weight).toList(), [60, 80]);
-      expect(find.byType(FTextField), findsNWidgets(6));
+      expect(find.byType(FTextField), findsNWidgets(4));
       expect(
-        [for (var i = 0; i < 6; i++) textOf(tester, i)],
-        ['60', '5', '80', '5', '', ''],
+        [for (var i = 0; i < 4; i++) textOf(tester, i)],
+        ['60', '5', '80', '5'],
       );
     });
 
@@ -427,6 +427,9 @@ void main() {
       await tester.tap(chip(0));
       await tester.pumpAndSettle();
       expect(cubit.state.sets.single.isWarmup, isFalse);
+
+      await tester.tap(find.text('Add set'));
+      await tester.pumpAndSettle();
 
       // A mouse click blurs the typed row first, logging it, and the toggle
       // then lands on the logged set.

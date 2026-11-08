@@ -156,14 +156,12 @@ class _SetEditorState extends State<_SetEditor> {
 
   int _extraEmptyRows = 0;
 
-  int get _emptyRowCount => _extraEmptyRows + 1;
-
   int get _plannedBaseCount =>
       widget.plannedSets.isEmpty ? 1 : widget.plannedSets.length;
 
   int get _rowCount => widget.planned
       ? math.max(_plannedBaseCount, widget.sets.length) + _extraEmptyRows
-      : widget.sets.length + _emptyRowCount;
+      : widget.sets.length + _extraEmptyRows;
 
   /// The exercise's sets as the cubit holds them right now. Handlers read
   /// these rather than [_SetEditor.sets]: the blur a tap causes can log a
@@ -175,6 +173,9 @@ class _SetEditorState extends State<_SetEditor> {
   @override
   void initState() {
     super.initState();
+    // A fresh free exercise starts with one blank row; later rows only come
+    // from "Add set".
+    if (!widget.planned && widget.sets.isEmpty) _extraEmptyRows = 1;
     _reconcile();
   }
 
@@ -453,7 +454,7 @@ class _SetEditorState extends State<_SetEditor> {
     final hasContent =
         row.weight.text.trim().isNotEmpty || row.reps.text.trim().isNotEmpty;
     if (hasContent) return true;
-    return _extraEmptyRows > 0;
+    return _extraEmptyRows > 0 && _rows.length > 1;
   }
 
   Future<bool> _confirmSwipeDelete(_Row row) async {
