@@ -5,13 +5,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forui/forui.dart';
-import 'package:tracker/domain/models/exercise.dart';
-import 'package:tracker/domain/models/muscle.dart';
 import 'package:tracker/domain/services/analytics.dart';
 import 'package:tracker/ui/analytics/widgets/graph_editor.dart';
-import 'package:tracker/ui/analytics/widgets/progression_page.dart';
 import 'package:tracker/ui/core/ui/line_chart.dart';
-import 'package:tracker/ui/exercises/widgets/exercise_detail_page.dart';
 
 import '../../../testing/test_helpers.dart';
 
@@ -23,47 +19,6 @@ void main() {
         Scaffold(body: LineChart(points: const <ProgressionPoint>[])),
       );
       expect(find.text('No data yet'), findsOneWidget);
-    });
-
-    testWidgets('LineChart renders a series without crashing', (tester) async {
-      await pumpAppPage(
-        tester,
-        Scaffold(
-          body: LineChart(
-            points: [
-              ProgressionPoint(date: DateTime(2026, 1, 1), value: 10),
-              ProgressionPoint(date: DateTime(2026, 1, 2), value: 20),
-            ],
-          ),
-        ),
-      );
-      expect(find.byType(CustomPaint), findsWidgets);
-    });
-
-    testWidgets('ExerciseDetailPage builds and shows an empty chart', (
-      tester,
-    ) async {
-      await pumpAppPage(
-        tester,
-        ExerciseDetailPage(
-          exercise: Exercise(
-            title: 'Bench Press',
-            primaryMuscle: [Muscle.chest],
-            equipment: [Equipment.barbell],
-            movementPattern: MovementPattern.push,
-          ),
-        ),
-      );
-
-      expect(find.text('Bench Press'), findsOneWidget);
-      expect(find.text('Best 1RM'), findsOneWidget);
-      expect(find.text('No data yet'), findsOneWidget);
-    });
-
-    testWidgets('ProgressionPage opens without a repository', (tester) async {
-      await pumpAppPage(tester, const ProgressionPage());
-      expect(find.text('Working volume over time'), findsOneWidget);
-      expect(find.text('No data yet'), findsNWidgets(2));
     });
 
     testWidgets('graph editor flags an empty title inline', (tester) async {

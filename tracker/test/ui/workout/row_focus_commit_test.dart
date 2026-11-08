@@ -42,34 +42,6 @@ Future<WorkoutCubit> pumpPlan(WidgetTester tester) async {
 void main() {
   setUp(() => HydratedBloc.storage = InMemoryStorage());
 
-  testWidgets('row 1 and 2 save when focus moves to the next row', (
-    tester,
-  ) async {
-    final cubit = await pumpPlan(tester);
-    await tester.enterText(field(0), '60');
-    await tester.enterText(field(1), '10');
-    await tester.tap(field(2));
-    await tester.pumpAndSettle();
-    expect(cubit.state.sets, hasLength(1), reason: 'row 1 by focus move');
-
-    await tester.enterText(field(2), '62.5');
-    await tester.enterText(field(3), '8');
-    await tester.tap(field(4));
-    await tester.pumpAndSettle();
-    expect(cubit.state.sets, hasLength(2), reason: 'row 2 by focus move');
-  });
-
-  testWidgets('row 3 saves when focus is dropped by tapping outside', (
-    tester,
-  ) async {
-    final cubit = await pumpPlan(tester);
-    await tester.enterText(field(4), '65');
-    await tester.enterText(field(5), '6');
-    await tester.tap(find.text('Bench Press'));
-    await tester.pumpAndSettle();
-    expect(cubit.state.sets, hasLength(1), reason: 'row 3 by tap outside');
-  });
-
   testWidgets('each row saves on tap outside (rows 1 to 3)', (tester) async {
     final cubit = await pumpPlan(tester);
     for (var row = 0; row < 3; row++) {

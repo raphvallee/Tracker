@@ -1,6 +1,6 @@
 // Unit tests for the analytics layer (lib/analytics/analytics.dart) — pure
 // functions/classes with no Isar and no widgets. Chart widgets that consume
-// this layer are integration (widget) tests: test/integration/analytics_test.dart.
+// this layer are integration (widget) tests: test/ui/analytics/analytics_test.dart.
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tracker/domain/models/graph_config.dart';

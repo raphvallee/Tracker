@@ -3,9 +3,12 @@
 // while the title is focused under the keyboard, and (2) the settings rep
 // range Min/Max inputs keep their 8px gap when the Max input is focused.
 //
-// Like visual_screenshots_test.dart this is an inspection capture (PNGs in
+// Like the visual screenshot sweep this is an inspection capture (PNGs in
 // build/test_screenshots), plus hard geometry assertions so the keyboard
 // reveal and the input spacing cannot silently regress.
+//
+// Shared body: one keyboard_<scenario>_test.dart per scenario runs it, so
+// each Isar-backed case gets its own process (docs/TESTING_ISAR_CI.md).
 
 import 'dart:async';
 
@@ -28,20 +31,19 @@ import 'package:tracker/ui/settings/view_models/settings_cubit.dart';
 import 'package:tracker/ui/settings/widgets/settings_page.dart';
 import 'package:tracker/ui/workout/view_models/workout_cubit.dart';
 
-import '../../testing/fakes/in_memory_storage.dart';
-import '../../testing/screenshot_helpers.dart';
-import '../../testing/test_fixtures.dart';
-import '../../testing/test_fonts.dart';
-import '../../testing/test_helpers.dart';
+import '../../../testing/fakes/in_memory_storage.dart';
+import '../../../testing/screenshot_helpers.dart';
+import '../../../testing/test_fixtures.dart';
+import '../../../testing/test_fonts.dart';
+import '../../../testing/test_helpers.dart';
 
 const double _keyboardHeight = 300;
 
-/// Phone viewport plus the sweep's minimum window size, where the keyboard
-/// leaves little room and the sheet must scroll.
-const List<(String, Size)> _sizes = [
-  ('400x850-phone', Size(400, 850)),
-  ('320x568-min', Size(320, 568)),
-];
+/// The sweep's minimum window size only: the keyboard leaves the least room
+/// there and the sheet must scroll, so a larger phone viewport adds no
+/// coverage.
+const String _sizeLabel = '320x568-min';
+const Size _viewport = Size(320, 568);
 
 /// The [FTextField] whose label text is exactly [label].
 Finder fieldWithLabel(String label) => find.byWidgetPredicate(
@@ -51,92 +53,86 @@ Finder fieldWithLabel(String label) => find.byWidgetPredicate(
       (widget.label as Text).data == label,
 );
 
-void main() {
-  setUpAll(initIsarCore);
+/// Pumps the seeded app at the minimum window size, then runs [scenario].
+/// Called by one `keyboard_<scenario>_test.dart` per scenario.
+Future<void> runKeyboardScenario(
+  WidgetTester tester,
+  String scenario,
+  Future<void> Function(WidgetTester, ScreenshotRecorder) run,
+) async {
+  await tester.runAsync(loadTestFonts);
+  debugDefaultTargetPlatformOverride = TargetPlatform.android;
+  addTearDown(() => debugDefaultTargetPlatformOverride = null);
+  // devicePixelRatio 1 keeps the faked keyboard inset in logical pixels.
+  tester.view.physicalSize = _viewport;
+  tester.view.devicePixelRatio = 1.0;
+  addTearDown(tester.view.reset);
 
-  for (final (sizeLabel, viewport) in _sizes) {
-    for (final (scenario, run)
-        in <(String, Future<void> Function(WidgetTester, ScreenshotRecorder))>[
-          ('add-graph-sheet', _addGraphSheetScenario),
-          ('settings-rep-range', _settingsRepRangeScenario),
-        ]) {
-      testWidgets('$scenario @$sizeLabel', (tester) async {
-        await tester.runAsync(loadTestFonts);
-        debugDefaultTargetPlatformOverride = TargetPlatform.android;
-        addTearDown(() => debugDefaultTargetPlatformOverride = null);
-        // devicePixelRatio 1 keeps the faked keyboard inset in logical pixels.
-        tester.view.physicalSize = viewport;
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(tester.view.reset);
+  final recorder = ScreenshotRecorder(tester);
+  recorder.beginRun(
+    sizeLabel: 'keyboard-check-$_sizeLabel',
+    width: _viewport.width.toInt(),
+    height: _viewport.height.toInt(),
+  );
 
-        final recorder = ScreenshotRecorder(tester);
-        recorder.beginRun(
-          sizeLabel: 'keyboard-check-$sizeLabel',
-          width: viewport.width.toInt(),
-          height: viewport.height.toInt(),
-        );
+  late TrackerRepository repo;
+  await tester.runAsync(() async {
+    final isar = await openTestIsar([
+      ExerciseSchema,
+      GymSchema,
+      WorkoutSplitSchema,
+      WorkoutSessionSchema,
+    ], name: 'isar_keyboard_${scenario}_$_sizeLabel');
+    repo = TrackerRepository(isar);
+    await seedExercisesIfNeeded(repo);
+    await seedSweepFixtures(repo);
+  });
 
-        late TrackerRepository repo;
-        await tester.runAsync(() async {
-          final isar = await openTestIsar([
-            ExerciseSchema,
-            GymSchema,
-            WorkoutSplitSchema,
-            WorkoutSessionSchema,
-          ], name: 'isar_keyboard_${scenario}_$sizeLabel');
-          repo = TrackerRepository(isar);
-          await seedExercisesIfNeeded(repo);
-          await seedSweepFixtures(repo);
-        });
+  HydratedBloc.storage = InMemoryStorage();
+  final workoutCubit = WorkoutCubit(repository: repo);
+  addTearDown(workoutCubit.close);
 
-        HydratedBloc.storage = InMemoryStorage();
-        final workoutCubit = WorkoutCubit(repository: repo);
-        addTearDown(workoutCubit.close);
-
-        await tester.pumpWidget(
-          MultiBlocProvider(
-            providers: [
-              BlocProvider<WorkoutCubit>.value(value: workoutCubit),
-              BlocProvider<SettingsCubit>(
-                create: (_) => SettingsCubit(),
-                lazy: false,
-              ),
-            ],
-            child: RepositoryScope(
-              repository: repo,
-              child: RepaintBoundary(
-                key: screenshotBoundaryKey,
-                child: const MyApp(),
-              ),
-            ),
-          ),
-        );
-        // Real delays let Isar's watcher events reach the StreamBuilders (the
-        // same arrangement as the visual sweep); wait until the feed leaves
-        // its loading spinner instead of pumping a fixed number of rounds -
-        // CI runners deliver the initial data slower than a local machine,
-        // and the feed only builds the analytics header once ready.
-        for (var i = 0; i < 20; i++) {
-          await tester.runAsync(
-            () => Future<void>.delayed(const Duration(milliseconds: 150)),
-          );
-          await tester.pump(const Duration(milliseconds: 250));
-          if (!tester.any(find.byType(FCircularProgress))) break;
-        }
-
-        await run(tester, recorder);
-
-        // Restore the platform override before the foundation invariant check
-        // (addTearDown runs too late for it - see visual_screenshots_test.dart).
-        debugDefaultTargetPlatformOverride = null;
-      });
-    }
+  await tester.pumpWidget(
+    MultiBlocProvider(
+      providers: [
+        BlocProvider<WorkoutCubit>.value(value: workoutCubit),
+        BlocProvider<SettingsCubit>(
+          create: (_) => SettingsCubit(),
+          lazy: false,
+        ),
+      ],
+      child: RepositoryScope(
+        repository: repo,
+        child: RepaintBoundary(
+          key: screenshotBoundaryKey,
+          child: const MyApp(),
+        ),
+      ),
+    ),
+  );
+  // Real delays let Isar's watcher events reach the StreamBuilders (the
+  // same arrangement as the visual sweep); wait until the feed leaves
+  // its loading spinner instead of pumping a fixed number of rounds -
+  // CI runners deliver the initial data slower than a local machine,
+  // and the feed only builds the analytics header once ready.
+  for (var i = 0; i < 20; i++) {
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 150)),
+    );
+    await tester.pump(const Duration(milliseconds: 250));
+    if (!tester.any(find.byType(FCircularProgress))) break;
   }
+
+  await run(tester, recorder);
+
+  // Restore the platform override before the foundation invariant check
+  // (addTearDown runs too late for it - see visual_screenshot_sweep.dart).
+  debugDefaultTargetPlatformOverride = null;
 }
 
 /// Opens the add-graph sheet, focuses the title with the keyboard up, and
 /// checks the whole card stays reachable above the keyboard.
-Future<void> _addGraphSheetScenario(
+Future<void> addGraphSheetScenario(
   WidgetTester tester,
   ScreenshotRecorder recorder,
 ) async {
@@ -186,7 +182,7 @@ Future<void> _addGraphSheetScenario(
 
 /// Focuses the rep-range Max input under the keyboard and checks the
 /// Min/Max inputs keep their 8px horizontal gap.
-Future<void> _settingsRepRangeScenario(
+Future<void> settingsRepRangeScenario(
   WidgetTester tester,
   ScreenshotRecorder recorder,
 ) async {

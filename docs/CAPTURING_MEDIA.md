@@ -31,7 +31,7 @@ Deterministic, no window or device needed, runs anywhere Flutter runs.
 
 For a screenshot of one specific page:
 
-1. Add one line to `tracker/test/ui/visual_screenshots_test.dart` in the
+1. Add one line to `tracker/test/ui/visual_screenshots/visual_screenshot_sweep.dart` in the
    pushed-pages block (after line `await visit('Settings page', ...)`):
    `await visit('My page label', const MyPage());`
    Pass `dataReady: () => tester.any(find.text('...'))` when the page loads

@@ -96,7 +96,7 @@ The README records intended refactors/features, not current behavior; several ar
 
 ## Writing tests (read first)
 
-**Before writing any test that opens a real Isar database, read `docs/TESTING_ISAR_CI.md`.** Isar-backed cases must each get their own `*_test.dart` file, or they hang on the 4-vCPU CI runner while passing locally.
+**Before writing any test that opens a real Isar database, read `docs/TESTING_ISAR_CI.md`.** Isar-backed cases must each get their own `*_test.dart` file, or they hang on the 4-vCPU CI runner while passing locally. Every Isar-backed file in `test/` follows this today (e.g. `test/data/*_test.dart`, `test/ui/workout/workout_*_test.dart`); keep it that way.
 
 ## Running GitHub Actions locally (repo root)
 
@@ -115,4 +115,4 @@ A working Tier 2 template lives at `tracker/integration_test/capture_smoke_test.
 `pwsh run-visual-tests.ps1` (repo root) renders every app page, dialog and sheet at 320x568, 800x600 and 1280x720 with real Inter text and Lucide/Material icon fonts, writing ~66 PNGs plus `manifest.json` to `tracker/build/test_screenshots/` (gitignored). Exit code = flutter test exit code. The sweep also runs on Linux CI via bare `flutter test`.
 
 - **Vision-analysis loop** (for Claude Code, after UI changes): run the script -> read `manifest.json` (or glob `tracker/build/test_screenshots/*.png`) -> inspect the images with the Read tool for overflow, clipped text, misalignment or tofu glyphs -> fix -> re-run. Files suffixed `_FAIL` are auto-captures of the screen that threw a render exception; the test output's `SCREENSHOT-SWEEP:` / `SCREENSHOT:` lines map captures to pages.
-- Under the hood: `test/ui/visual_screenshots_test.dart` (the sweep), `test/ui/overflow/layout_overflow_sweep.dart` + one `layout_overflow_<size>_test.dart` per window size (overflow assertions over the same pages; one file per size so each runs in its own process — libisar's native worker pool wedges multi-case sweeps on 4-CPU CI runners), and the shared infra in `testing/` (`screenshot_helpers.dart`, `test_fixtures.dart`, `test_fonts.dart`, `test_helpers.dart`). The output directory is disposable; `-NoClean` keeps previous captures.
+- Under the hood: `test/ui/visual_screenshots/visual_screenshot_sweep.dart` (the sweep body) + one `visual_screenshots_<size>_test.dart` per size, `test/ui/overflow/layout_overflow_sweep.dart` + one `layout_overflow_<size>_test.dart` per extra window size (480x800, 640x720, 1920x1080 - the sweep's own 320x568/800x600/1280x720 already fail on render exceptions, so they have no overflow file; overflow assertions over the same pages; one file per size so each runs in its own process — libisar's native worker pool wedges multi-case sweeps on 4-CPU CI runners), and the shared infra in `testing/` (`screenshot_helpers.dart`, `test_fixtures.dart`, `test_fonts.dart`, `test_helpers.dart`). The output directory is disposable; `-NoClean` keeps previous captures.
