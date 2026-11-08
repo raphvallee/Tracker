@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:forui/forui.dart';
 import 'package:tracker/data/repositories/tracker_repository.dart';
 import 'package:tracker/domain/models/exercise.dart';
 import 'package:tracker/domain/models/gym.dart';
@@ -140,3 +141,16 @@ Future<void> settleSessionFlow(WidgetTester tester) async {
   await tester.pump(const Duration(milliseconds: 250));
   await tester.pump(const Duration(milliseconds: 400));
 }
+
+/// The session editor's title input (its first [FTextField]).
+Finder sessionTitleField() => find
+    .descendant(
+      of: find.byType(FTextField),
+      matching: find.byType(EditableText),
+    )
+    .first;
+
+/// The editor's gym lookups resolve in real time, so poll until [text]
+/// renders.
+Future<void> waitForText(WidgetTester tester, String text) =>
+    waitForRealIo(tester, () async => find.text(text).evaluate().isNotEmpty);

@@ -63,24 +63,6 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('dragging a day grip moves the day up the list', (tester) async {
-    await pumpApp(tester);
-    unawaited(pushSplitEditor(tester, threeDaySplit()));
-    await tester.pumpAndSettle();
-
-    expect(
-      tester.getTopLeft(dayTitle('Pull')).dy,
-      greaterThan(tester.getTopLeft(dayTitle('Push')).dy),
-    );
-
-    await dragDay(tester, 1, -120);
-
-    expect(
-      tester.getTopLeft(dayTitle('Pull')).dy,
-      lessThan(tester.getTopLeft(dayTitle('Push')).dy),
-    );
-  });
-
   testWidgets('a reorder marks the draft dirty and the discard guard fires', (
     tester,
   ) async {

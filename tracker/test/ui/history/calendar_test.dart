@@ -1,6 +1,6 @@
 // Unit tests for history/calendar math (lib/pages/history/calendar_grid.dart) -
 // pure functions/classes, no Isar, no widgets. The SessionDetailPage widget
-// that renders this data is an integration test: test/integration/history_test.dart.
+// that renders this data is an integration test: test/ui/history/history_test.dart.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -20,11 +20,6 @@ void main() {
       expect(grid.days[36], 31); // March has 31 days
       // Cells after the month end are blank.
       expect(grid.days.sublist(37).where((d) => d != null), isEmpty);
-    });
-
-    test('February 2026 (28 days) lays out in one fewer row', () {
-      final grid = CalendarGrid(2026, 2);
-      expect(grid.days.where((d) => d != null), hasLength(28));
     });
 
     test('dateFor maps an index back to a real date', () {

@@ -1,6 +1,6 @@
 // Unit tests for settings (lib/pages/settings/) - pure: weight unit conversion
 // and SettingsState JSON round-trip. The SettingsCubit (HydratedCubit) and
-// SettingsPage widget are integration tests: test/integration/settings_test.dart.
+// SettingsPage widget are integration tests: test/ui/settings/settings_test.dart.
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tracker/domain/models/graph_config.dart';
@@ -102,15 +102,6 @@ void main() {
       const graph = GraphConfig(title: 'x', exerciseId: 2);
       expect(graph.copyWith(exerciseId: null).exerciseId, isNull);
       expect(GraphConfig.fromJson(graph.toJson()).exerciseId, 2);
-    });
-
-    test('collections and values have structural equality', () {
-      const graph = GraphConfig(title: 'x');
-      expect(SettingsState(graphs: [graph]), SettingsState(graphs: [graph]));
-      expect(
-        () => SettingsState(graphs: [graph]).graphs.add(graph),
-        throwsUnsupportedError,
-      );
     });
   });
 

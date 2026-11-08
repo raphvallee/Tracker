@@ -75,7 +75,8 @@ The fix was to split the file, as described in rule 1:
 - `session_edit_delete_test.dart`: widget-only tests (no Isar)
 - `session_edit_persist_test.dart`: saved-edit persistence
 - `session_delete_persist_test.dart`: delete persistence
-- `session_edit_delete_repo_test.dart`: repository round-trip
+- `session_edit_delete_repo_test.dart`: repository round-trip (later removed
+  as redundant with `tracker/test/data/session_repository_test.dart`)
 
 After the split, `act` with a 4-CPU container passed 130 tests.
 

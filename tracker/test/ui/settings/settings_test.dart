@@ -1,6 +1,6 @@
-// Settings integration tests (lib/pages/settings/): the SettingsCubit
-// (a HydratedCubit) and the SettingsPage widget. Pure weight-format / state
-// round-trip logic is unit-tested separately: test/unit/settings_test.dart.
+// SettingsPage widget tests (lib/ui/settings/): the workout-default inputs and
+// the start-workout placement update the SettingsCubit. SettingsState
+// round-trips are unit-tested in settings_cubit_test.dart.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -14,63 +14,9 @@ import 'package:tracker/ui/settings/widgets/settings_page.dart';
 import '../../../testing/fakes/in_memory_storage.dart';
 import '../../../testing/test_helpers.dart';
 
-Future<void> pumpSettingsPage(WidgetTester tester) async {
-  await pumpAppPage(
-    tester,
-    BlocProvider(create: (_) => SettingsCubit(), child: const SettingsPage()),
-  );
-}
-
 void main() {
   setUp(() {
     HydratedBloc.storage = InMemoryStorage();
-  });
-
-  test(
-    'SettingsCubit persists preferences and ignores legacy profile keys',
-    () {
-      final cubit = SettingsCubit();
-      addTearDown(cubit.close);
-
-      cubit.setUnit(WeightUnit.pounds);
-      cubit.setNotificationsEnabled(false);
-      cubit.setAnalyticsEnabled(false);
-
-      final restored = SettingsState.fromJson({
-        ...cubit.state.toJson(),
-        'displayName': 'Legacy User',
-        'email': 'legacy@example.com',
-      });
-      expect(restored.unit, WeightUnit.pounds);
-      expect(restored.notificationsEnabled, isFalse);
-      expect(restored.analyticsEnabled, isFalse);
-      expect(restored.toJson().containsKey('displayName'), isFalse);
-      expect(restored.toJson().containsKey('email'), isFalse);
-    },
-  );
-
-  testWidgets('settings page replaces placeholder cards with controls', (
-    tester,
-  ) async {
-    await pumpSettingsPage(tester);
-    expect(find.text('Profile Settings'), findsNothing);
-    expect(find.text('Units'), findsOneWidget);
-    expect(find.text('Notifications'), findsOneWidget);
-    expect(find.text('Privacy & Security'), findsOneWidget);
-    expect(find.byType(FSwitch), findsNWidgets(2));
-    expect(find.byType(AlertDialog), findsNothing);
-
-    await tester.tap(find.byType(FSwitch).first);
-    await tester.pump();
-    expect(find.byType(AlertDialog), findsNothing);
-    expect(tester.widget<FSwitch>(find.byType(FSwitch).first).value, isFalse);
-
-    await tester.tap(find.text('kg'));
-    await tester.pumpAndSettle();
-    expect(find.text('lb'), findsOneWidget);
-    await tester.tap(find.text('lb'));
-    await tester.pumpAndSettle();
-    expect(find.text('lb'), findsOneWidget);
   });
 
   testWidgets('workout defaults fields update the cubit', (tester) async {

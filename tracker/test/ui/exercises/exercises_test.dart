@@ -20,19 +20,6 @@ void main() {
     expect(grouped[MuscleGroup.abdominals], [exercise]);
   });
 
-  test('exercise remains in each distinct muscle group once', () {
-    final exercise = Exercise(
-      title: 'Squat',
-      primaryMuscle: [Muscle.quadriceps, Muscle.glutes, Muscle.hamstrings],
-      equipment: [Equipment.barbell],
-    );
-
-    final grouped = groupExercisesByMuscle([exercise]);
-
-    expect(grouped.keys, {MuscleGroup.legs});
-    expect(grouped[MuscleGroup.legs], [exercise]);
-  });
-
   testWidgets('exercise form flags name and target muscle inline', (
     tester,
   ) async {

@@ -9,6 +9,10 @@
 // native pool, so every case sees the always-passes "one open instance"
 // condition that CI previously met only for the first 4 sizes.
 //
+// Only sizes the visual screenshot sweep (test/ui/visual_screenshots/) does
+// not render get an entry file: that sweep already fails on render exceptions
+// at 320x568, 800x600 and 1280x720 over the same pages.
+//
 // Pumps the full app stack (ForUI desktop theme, real Isar data) at one of
 // the window sizes a Windows desktop session can hit and visits every page,
 // dialog and sheet. Any RenderFlex/RenderBox overflow throws through

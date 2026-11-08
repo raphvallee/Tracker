@@ -25,7 +25,9 @@ if (-not $NoClean) {
 
 Push-Location (Join-Path $PSScriptRoot 'tracker')
 try {
-    flutter test test/ui/visual_screenshots_test.dart
+    # One file per size (one Isar-backed case per process); run them one at a
+    # time so each process can merge its entries into manifest.json.
+    flutter test --concurrency=1 test/ui/visual_screenshots
     $code = $LASTEXITCODE
 }
 finally {
