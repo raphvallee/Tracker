@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:forui/forui.dart';
 import 'package:tracker/domain/models/workout_session.dart';
 import 'package:tracker/domain/models/workout_set.dart';
+import 'package:tracker/ui/history/widgets/calendar/calendar_grid.dart';
 import 'package:tracker/ui/history/widgets/calendar/history_calendar.dart';
 
 const List<int> sessionCounts = [500, 2000];
@@ -72,7 +73,15 @@ Future<ValueNotifier<List<WorkoutSession>?>> pumpCalendarHost(
                     ? const SizedBox.shrink()
                     : HistoryCalendar(
                         key: remountOnChange ? ValueKey(value) : null,
-                        sessions: value,
+                        // Newest first, as the repository returns them.
+                        index: WorkoutDateIndex([
+                          for (final session in value) session.startTime,
+                        ]),
+                        sessionsOn: (day) => [
+                          for (final session in value)
+                            if (DateUtils.isSameDay(session.startTime, day))
+                              session,
+                        ],
                         gymNames: const {},
                       ),
               ),
@@ -101,10 +110,38 @@ String selectionLabel(WidgetTester tester) => tester
     .map((text) => text.data ?? '')
     .firstWhere((text) => text.startsWith('Workouts'));
 
+/// Day cells of the month grid: the only opaque GestureDetectors wrapping a
+/// 1px-margin Container (the month nav buttons are FButtons).
 Finder dayCells() => find.byWidgetPredicate(
   (widget) =>
-      widget is InkWell && widget.borderRadius == BorderRadius.circular(8),
+      widget is GestureDetector &&
+      widget.behavior == HitTestBehavior.opaque &&
+      widget.child is Container &&
+      (widget.child! as Container).margin == const EdgeInsets.all(1),
 );
+
+/// Copies [sessions] with brand-new DateTimes, the way Isar hands them out
+/// (`fromMicrosecondsSinceEpoch(utc).toLocal()`). A DateTime resolves its
+/// local date lazily (a time-zone lookup) and caches it, so a benchmark that
+/// reuses one list across iterations measures warm dates the app never sees.
+List<WorkoutSession> isarFresh(List<WorkoutSession> sessions) => [
+  for (final s in sessions)
+    WorkoutSession(
+      title: s.title,
+      startTime: DateTime.fromMicrosecondsSinceEpoch(
+        s.startTime.microsecondsSinceEpoch,
+        isUtc: true,
+      ).toLocal(),
+      endTime: s.endTime == null
+          ? null
+          : DateTime.fromMicrosecondsSinceEpoch(
+              s.endTime!.microsecondsSinceEpoch,
+              isUtc: true,
+            ).toLocal(),
+      gymId: s.gymId,
+      sets: s.sets,
+    ),
+];
 
 class BenchStats {
   BenchStats(List<int> micros) : _sorted = ([...micros]..sort());

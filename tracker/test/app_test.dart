@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forui/forui.dart';
 import 'package:hydrated_bloc/hydrated_bloc.dart';
+import 'package:tracker/ui/history/widgets/history_page.dart';
 
 import '../testing/fakes/in_memory_storage.dart';
 import '../testing/test_helpers.dart';
@@ -50,6 +51,23 @@ void main() {
       }
     },
   );
+
+  testWidgets('builds the History tab offstage shortly after launch', (
+    WidgetTester tester,
+  ) async {
+    await pumpApp(tester);
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
+
+    expect(find.byType(HistoryPage), findsNothing);
+    expect(find.byType(HistoryPage, skipOffstage: false), findsOneWidget);
+
+    tester
+        .widget<FBottomNavigationBar>(find.byType(FBottomNavigationBar))
+        .onChange!(1);
+    await tester.pump();
+    expect(find.byType(HistoryPage), findsOneWidget);
+  });
 
   testWidgets('tapping outside a text field clears its focus', (
     WidgetTester tester,

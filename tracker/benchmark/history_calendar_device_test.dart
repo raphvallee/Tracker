@@ -20,7 +20,7 @@ void main() {
         final sessions = await pumpCalendarHost(tester, remountOnChange: true);
         await _measure(binding, 'mount', count, (iterations) async {
           for (var i = 0; i < iterations; i++) {
-            sessions.value = List.of(data);
+            sessions.value = isarFresh(data);
             await tester.pump();
           }
         });
@@ -57,16 +57,20 @@ void main() {
         });
       });
 
-      test('index build (fromSessions)', () {
+      test('index: first month + streak (fresh dates)', () {
         final sessions = buildSessions(count);
+        final now = DateTime.now();
         final micros = <int>[];
         for (var i = 0; i < _warmup + _iterations; i++) {
+          final starts = [for (final s in isarFresh(sessions)) s.startTime];
           final watch = Stopwatch()..start();
-          WorkoutDateIndex.fromSessions(sessions);
+          WorkoutDateIndex(starts)
+            ..workoutDaysIn(now.year, now.month)
+            ..currentStreak();
           watch.stop();
           if (i >= _warmup) micros.add(watch.elapsedMicroseconds);
         }
-        print(BenchStats(micros).line('index build (fromSessions)', count));
+        print(BenchStats(micros).line('index: first month + streak', count));
       });
 
       testWidgets('sessions update', (tester) async {
@@ -75,17 +79,17 @@ void main() {
         final versions = [
           base,
           [
-            ...base,
             WorkoutSession(
               title: 'Extra',
               startTime: DateTime(today.year, today.month, today.day, 18),
             ),
+            ...base,
           ],
         ];
         final sessions = await pumpCalendarHost(tester, initial: versions[0]);
         await _measure(binding, 'sessions update', count, (iterations) async {
           for (var i = 0; i < iterations; i++) {
-            sessions.value = versions[(i + 1) % 2];
+            sessions.value = isarFresh(versions[(i + 1) % 2]);
             await tester.pump();
           }
         });

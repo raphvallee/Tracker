@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
 import 'package:tracker/domain/models/workout_session.dart';
+import 'package:tracker/routing/tab_navigation.dart';
 import 'package:tracker/ui/core/ui/custom_route.dart';
 import 'package:tracker/ui/core/ui/icon_button.dart';
 import 'package:tracker/ui/core/ui/weight_format.dart';
@@ -8,14 +9,25 @@ import 'package:tracker/ui/core/ui/weight_format.dart';
 import '../session_detail_page.dart';
 import 'calendar_grid.dart';
 
+/// Month calendar of the workout history.
+///
+/// Lays out at its content height, so it belongs in a scrollable (the History
+/// page puts it in a sliver).
 class HistoryCalendar extends StatefulWidget {
   const HistoryCalendar({
     super.key,
-    required this.sessions,
+    required this.index,
+    required this.sessionsOn,
     required this.gymNames,
   });
 
-  final List<WorkoutSession> sessions;
+  /// Workout days of the whole history.
+  final WorkoutDateIndex index;
+
+  /// Sessions starting on the given local day, newest first. Only called for
+  /// the selected day, again whenever [index] changes.
+  final List<WorkoutSession> Function(DateTime day) sessionsOn;
+
   final Map<int, String> gymNames;
 
   @override
@@ -29,33 +41,45 @@ class _HistoryCalendarState extends State<HistoryCalendar> {
 
   late int _year;
   late int _month;
-  late WorkoutDateIndex _dateIndex;
+  late DateTime _today;
   late final ValueNotifier<DateTime?> _selectedDayNotifier;
+  bool? _wasActive;
 
   late CalendarGrid _grid;
-  late int _monthWorkoutDays;
   late Set<int> _daysWithWorkouts;
   late int _streak;
+
+  DateTime? _listedDay;
+  WorkoutDateIndex? _listedIndex;
+  List<WorkoutSession> _listed = const [];
 
   @override
   void initState() {
     super.initState();
-    final now = DateTime.now();
-    _year = now.year;
-    _month = now.month;
-    _dateIndex = WorkoutDateIndex.fromSessions(widget.sessions);
-    _selectedDayNotifier = ValueNotifier(_day(now));
+    _today = _day(DateTime.now());
+    _year = _today.year;
+    _month = _today.month;
+    _selectedDayNotifier = ValueNotifier(_today);
 
-    _streak = _dateIndex.currentStreak();
+    _streak = widget.index.currentStreak();
     _updateMonthData();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // The tab shell builds History ahead of time, so the calendar can stay
+    // mounted across midnight: re-resolve "today" whenever its tab shows.
+    final active = TabVisibilityScope.isActiveOf(context);
+    if (active && _wasActive == false) _refreshToday();
+    _wasActive = active;
   }
 
   @override
   void didUpdateWidget(covariant HistoryCalendar oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!identical(oldWidget.sessions, widget.sessions)) {
-      _dateIndex = WorkoutDateIndex.fromSessions(widget.sessions);
-      _streak = _dateIndex.currentStreak();
+    if (!identical(oldWidget.index, widget.index)) {
+      _streak = widget.index.currentStreak();
       _updateMonthData();
     }
   }
@@ -68,19 +92,36 @@ class _HistoryCalendarState extends State<HistoryCalendar> {
 
   static DateTime _day(DateTime t) => DateTime(t.year, t.month, t.day);
 
-  List<WorkoutSession> _sessionsOn(DateTime day) => _dateIndex.sessionsOn(day);
+  void _refreshToday() {
+    final today = _day(DateTime.now());
+    if (today == _today) return;
+    // Follow the date only if the user had not moved off "today".
+    final onToday =
+        _selectedDayNotifier.value == _today &&
+        _year == _today.year &&
+        _month == _today.month;
+    _today = today;
+    _streak = widget.index.currentStreak();
+    if (onToday) {
+      _year = today.year;
+      _month = today.month;
+      _selectedDayNotifier.value = today;
+      _updateMonthData();
+    }
+  }
+
+  List<WorkoutSession> _sessionsOn(DateTime day) {
+    if (day != _listedDay || !identical(_listedIndex, widget.index)) {
+      _listedDay = day;
+      _listedIndex = widget.index;
+      _listed = widget.sessionsOn(day);
+    }
+    return _listed;
+  }
 
   void _updateMonthData() {
     _grid = CalendarGrid(_year, _month);
-    _monthWorkoutDays = _dateIndex.monthWorkoutDays(_year, _month);
-
-    final days = <int>{};
-    for (final dayVal in _grid.days) {
-      if (dayVal != null && _dateIndex.hasWorkoutOn(_year, _month, dayVal)) {
-        days.add(dayVal);
-      }
-    }
-    _daysWithWorkouts = days;
+    _daysWithWorkouts = widget.index.workoutDaysIn(_year, _month);
   }
 
   void _goMonth(int delta) {
@@ -96,139 +137,129 @@ class _HistoryCalendarState extends State<HistoryCalendar> {
   @override
   Widget build(BuildContext context) {
     final theme = context.theme;
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final available = constraints.maxHeight.isFinite
-            ? constraints.maxHeight
-            : MediaQuery.sizeOf(context).height -
-                  MediaQuery.paddingOf(context).top -
-                  kToolbarHeight -
-                  _navAllowance;
-
-        final cellHeight =
-            ((available - _reservedHeight) / (_grid.days.length ~/ 7)).clamp(
-              36.0,
-              56.0,
-            );
-
-        return SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: <Widget>[
-              _BuildMonthHeader(
-                year: _year,
-                monthName: _monthName(_month),
-                onPrev: () => _goMonth(-1),
-                onNext: () => _goMonth(1),
-              ),
-              const SizedBox(height: 4),
-              Row(
-                children: <Widget>[
-                  for (final label in _weekdayLabels)
-                    Expanded(
-                      child: Center(
-                        child: Text(
-                          label,
-                          style: theme.typography.body.xs.copyWith(
-                            color: theme.colors.mutedForeground,
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 2),
-              ValueListenableBuilder<DateTime?>(
-                valueListenable: _selectedDayNotifier,
-                builder: (context, selectedDay, _) {
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _DayGrid(
-                        grid: _grid,
-                        theme: theme,
-                        cellHeight: cellHeight,
-                        selectedDay: selectedDay,
-                        daysWithWorkouts: _daysWithWorkouts,
-                        onSelectDay: (day) => _selectedDayNotifier.value = day,
-                      ),
-                      const SizedBox(height: 6),
-                      _MetricsStrip(
-                        monthWorkoutDays: _monthWorkoutDays,
-                        streak: _streak,
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        selectedDay == null
-                            ? 'Workouts'
-                            : 'Workouts · ${_dateLabel(selectedDay)}',
-                        style: theme.typography.body.sm.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      _dayList(selectedDay),
-                    ],
-                  );
-                },
-              ),
-            ],
-          ),
+    // The calendar always sits in a scrollable (unbounded height), so size the
+    // cells from the window instead of the incoming constraints.
+    final available =
+        MediaQuery.sizeOf(context).height -
+        MediaQuery.paddingOf(context).top -
+        kToolbarHeight -
+        _navAllowance;
+    final cellHeight =
+        ((available - _reservedHeight) / (_grid.days.length ~/ 7)).clamp(
+          36.0,
+          56.0,
         );
-      },
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        _BuildMonthHeader(
+          year: _year,
+          monthName: _monthName(_month),
+          onPrev: () => _goMonth(-1),
+          onNext: () => _goMonth(1),
+        ),
+        const SizedBox(height: 4),
+        Row(
+          children: <Widget>[
+            for (final label in _weekdayLabels)
+              Expanded(
+                child: Center(
+                  child: Text(
+                    label,
+                    style: theme.typography.body.xs.copyWith(
+                      color: theme.colors.mutedForeground,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 2),
+        ValueListenableBuilder<DateTime?>(
+          valueListenable: _selectedDayNotifier,
+          builder: (context, selectedDay, _) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _DayGrid(
+                  grid: _grid,
+                  theme: theme,
+                  cellHeight: cellHeight,
+                  selectedDay: selectedDay,
+                  daysWithWorkouts: _daysWithWorkouts,
+                  onSelectDay: (day) => _selectedDayNotifier.value = day,
+                ),
+                const SizedBox(height: 6),
+                _MetricsStrip(
+                  monthWorkoutDays: _daysWithWorkouts.length,
+                  streak: _streak,
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  selectedDay == null
+                      ? 'Workouts'
+                      : 'Workouts · ${_dateLabel(selectedDay)}',
+                  style: theme.typography.body.sm.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                _dayList(selectedDay),
+              ],
+            );
+          },
+        ),
+      ],
     );
   }
 
   Widget _dayList(DateTime? day) {
-    final sessions = day == null ? const <WorkoutSession>[] : _sessionsOn(day);
     if (day == null) {
       return const Text('Pick a workout day above.');
     }
+    final sessions = _sessionsOn(day);
     if (sessions.isEmpty) {
       return const Text('No workouts on this day.');
     }
-    return ListView.builder(
-      padding: EdgeInsets.zero,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: sessions.length,
-      itemBuilder: (context, index) {
-        final session = sessions[index];
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 4),
-          child: FItem.raw(
-            onPress: () => pushTo(
-              context,
-              SessionDetailPage(
-                session: session,
-                gymName: session.gymId == null
-                    ? null
-                    : widget.gymNames[session.gymId],
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final session in sessions)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: FItem.raw(
+              onPress: () => pushTo(
+                context,
+                SessionDetailPage(
+                  session: session,
+                  gymName: session.gymId == null
+                      ? null
+                      : widget.gymNames[session.gymId],
+                ),
               ),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Row(
-                children: [
-                  const Icon(FLucideIcons.footprints),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(session.title),
-                        Text(plural('set', session.sets.length)),
-                      ],
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  children: [
+                    const Icon(FLucideIcons.footprints),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(session.title),
+                          Text(plural('set', session.sets.length)),
+                        ],
+                      ),
                     ),
-                  ),
-                  const Icon(FLucideIcons.chevronRight),
-                ],
+                    const Icon(FLucideIcons.chevronRight),
+                  ],
+                ),
               ),
             ),
           ),
-        );
-      },
+      ],
     );
   }
 
@@ -276,6 +307,11 @@ class _DayGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     const double cellSpacing = 4;
     final rowCount = grid.days.length ~/ 7;
+    final dayStyle = theme.typography.body.xs;
+    final styles = (
+      normal: dayStyle.copyWith(color: theme.colors.foreground),
+      selected: dayStyle.copyWith(color: theme.colors.primaryForeground),
+    );
     return Padding(
       padding: const EdgeInsets.only(top: 4),
       child: Column(
@@ -290,7 +326,7 @@ class _DayGrid extends StatelessWidget {
                   Expanded(
                     child: SizedBox(
                       height: cellHeight,
-                      child: _cellAt(row * 7 + column),
+                      child: _cellAt(row * 7 + column, styles),
                     ),
                   ),
                 ],
@@ -302,7 +338,7 @@ class _DayGrid extends StatelessWidget {
     );
   }
 
-  Widget _cellAt(int index) {
+  Widget _cellAt(int index, ({TextStyle normal, TextStyle selected}) styles) {
     final dayVal = grid.days[index];
     if (dayVal == null) return const SizedBox.shrink();
 
@@ -315,6 +351,7 @@ class _DayGrid extends StatelessWidget {
     return _DayCell(
       dayVal: dayVal,
       theme: theme,
+      textStyle: isSelected ? styles.selected : styles.normal,
       isSelected: isSelected,
       hasWorkout: daysWithWorkouts.contains(dayVal),
       onTap: () => onSelectDay(DateTime(grid.year, grid.month, dayVal)),
@@ -322,10 +359,14 @@ class _DayGrid extends StatelessWidget {
   }
 }
 
+/// A plain gesture target: an InkWell per cell built a Focus, Actions,
+/// MouseRegion and ink layer for each of the 42 cells, which dominated the
+/// grid's mount cost.
 class _DayCell extends StatelessWidget {
   const _DayCell({
     required this.dayVal,
     required this.theme,
+    required this.textStyle,
     required this.isSelected,
     required this.hasWorkout,
     required this.onTap,
@@ -333,22 +374,20 @@ class _DayCell extends StatelessWidget {
 
   final int dayVal;
   final FThemeData theme;
+  final TextStyle textStyle;
   final bool isSelected;
   final bool hasWorkout;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final foreground = isSelected
-        ? theme.colors.primaryForeground
-        : theme.colors.foreground;
     final dot = isSelected
         ? theme.colors.primaryForeground
         : (hasWorkout ? theme.colors.primary : Colors.transparent);
 
-    return InkWell(
+    return GestureDetector(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
+      behavior: HitTestBehavior.opaque,
       child: Container(
         margin: const EdgeInsets.all(1),
         decoration: BoxDecoration(
@@ -359,10 +398,7 @@ class _DayCell extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[
-            Text(
-              dayVal.toString(),
-              style: theme.typography.body.xs.copyWith(color: foreground),
-            ),
+            Text(dayVal.toString(), style: textStyle),
             Container(
               width: 4,
               height: 4,
