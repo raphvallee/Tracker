@@ -1,10 +1,16 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
+import 'package:tracker/data/repositories/tracker_repository.dart';
+import 'package:tracker/data/services/app_log.dart';
 import 'package:tracker/domain/models/workout_session.dart';
+import 'package:tracker/routing/tab_navigation.dart';
 import 'package:tracker/ui/core/ui/custom_app_bar.dart';
 import 'package:tracker/ui/core/ui/custom_route.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
 import 'package:tracker/ui/core/ui/weight_format.dart';
+import 'package:tracker/ui/history/widgets/calendar/calendar_grid.dart';
 import 'package:tracker/ui/history/widgets/calendar/history_calendar.dart';
 import 'package:tracker/ui/history/widgets/session_detail_page.dart';
 
@@ -16,100 +22,166 @@ class HistoryPage extends StatefulWidget {
 }
 
 class _HistoryPageState extends State<HistoryPage> {
-  Map<int, String> _gymNames = const {};
-  Stream<List<WorkoutSession>>? _stream;
+  static const int _calendarTab = 0;
+  static const int _listTab = 1;
+
+  TrackerRepository? _repo;
+  StreamSubscription<void>? _changes;
   bool _didLoad = false;
+  bool _active = true;
+  bool _stale = false;
+  Object? _error;
+
+  Map<int, String> _gymNames = const {};
+  WorkoutDateIndex _index = WorkoutDateIndex(const []);
+
+  /// Full sessions for the List tab, read only while it is (or was last)
+  /// shown; the calendar works from start times alone.
+  List<WorkoutSession>? _sessions;
+  int _tab = _calendarTab;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    _active = TabVisibilityScope.isActiveOf(context);
     // RepositoryScope is an inherited widget, so read it here (after initState).
-    // Cache the watch stream once so rebuilds don't resubscribe the query.
     if (!_didLoad) {
       _didLoad = true;
-      _stream = RepositoryScope.maybeOf(context)?.sessions.watchAll();
-      _loadGyms();
+      _repo = RepositoryScope.maybeOf(context);
+      _changes = _repo?.sessions.watchChanges().listen(
+        (_) => _onSessionsChanged(),
+        onError: _onLoadError,
+      );
+      // Synchronous reads, so the very first frame already shows the
+      // calendar instead of a loading spinner.
+      _load(includeGyms: true);
+    } else if (_active && _stale) {
+      _load();
     }
   }
 
-  Future<void> _loadGyms() async {
-    final repo = RepositoryScope.maybeOf(context);
-    final gyms = await repo?.gyms.getAll() ?? const [];
-    if (!mounted) return;
+  @override
+  void dispose() {
+    _changes?.cancel();
+    super.dispose();
+  }
+
+  void _onSessionsChanged() {
+    // History is built ahead of time while hidden: defer the reload to when
+    // the tab is shown instead of rebuilding offstage on every save.
+    if (!_active) {
+      _stale = true;
+      return;
+    }
+    setState(_load);
+  }
+
+  void _onLoadError(Object error, StackTrace stackTrace) {
+    AppLog.error('history', error, stackTrace);
+    if (mounted) setState(() => _error = error);
+  }
+
+  void _load({bool includeGyms = false}) {
+    _stale = false;
+    final repo = _repo;
+    if (repo == null) return;
+    try {
+      if (includeGyms) {
+        _gymNames = {for (final g in repo.gyms.getAllSync()) g.id: g.name};
+      }
+      _index = WorkoutDateIndex(repo.sessions.getStartTimesSync());
+      // An emptied history drops the tab bar; it comes back on Calendar.
+      if (_index.isEmpty) _tab = _calendarTab;
+      _sessions = _tab == _listTab ? repo.sessions.getAllSync() : null;
+      _error = null;
+    } on Object catch (error, stackTrace) {
+      AppLog.error('history', error, stackTrace);
+      _error = error;
+    }
+  }
+
+  void _selectTab(int tab) {
+    if (tab == _tab) return;
     setState(() {
-      _gymNames = {for (final g in gyms) g.id: g.name};
+      _tab = tab;
+      if (tab == _listTab && _sessions == null) _load();
     });
   }
 
+  List<WorkoutSession> _sessionsOn(DateTime day) =>
+      _repo?.sessions.getOnLocalDaySync(day) ?? const [];
+
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<List<WorkoutSession>>(
-      stream: _stream,
-      builder: (context, snapshot) {
-        return CustomScrollView(slivers: _buildSlivers(context, snapshot));
-      },
-    );
+    return CustomScrollView(slivers: _buildSlivers(context));
   }
 
-  List<Widget> _buildSlivers(
-    BuildContext context,
-    AsyncSnapshot<List<WorkoutSession>> snapshot,
-  ) {
+  List<Widget> _buildSlivers(BuildContext context) {
     final slivers = <Widget>[CustomAppBar(context, title: 'History')];
 
-    if (snapshot.hasError) {
+    if (_error != null) {
       slivers.add(
         const SliverFillRemaining(
           hasScrollBody: false,
           child: _HistoryMessage(message: 'Could not load workout history.'),
         ),
       );
-    } else if (snapshot.connectionState == ConnectionState.waiting &&
-        !snapshot.hasData) {
-      slivers.add(
-        const SliverFillRemaining(
-          hasScrollBody: false,
-          child: Center(child: FCircularProgress()),
-        ),
-      );
-    } else if ((snapshot.data ?? const <WorkoutSession>[]).isEmpty) {
+    } else if (_index.isEmpty) {
       slivers.add(
         const SliverFillRemaining(hasScrollBody: false, child: _EmptyHistory()),
       );
     } else {
-      final sessions = (snapshot.data ?? const <WorkoutSession>[]).toList()
-        ..sort((a, b) => b.startTime.compareTo(a.startTime));
-      slivers.add(
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-          sliver: SliverToBoxAdapter(
-            child: FTabs(
-              children: [
-                .entry(
-                  label: const Text('Calendar'),
-                  child: HistoryCalendar(
-                    sessions: sessions,
-                    gymNames: _gymNames,
+      final theme = context.theme;
+      slivers
+        ..add(
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            // Tab bar only: the selected tab's content is its own sliver
+            // below, so the List tab can be a lazy SliverList.
+            sliver: SliverToBoxAdapter(
+              child: FTabs(
+                control: .managed(onChange: _selectTab),
+                onPress: _selectTab,
+                children: [
+                  .entry(
+                    label: const Text('Calendar'),
+                    child: const SizedBox.shrink(),
                   ),
-                ),
-                .entry(
-                  label: const Text('List'),
-                  child: _sessionList(context, sessions),
-                ),
-              ],
+                  .entry(
+                    label: const Text('List'),
+                    child: const SizedBox.shrink(),
+                  ),
+                ],
+              ),
             ),
           ),
-        ),
-      );
+        )
+        ..add(
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
+            // The text style FTabs gives its own content.
+            sliver: DefaultTextStyle(
+              style: theme.typography.body.md.copyWith(
+                color: theme.colors.foreground,
+              ),
+              child: _tab == _calendarTab
+                  ? SliverToBoxAdapter(
+                      child: HistoryCalendar(
+                        index: _index,
+                        sessionsOn: _sessionsOn,
+                        gymNames: _gymNames,
+                      ),
+                    )
+                  : _sessionList(_sessions ?? const []),
+            ),
+          ),
+        );
     }
     return slivers;
   }
 
-  Widget _sessionList(BuildContext context, List<WorkoutSession> sessions) {
-    return ListView.builder(
-      padding: EdgeInsets.zero,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
+  Widget _sessionList(List<WorkoutSession> sessions) {
+    return SliverList.builder(
       itemCount: sessions.length,
       itemBuilder: (context, index) {
         final session = sessions[index];

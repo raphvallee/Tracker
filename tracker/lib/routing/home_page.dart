@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart' show SystemNavigator;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:forui/forui.dart';
@@ -30,6 +33,7 @@ class _HomePageState extends State<HomePage> {
     (index) => _TabPopObserver(),
   );
   bool _poppingActiveTab = false;
+  Timer? _prebuildTimer;
 
   Future<bool> _handlePop() async {
     final navigator = _navigatorKeys[_currentIndex].currentState;
@@ -92,10 +96,31 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
     HomePageSingleton().indexSetState = indexSetState;
+    // Build the History tab offstage shortly after launch, so its first open
+    // is a visibility flip instead of a cold build. A one-shot timer, not an
+    // idle-priority scheduler task: while any animation runs the scheduler
+    // rejects idle tasks and immediately re-polls with Timer.run, a busy loop
+    // (and an endless one under fake-async tests with a looping spinner).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _prebuildTimer = Timer(const Duration(seconds: 1), _prebuildHistory);
+    });
+  }
+
+  void _prebuildHistory() {
+    const historyTab = 1;
+    if (!mounted || _visited.contains(historyTab)) return;
+    // Keep the build frame out of animations and flings: try again later.
+    if (SchedulerBinding.instance.transientCallbackCount > 0) {
+      _prebuildTimer = Timer(const Duration(seconds: 1), _prebuildHistory);
+      return;
+    }
+    setState(() => _visited.add(historyTab));
   }
 
   @override
   void dispose() {
+    _prebuildTimer?.cancel();
     if (HomePageSingleton().indexSetState == indexSetState) {
       HomePageSingleton().indexSetState = null;
     }

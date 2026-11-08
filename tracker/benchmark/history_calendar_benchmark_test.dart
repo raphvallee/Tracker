@@ -22,7 +22,7 @@ void main() {
         final sessions = await pumpCalendarHost(tester, remountOnChange: true);
         final micros = <int>[];
         for (var i = 0; i < _warmup + _iterations; i++) {
-          sessions.value = List.of(data);
+          sessions.value = isarFresh(data);
           final watch = Stopwatch()..start();
           await tester.pump();
           watch.stop();
@@ -80,17 +80,17 @@ void main() {
         final versions = [
           base,
           [
-            ...base,
             WorkoutSession(
               title: 'Extra',
               startTime: DateTime(today.year, today.month, today.day, 18),
             ),
+            ...base,
           ],
         ];
         final sessions = await pumpCalendarHost(tester, initial: versions[0]);
         final micros = <int>[];
         for (var i = 0; i < _warmup + _iterations; i++) {
-          sessions.value = versions[(i + 1) % 2];
+          sessions.value = isarFresh(versions[(i + 1) % 2]);
           final watch = Stopwatch()..start();
           await tester.pump();
           watch.stop();
@@ -99,16 +99,20 @@ void main() {
         print(BenchStats(micros).line('sessions update', count));
       });
 
-      test('building blocks: WorkoutDateIndex.fromSessions', () {
+      test('index: first month + streak (fresh dates)', () {
         final sessions = buildSessions(count);
+        final now = DateTime.now();
         final micros = <int>[];
         for (var i = 0; i < _warmup + _iterations; i++) {
+          final starts = [for (final s in isarFresh(sessions)) s.startTime];
           final watch = Stopwatch()..start();
-          WorkoutDateIndex.fromSessions(sessions);
+          WorkoutDateIndex(starts)
+            ..workoutDaysIn(now.year, now.month)
+            ..currentStreak();
           watch.stop();
           if (i >= _warmup) micros.add(watch.elapsedMicroseconds);
         }
-        print(BenchStats(micros).line('index build (fromSessions)', count));
+        print(BenchStats(micros).line('index: first month + streak', count));
       });
     });
   }

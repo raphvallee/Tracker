@@ -9,6 +9,8 @@ class GymRepository {
 
   Future<List<Gym>> getAll() => _isar.gyms.where().sortByOrder().findAll();
 
+  List<Gym> getAllSync() => _isar.gyms.where().sortByOrder().findAllSync();
+
   Future<Gym?> getById(int id) => _isar.gyms.get(id);
 
   Future<Gym?> getPrimary() =>

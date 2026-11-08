@@ -78,4 +78,41 @@ class WorkoutSessionRepository {
       .where()
       .sortByStartTimeDesc()
       .watch(fireImmediately: true);
+
+  /// Fires after every change to the sessions collection.
+  Stream<void> watchChanges() => _isar.workoutSessions.watchLazy();
+
+  /// Every session, newest first.
+  List<WorkoutSession> getAllSync() =>
+      _isar.workoutSessions.where().sortByStartTimeDesc().findAllSync();
+
+  /// Start times of every session, newest first. A property query skips
+  /// decoding titles and sets, so it is cheap enough to run inside a frame.
+  List<DateTime> getStartTimesSync() => _isar.workoutSessions
+      .where()
+      .sortByStartTimeDesc()
+      .startTimeProperty()
+      .findAllSync();
+
+  /// Sessions starting on [day]'s local calendar date, newest first.
+  ///
+  /// The query window is padded by a day on each side and the results are
+  /// matched on their local date, so 23 h and 25 h DST days are exact.
+  List<WorkoutSession> getOnLocalDaySync(DateTime day) {
+    final sessions = _isar.workoutSessions
+        .filter()
+        .startTimeBetween(
+          DateTime.utc(day.year, day.month, day.day - 1),
+          DateTime.utc(day.year, day.month, day.day + 2),
+        )
+        .sortByStartTimeDesc()
+        .findAllSync();
+    return [
+      for (final session in sessions)
+        if (session.startTime.year == day.year &&
+            session.startTime.month == day.month &&
+            session.startTime.day == day.day)
+          session,
+    ];
+  }
 }

@@ -32,6 +32,7 @@ import 'package:tracker/ui/exercises/widgets/exercise_detail_page.dart';
 import 'package:tracker/ui/exercises/widgets/exercises_page.dart';
 import 'package:tracker/ui/exercises/widgets/new_exercise_page.dart';
 import 'package:tracker/ui/feed/widgets/feed_page.dart';
+import 'package:tracker/ui/history/widgets/calendar/calendar_grid.dart';
 import 'package:tracker/ui/history/widgets/calendar/history_calendar.dart';
 import 'package:tracker/ui/history/widgets/history_page.dart';
 import 'package:tracker/ui/history/widgets/session_detail_page.dart';
@@ -194,9 +195,16 @@ Future<void> sweepSize(WidgetTester tester, String label, Size size) async {
     'HistoryCalendar',
     Material(
       type: MaterialType.transparency,
-      child: HistoryCalendar(
-        sessions: sweepFixtures.allSessions,
-        gymNames: sweepFixtures.gymNames,
+      // The app always hosts the calendar in a scrollable.
+      child: SingleChildScrollView(
+        child: HistoryCalendar(
+          index: WorkoutDateIndex.fromSessions(sweepFixtures.allSessions),
+          sessionsOn: (day) => [
+            for (final s in sweepFixtures.allSessions)
+              if (DateUtils.isSameDay(s.startTime, day)) s,
+          ],
+          gymNames: sweepFixtures.gymNames,
+        ),
       ),
     ),
   );
