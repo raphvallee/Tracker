@@ -1,7 +1,3 @@
-// Unit tests for the analytics layer (lib/analytics/analytics.dart) — pure
-// functions/classes with no Isar and no widgets. Chart widgets that consume
-// this layer are integration (widget) tests: test/ui/analytics/analytics_test.dart.
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tracker/domain/models/graph_config.dart';
 import 'package:tracker/domain/models/workout_session.dart';
@@ -45,15 +41,14 @@ void main() {
 
   group('per-exercise series excludes warmups + normalizes', () {
     test('unifies the same movement across two gyms (checkpoint)', () {
-      // Same exercise logged at gym A (mult 1.0) and gym B (mult 0.9).
       final sessions = [
         _session(DateTime(2026, 1, 1), 1, [
           _set(7, 100, 5, SetType.working),
-          _set(7, 60, 8, SetType.warmup), // excluded
+          _set(7, 60, 8, SetType.warmup),
         ]),
         _session(DateTime(2026, 1, 2), 2, [
-          _set(7, 110, 5, SetType.working), // normalized → 99
-          _set(7, 70, 8, SetType.warmup), // excluded
+          _set(7, 110, 5, SetType.working),
+          _set(7, 70, 8, SetType.warmup),
         ]),
       ];
       const multipliers = {1: 1.0, 2: 0.9};
@@ -62,7 +57,6 @@ void main() {
       expect(series, hasLength(2));
       expect(series[0].date, DateTime(2026, 1, 1));
       expect(series[0].value, closeTo(epley1rm(weight: 100, reps: 5), 0.001));
-      // Raw 110 × 0.9 = 99, then Epley.
       expect(series[1].value, closeTo(epley1rm(weight: 99, reps: 5), 0.001));
     });
 
@@ -87,8 +81,8 @@ void main() {
     test('excludes warmup sets and normalizes weight', () {
       final sessions = [
         _session(DateTime(2026, 1, 1), 2, [
-          _set(1, 100, 5, SetType.working), // 100×0.9×5 = 450
-          _set(1, 60, 8, SetType.warmup), // excluded
+          _set(1, 100, 5, SetType.working),
+          _set(1, 60, 8, SetType.warmup),
         ]),
       ];
       const multipliers = {2: 0.9};
@@ -289,7 +283,6 @@ void main() {
           _set(2, 60, 8, SetType.working),
         ]),
       ];
-      // ex1 ratio 100/110 = 0.909; ex2 ratio 50/60 = 0.833; median = 0.909.
       final estimate = estimateGymMultiplier(sessions, 1, 2);
       expect(estimate, isNotNull);
       expect(estimate!, closeTo(0.9090909, 0.001));

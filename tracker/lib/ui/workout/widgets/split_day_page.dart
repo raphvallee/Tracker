@@ -11,9 +11,6 @@ import 'package:tracker/ui/workout/view_models/workout_cubit.dart';
 
 import 'gym_picker.dart';
 
-/// A real detail screen for one split day (Milestone 3): shows the day's
-/// exercises and lets the user start that workout as the active session. This
-/// replaces the old `Text('restart if stuck in fake workout')` placeholder.
 class SplitDayPage extends StatefulWidget {
   const SplitDayPage({super.key, required this.splitTitle, required this.day});
 
@@ -32,8 +29,6 @@ class _SplitDayPageState extends State<SplitDayPage> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // RepositoryScope is an inherited widget, so read it here (after initState)
-    // rather than in initState.
     if (!_didLoad) {
       _didLoad = true;
       _load();
@@ -123,8 +118,6 @@ class _SplitDayPageState extends State<SplitDayPage> {
                         padding: const EdgeInsets.all(12),
                         child: Row(
                           children: [
-                            // Fixed width so exercise names line up once the
-                            // order reaches two digits.
                             SizedBox(
                               width: 20,
                               child: Text(
@@ -145,9 +138,6 @@ class _SplitDayPageState extends State<SplitDayPage> {
                               ),
                             ),
                             const SizedBox(width: 12),
-                            // Planned sets are the source of truth; legacy
-                            // items (saved before sets existed) fall back to
-                            // their old target field.
                             _SetCount(
                               count: item.sets.isNotEmpty
                                   ? item.sets.length
@@ -160,13 +150,9 @@ class _SplitDayPageState extends State<SplitDayPage> {
                   ],
                 const SizedBox(height: 4),
                 const SizedBox(height: 24),
-                // Reactive on the cubit so the button comes back the moment
-                // the active session ends (no dialog, no discard choice - the
-                // running session's logged sets must never be at risk). The
-                // blocked state is a single button that carries both the
-                // reason (title line) and the action (second line) - no
-                // separate message widget. Two lines because one combined
-                // line overflows at the 320px minimum window width.
+                // No discard choice here: the running session's logged sets
+                // must never be at risk. Two lines because one combined line
+                // overflows at the 320px minimum window width.
                 BlocSelector<WorkoutCubit, WorkoutState, bool>(
                   selector: (state) => state.isInProgress,
                   builder: (context, isInProgress) => isInProgress
@@ -202,9 +188,6 @@ class _SplitDayPageState extends State<SplitDayPage> {
   List<ExerciseItem> get items => widget.day.exercises;
 }
 
-/// The number of sets planned for an exercise, set large in a fixed-width
-/// column so the counts line up down the day and scan like a program sheet.
-/// Blank when the exercise has no planned sets.
 class _SetCount extends StatelessWidget {
   const _SetCount({required this.count});
 

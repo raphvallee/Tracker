@@ -1,10 +1,3 @@
-// Tier 2 capture: drives the full past-session edit + delete flow in the real
-// app window (feature branch only): History > detail > Edit > edit a set via
-// the dialog > Save > updated detail > Delete > confirmation > list without
-// the session. Throwaway data (in-memory HydratedBloc storage + temp Isar).
-//
-//   pwsh ./capture-app-media.ps1 -Mode video -Seconds 40 \
-//     -Test tracker/integration_test/capture_session_edit_flow_test.dart
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -30,7 +23,6 @@ import '../testing/test_helpers.dart';
 
 Future<void> main() async {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
-  // Fully live frames so what the window shows matches what the test pumps.
   binding.framePolicy = LiveTestWidgetsFlutterBindingFramePolicy.fullyLive;
   setUpAll(initIsarCore);
 
@@ -96,25 +88,21 @@ Future<void> main() async {
     Future<void> pause([int ms = 1500]) =>
         Future<void>.delayed(Duration(milliseconds: ms));
 
-    // ---- drive the UI ----------------------------------------------------
-    // History tab > session detail.
     tester
         .widget<FBottomNavigationBar>(find.byType(FBottomNavigationBar))
         .onChange!(1);
     await tester.pumpAndSettle();
     await tester.tap(find.textContaining('Push Day'));
     await tester.pumpAndSettle();
-    await pause(2000); // detail page with Edit + Delete session
+    await pause(2000);
 
-    // Edit > tap the 80 kg set row > per-set editor dialog.
     await tester.tap(find.text('Edit'));
     await tester.pumpAndSettle();
-    await pause(2000); // edit page
+    await pause(2000);
     await tester.tap(find.text('80 kg × 6'));
     await tester.pumpAndSettle();
-    await pause(2000); // Edit set dialog
+    await pause(2000);
 
-    // Change the weight, save the dialog, then save the session.
     final fields = find.descendant(
       of: find.byType(FDialog),
       matching: find.byType(EditableText),
@@ -127,13 +115,11 @@ Future<void> main() async {
     await tester.pumpAndSettle();
     await pause(1000);
 
-    // Before saving, park on the editor for one screenshot, then open the
-    // date/time picker dialog for another.
     final dateRow = find.text('Started');
     if (dateRow.evaluate().isNotEmpty) {
       await tester.tap(dateRow);
       await tester.pumpAndSettle();
-      await pause(2500); // Start time dialog with wheels
+      await pause(2500);
       await tester.tap(
         find.descendant(
           of: find.byType(FDialog),
@@ -143,21 +129,17 @@ Future<void> main() async {
       await tester.pumpAndSettle();
     }
 
-    await tester.tap(find.text('Save')); // editor app-bar action
+    await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();
-    await pause(2500); // detail page shows 90 kg × 6
+    await pause(2500);
 
-    // Delete the session with confirmation (from the detail page itself).
     await tester.tap(find.text('Delete session'));
     await tester.pumpAndSettle();
-    await pause(2000); // Delete session? confirmation dialog
+    await pause(2000);
     await tester.tap(find.widgetWithText(FButton, 'Delete'));
     await tester.pumpAndSettle();
-    await pause(2500); // back at the history list, session gone
-    // ----------------------------------------------------------------------
+    await pause(2500);
 
-    // The script captures the window externally. Keep the window on screen
-    // until it signals "capture finished" via build/captures/.capture-done.
     const doneFile = 'build/captures/.capture-done';
     final deadline = DateTime.now().add(const Duration(seconds: 15));
     while (!File(doneFile).existsSync() && DateTime.now().isBefore(deadline)) {

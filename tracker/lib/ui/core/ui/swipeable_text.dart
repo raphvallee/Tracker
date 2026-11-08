@@ -2,9 +2,6 @@ import 'dart:ui' show PointerDeviceKind;
 
 import 'package:flutter/material.dart';
 
-/// Single-line text that scrolls sideways when it is too long to fit. Swiping
-/// works with every pointer, including a mouse on desktop, and no scrollbar is
-/// ever shown.
 class SwipeableText extends StatelessWidget {
   const SwipeableText(this.text, {super.key, this.style});
 

@@ -33,22 +33,16 @@ class SettingsState {
     List<GraphConfig> graphs = const [],
   }) : graphs = List.unmodifiable(graphs);
 
-  /// Mode used for newly created planned sets. The app bundles with
-  /// [RepMode.range].
   static const RepMode initialDefaultRepMode = RepMode.range;
 
-  /// Default rep count pre-filled when adding a fixed set in the split editor.
   static const int initialDefaultReps = 10;
 
-  /// Default rep-range bounds pre-filled when adding a range set.
   static const int initialDefaultRepRangeMin = 8;
   static const int initialDefaultRepRangeMax = 12;
 
   static int? _positiveInt(Object? value) =>
       value is int && value > 0 ? value : null;
 
-  /// Reads a persisted rep-range pair, falling back to the defaults when
-  /// either bound is missing/malformed or the range is crossed (min > max).
   static (int, int) _repRange(Map<String, dynamic> json) {
     final min = _positiveInt(json['defaultRepRangeMin']);
     final max = _positiveInt(json['defaultRepRangeMax']);
@@ -106,18 +100,13 @@ class SettingsState {
   final bool analyticsEnabled;
   final FreeStartPlacement freeStartPlacement;
 
-  /// Rep defaults pre-filled when adding sets in the split editor.
   final RepMode defaultRepMode;
   final int defaultReps;
   final int defaultRepRangeMin;
   final int defaultRepRangeMax;
 
-  /// Whether to ask for confirmation before logging a heavy weight. Turned off
-  /// by the "Don't show this again" checkbox in that prompt.
   final bool showHeavyWeightWarning;
 
-  /// Whether the user has confirmed a heavy weight at least once. The prompt
-  /// only offers "Don't show this again" after that first confirmation.
   final bool heavyWeightConfirmed;
 
   final List<GraphConfig> graphs;
@@ -190,7 +179,6 @@ class SettingsState {
   }
 
   Map<String, dynamic> toJson() => {
-    // Hydrated-state schema version; see the comment on fromJson.
     'v': 1,
     'unit': unit.name,
     'notificationsEnabled': notificationsEnabled,
@@ -220,18 +208,14 @@ class SettingsCubit extends HydratedCubit<SettingsState> {
   void setFreeStartPlacement(FreeStartPlacement placement) =>
       emit(state.copyWith(freeStartPlacement: placement));
 
-  /// Sets the default rep mode used for newly created sets.
   void setDefaultRepMode(RepMode mode) =>
       emit(state.copyWith(defaultRepMode: mode));
 
-  /// Sets the default rep count pre-filled for fixed sets (minimum 1).
   void setDefaultReps(int reps) {
     if (reps < 1) return;
     emit(state.copyWith(defaultReps: reps));
   }
 
-  /// Sets the default rep range pre-filled for range sets.
-  /// Ignored unless `1 <= min <= max`.
   void setDefaultRepRange({required int min, required int max}) {
     if (min < 1 || max < min) return;
     emit(state.copyWith(defaultRepRangeMin: min, defaultRepRangeMax: max));
@@ -240,8 +224,6 @@ class SettingsCubit extends HydratedCubit<SettingsState> {
   void setShowHeavyWeightWarning(bool value) =>
       emit(state.copyWith(showHeavyWeightWarning: value));
 
-  /// Records that the user confirmed a heavy weight once; from then on the
-  /// heavy-weight prompt offers the "Don't show this again" checkbox.
   void confirmHeavyWeight() => emit(state.copyWith(heavyWeightConfirmed: true));
 
   void addGraph(GraphConfig graph) =>

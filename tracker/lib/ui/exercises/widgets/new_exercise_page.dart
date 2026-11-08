@@ -10,15 +10,9 @@ import 'package:tracker/ui/core/ui/keyboard_inset.dart';
 import 'package:tracker/utils/form_validators.dart';
 import 'package:tracker/ui/core/ui/max_width.dart';
 
-/// Exercise create/edit form (Plan.md §1.4): title, movement pattern,
-/// target muscle groups, equipment and a description, persisted to the library
-/// via the repository. Pops the saved [Exercise] so the caller can react.
-/// Pass an existing [NewExercisePage.exercise] to rename/edit it in place; the
-/// form then also offers a reference-checked delete.
 class NewExercisePage extends StatefulWidget {
   const NewExercisePage({super.key, this.exercise});
 
-  /// Existing exercise to edit; null creates a new one.
   final Exercise? exercise;
 
   @override
@@ -53,7 +47,6 @@ class _NewExercisePageState extends State<NewExercisePage> {
         ..clear()
         ..addAll(exercise.equipment);
     }
-    // Drop the stale duplicate error as soon as the name changes again.
     _title.addListener(() {
       if (_duplicateError != null) setState(() => _duplicateError = null);
     });
@@ -123,8 +116,6 @@ class _NewExercisePageState extends State<NewExercisePage> {
     }
   }
 
-  /// Deletes the edited exercise. Deletion is blocked while split templates or
-  /// logged sessions still reference it; otherwise it asks for confirmation.
   Future<void> _delete() async {
     final exercise = widget.exercise!;
     final repo = RepositoryScope.maybeOf(context);
@@ -162,7 +153,6 @@ class _NewExercisePageState extends State<NewExercisePage> {
     );
     if (confirmed == true) {
       await repo.exercises.delete(exercise.id);
-      // Pop without a result; the detail page notices the exercise is gone.
       if (mounted) Navigator.of(context).pop();
     }
   }
@@ -178,9 +168,6 @@ class _NewExercisePageState extends State<NewExercisePage> {
         ),
         SliverToBoxAdapter(
           child: Padding(
-            // Bottom padding tracks the keyboard (plus the reveal gap) so the
-            // focused field and the trailing selects can scroll above it
-            // (shell no longer resizes).
             padding: EdgeInsets.fromLTRB(
               16,
               16,
@@ -234,8 +221,6 @@ class _NewExercisePageState extends State<NewExercisePage> {
                             ..clear()
                             ..addAll(sel),
                         );
-                        // Re-validate once Save has been attempted so the
-                        // inline error clears as soon as a muscle is picked.
                         if (_saveAttempted) {
                           _formKey.currentState?.validate();
                         }

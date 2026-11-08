@@ -1,6 +1,3 @@
-// Feed cubit tests: the retry flow must open a FRESH repository subscription
-// after an error (a rebuilt dead subscription can never recover).
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tracker/data/repositories/tracker_repository.dart';
 import 'package:tracker/data/repositories/workout_session_repository.dart';
@@ -10,7 +7,6 @@ import 'package:tracker/ui/feed/view_models/feed_cubit.dart';
 
 import '../../../testing/test_helpers.dart';
 
-/// Fails the first watch, then serves one recorded session.
 class _FlakySessionRepo extends WorkoutSessionRepository {
   _FlakySessionRepo(super.isar);
 
@@ -55,14 +51,12 @@ void main() {
       addTearDown(cubit.close);
       addTearDown(isar.close);
 
-      // Load: the first subscription fails -> error state.
       cubit.load();
       await Future<void>.delayed(const Duration(milliseconds: 50));
       expect(cubit.state.status, FeedStatus.error);
       expect(cubit.state.sessions, isEmpty);
       expect(sessionRepo.calls, 1);
 
-      // Retry: a fresh subscription succeeds -> ready with sessions.
       cubit.retry();
       await Future<void>.delayed(const Duration(milliseconds: 50));
       expect(cubit.state.status, FeedStatus.ready);

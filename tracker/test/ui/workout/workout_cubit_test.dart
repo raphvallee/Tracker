@@ -1,6 +1,5 @@
-// Unit tests for WorkoutState (JSON serialization, restore snapshots) and the
-// WorkoutCubit set/restore logic that needs no repository. No Isar: the cases
-// that persist through Isar live one per file in workout_*_test.dart.
+// No Isar: the cases that persist through Isar live one per file in
+// workout_*_test.dart.
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hydrated_bloc/hydrated_bloc.dart';
@@ -233,7 +232,6 @@ void main() {
             .canRestoreDiscarded(),
         isTrue,
       );
-      // Exactly at the window boundary is too late.
       expect(
         withDiscardAt(
           DateTime.now().subtract(WorkoutState.discardRestoreWindow),
@@ -318,7 +316,7 @@ void main() {
       cubit.logSet(exerciseId: 2, exerciseName: 'B', weight: 20, reps: 5);
       cubit.logSet(exerciseId: 3, exerciseName: 'C', weight: 30, reps: 5);
 
-      cubit.removeSet(1); // remove the middle set
+      cubit.removeSet(1);
       expect(cubit.state.sets, hasLength(2));
       expect(cubit.state.sets.map((s) => s.order).toList(), [0, 1]);
       expect(cubit.state.sets.first.exerciseName, 'A');
@@ -341,11 +339,9 @@ void main() {
       final updated = cubit.state.sets.singleWhere((s) => s.order == 1);
       expect(updated.weight, 22.5);
       expect(updated.reps, 6);
-      // Everything else about the set is preserved.
       expect(updated.isWarmup, isTrue);
       expect(updated.exerciseId, 2);
       expect(cubit.state.sets, hasLength(2));
-      // A partial update keeps the untouched field.
       cubit.updateSet(1, weight: 25);
       expect(cubit.state.sets.singleWhere((s) => s.order == 1).reps, 6);
     });
@@ -358,10 +354,8 @@ void main() {
 
       cubit.startWorkout();
       expect(cubit.state.discardedSnapshot, discarded);
-      // Restoring is blocked while the new session is in progress...
       expect(cubit.state.canRestoreDiscarded(), isFalse);
 
-      // ...and offered again once it ends.
       await cubit.endWorkout();
       expect(cubit.state.isInProgress, isFalse);
       expect(cubit.state.canRestoreDiscarded(), isTrue);

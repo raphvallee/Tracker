@@ -5,19 +5,10 @@ import 'package:tracker/ui/core/ui/app_dialog.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
 import 'package:tracker/utils/form_validators.dart';
 
-/// Explicit "clear gym" marker returned by the picker when the user selects
-/// "No gym". Use `picked is NoGym` to detect it.
 class NoGym {
   const NoGym();
 }
 
-/// Resolves which [Gym] a workout should be logged at (Plan.md §2.2).
-///
-/// - No gyms configured → returns `null` (workout proceeds gym-less).
-/// - Exactly one gym → returned directly (no prompt).
-/// - Several gyms → the user is asked to pick one via a modal bottom sheet;
-///   dismissing leaves the selection `null`. The sheet also offers "Add Gym"
-///   to create a new gym and select it right away.
 Future<Gym?> promptGym(BuildContext context, List<Gym> gyms) async {
   if (gyms.length <= 1) {
     return gyms.isEmpty ? null : gyms.first;
@@ -95,9 +86,6 @@ Future<Object?> showGymPicker(
   );
 }
 
-/// Opens the new-gym dialog, persists the result, and returns the created
-/// [Gym] (or null on cancel). Mirrors the settings add-gym flow so a freshly
-/// created gym can be selected right away from any gym picker.
 Future<Gym?> promptAddGym(BuildContext context, List<Gym> gyms) async {
   final repo = RepositoryScope.maybeOf(context);
   var nextOrder = 0;
@@ -116,12 +104,6 @@ Future<Gym?> promptAddGym(BuildContext context, List<Gym> gyms) async {
   return created;
 }
 
-// ---------------------------------------------------------------------------
-// Shared add/edit gym dialog (moved here from gyms_page.dart so any gym
-// picker can offer "Add Gym"). editGymDialog returns the [Gym] to persist
-// or null on cancel.
-// ---------------------------------------------------------------------------
-
 String? _gymNameError(String value) => requiredText(value);
 
 String? _gymMultiplierError(String value, {required bool isPrimary}) =>
@@ -138,7 +120,6 @@ bool sameGymName(Gym first, Gym second) =>
 String _fmtGym(double v) =>
     v == v.roundToDouble() ? v.toStringAsFixed(1) : v.toStringAsFixed(2);
 
-/// Formats a gym multiplier for display.
 String fmtGym(double v) => _fmtGym(v);
 
 class EditGymDialog extends StatefulWidget {
@@ -162,7 +143,6 @@ class _EditGymDialogState extends State<EditGymDialog> {
   late final TextEditingController _description;
   late final TextEditingController _multiplier;
 
-  // Set only by Save; typing in the matching field clears its error.
   String? _nameError;
   String? _multiplierError;
 

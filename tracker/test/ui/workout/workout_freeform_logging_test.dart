@@ -1,5 +1,3 @@
-// Free-form logging on the CurrentWorkout tab: exercise dropdown, warm-up
-// toggle, Add set rows and swipe-to-delete.
 // One Isar-backed case per file: each *_test.dart runs in its own
 // flutter_tester process with a fresh libisar native worker pool (see
 // docs/TESTING_ISAR_CI.md).
@@ -34,7 +32,6 @@ void main() {
   testWidgets('free-form logging keeps the warm-up toggle and add button', (
     tester,
   ) async {
-    // Tall enough that the footer row clears the bottom navigation bar.
     tester.view.physicalSize = const Size(800, 1000);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -126,9 +123,6 @@ void main() {
     );
     expect(tester.widget<EditableText>(repsField).controller.text, '');
 
-    // Tapping Add set must materialize the blank row immediately, before
-    // any cubit emission: the row lives in the form now, not behind the
-    // next state-driven rebuild.
     tester
         .widget<FButton>(
           find.ancestor(
@@ -138,7 +132,7 @@ void main() {
         )
         .onPress!();
     await tester.pump();
-    expect(find.byType(FTextField), findsNWidgets(5)); // 2 rows + dropdown
+    expect(find.byType(FTextField), findsNWidgets(5));
     final addedWeightText = find
         .descendant(
           of: find.byType(FTextField).at(3),
@@ -187,9 +181,6 @@ void main() {
         .first;
     await tester.enterText(weightField, '50');
     await tester.enterText(repsField, '8');
-    // Tapping the warm-up toggle does not move focus away from the row
-    // (only focus change commits), so the flag applies to the set when it
-    // finally commits - here through the keyboard's done action.
     await tester.ensureVisible(find.byType(FCheckbox));
     await tester.tap(find.byType(FCheckbox));
     // Forui tappables (checkbox included) defer their press callbacks
@@ -204,15 +195,11 @@ void main() {
     expect(state.sets.single.exerciseId, exerciseId);
     expect(state.sets.single.exerciseName, 'Bench Press');
     expect(state.sets.single.type, SetType.warmup);
-    // No rendered-set display: the logged set keeps living in its inputs,
-    // and the warm-up flag reset is ready for the next set.
     expect(find.text('50 kg × 8'), findsNothing);
     expect(tester.widget<EditableText>(weightField).controller.text, '50');
     expect(tester.widget<EditableText>(repsField).controller.text, '8');
     expect(tester.widget<FCheckbox>(find.byType(FCheckbox)).value, isFalse);
 
-    // Add set appends another empty row below the committed one (on top of
-    // the blank row added above, which the commit consumed).
     tester
         .widget<FButton>(
           find.ancestor(
@@ -222,7 +209,7 @@ void main() {
         )
         .onPress!();
     await tester.pumpAndSettle();
-    expect(find.byType(FTextField), findsNWidgets(7)); // 3 rows + dropdown
+    expect(find.byType(FTextField), findsNWidgets(7));
     final nextWeightText = find
         .descendant(
           of: find.byType(FTextField).at(3),
@@ -232,10 +219,6 @@ void main() {
     expect(tester.widget<EditableText>(nextWeightText).controller.text, '');
     expect(cubit.state.sets, hasLength(1));
 
-    // A deletable row is rubber-banded for the first 75% of the delete
-    // distance - the row lags the finger there - and tracks the finger 1:1
-    // from there to the delete distance, 63.5% of the row's width.
-    // The row fills the card's inner width (the card pads 12 on each side).
     final rowWidth =
         tester
             .getSize(
@@ -256,10 +239,7 @@ void main() {
     await tester.pump();
     final halfBandTravel =
         fieldRect.left - tester.getRect(find.byType(FTextField).at(1)).left;
-    // Rubber-banded: the row moved less than the finger did.
     expect(halfBandTravel, lessThan(bandEnd / 2));
-    // Releasing inside the band cancels: the row springs back to rest over
-    // several frames - it must not teleport - and no dialog opens.
     final cancelStartRect = tester.getRect(find.byType(FTextField).at(1));
     await bandGesture.up();
     await tester.pump();
@@ -283,12 +263,9 @@ void main() {
     await trackGesture.moveBy(Offset(-bandEnd - 10, 0));
     await tester.pump();
     final atBandEnd = tester.getRect(find.byType(FTextField).at(1)).left;
-    // Still lagging the finger when the band ends...
     expect(fieldRect.left - atBandEnd, lessThan(bandEnd));
     await trackGesture.moveBy(const Offset(-30, 0));
     await tester.pump();
-    // ...then nearly keeping pace with it (the mid-swipe stretch only
-    // bleeds a few pixels off those 30px of travel).
     expect(
       tester.getRect(find.byType(FTextField).at(1)).left,
       closeTo(atBandEnd - 30, 6),
@@ -298,8 +275,6 @@ void main() {
     expect(tester.getRect(find.byType(FTextField).at(1)), fieldRect);
     expect(cubit.state.sets, hasLength(1));
 
-    // Past the band but short of the gate the swipe still springs back:
-    // 60% of the row width is not enough to delete.
     await tester.timedDrag(
       find.byType(FTextField).at(1),
       Offset(-rowWidth * 0.6, 0),
@@ -310,9 +285,6 @@ void main() {
     expect(tester.getRect(find.byType(FTextField).at(1)), fieldRect);
     expect(cubit.state.sets, hasLength(1));
 
-    // Swipe-to-delete (free workouts only): a swipe of at least 63.5% of the
-    // row width on the first row (the logged set) opens the destructive
-    // confirmation first.
     final rowRect = tester.getRect(find.byType(FTextField).at(1));
     await tester.timedDrag(
       find.byType(FTextField).at(1),
@@ -320,11 +292,9 @@ void main() {
       const Duration(milliseconds: 200),
     );
     await tester.pumpAndSettle();
-    expect(cubit.state.sets, hasLength(1)); // asked, not removed yet
+    expect(cubit.state.sets, hasLength(1));
     expect(find.text('Delete this set?'), findsOneWidget);
 
-    // Cancelling keeps the set and returns the row: the row does not stay
-    // frozen mid-swipe but sits back exactly where it was.
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
     expect(cubit.state.sets, hasLength(1));
@@ -344,8 +314,6 @@ void main() {
       '50',
     );
 
-    // Confirming removes the set and shifts the remaining rows up: row 0
-    // now holds nothing (the deleted set is gone) and stays blank.
     await tester.timedDrag(
       find.byType(FTextField).at(1),
       Offset(-rowWidth * 1.1, 0),
@@ -356,8 +324,6 @@ void main() {
     await tester.tap(find.widgetWithText(FButton, 'Delete'));
     await tester.pumpAndSettle();
     expect(cubit.state.sets, isEmpty);
-    // The logged set is gone; the trailing blank rows (the always-available
-    // one plus the added extra) remain for the next entry.
     expect(find.byType(FTextField), findsNWidgets(5));
     expect(
       tester
@@ -388,8 +354,6 @@ void main() {
       '',
     );
 
-    // A blank extra row (Add set) is still removable silently, but it never
-    // asks: there is nothing to lose. It needs the same 63.5% swipe.
     expect(find.byIcon(FLucideIcons.trash2), findsNWidgets(2));
     await tester.timedDrag(
       find.byType(FTextField).at(1),
@@ -400,11 +364,6 @@ void main() {
     expect(find.text('Delete this set?'), findsNothing);
     expect(find.byType(FTextField), findsNWidgets(3));
 
-    // Only the always-available logging row is left, and it cannot be
-    // deleted: no delete indicator is revealed at rest (the trash icon
-    // only exists while a deletable row is mid-swipe), a swipe rubber-bands
-    // with sqrt resistance (200px of finger travel move it only ~50px), and
-    // it springs back on release without ever opening the dialog.
     expect(find.byIcon(FLucideIcons.trash2), findsNothing);
     final loggingRowRect = tester.getRect(find.byType(FTextField).at(1));
     final gesture = await tester.startGesture(
@@ -422,8 +381,6 @@ void main() {
     expect(find.text('Delete this set?'), findsNothing);
     expect(cubit.state.sets, isEmpty);
 
-    // Even a swipe past the delete distance cannot delete it: deletability,
-    // not distance, is the gate.
     await tester.timedDrag(
       find.byType(FTextField).at(1),
       Offset(-rowWidth * 1.1, 0),

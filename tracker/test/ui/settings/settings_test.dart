@@ -1,7 +1,3 @@
-// SettingsPage widget tests (lib/ui/settings/): the workout-default inputs and
-// the start-workout placement update the SettingsCubit. SettingsState
-// round-trips are unit-tested in settings_cubit_test.dart.
-
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -45,7 +41,6 @@ void main() {
     expect(cubit.state.defaultRepRangeMin, 6);
     expect(cubit.state.defaultRepRangeMax, 9);
 
-    // A crossed range (min > max) is rejected: state unchanged, error shown.
     await tester.enterText(find.widgetWithText(FTextField, 'Min'), '15');
     await tester.pumpAndSettle();
     expect(cubit.state.defaultRepRangeMin, 6);

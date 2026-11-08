@@ -1,4 +1,3 @@
-// A failed Isar write keeps the workout in progress.
 // One Isar-backed case per file: each *_test.dart runs in its own
 // flutter_tester process with a fresh libisar native worker pool (see
 // docs/TESTING_ISAR_CI.md).
@@ -46,13 +45,9 @@ void main() {
       cubit.logSet(exerciseId: 1, exerciseName: 'Squat', weight: 100, reps: 5);
       expect(cubit.state.sets, hasLength(1));
 
-      // Force the Isar write to fail by closing the instance out from under
-      // the repository.
       await isar.close();
       await cubit.endWorkout();
 
-      // Error-surfacing contract (PRODUCTION_READINESS.md Phase 1): the
-      // in-progress workout must NOT be discarded from HydratedStorage.
       expect(cubit.state.isInProgress, isTrue);
       expect(cubit.state.sets, hasLength(1));
       expect(cubit.state.saveError, isNotNull);

@@ -1,4 +1,3 @@
-// Split and session references to an exercise.
 // One Isar-backed case per file: each *_test.dart runs in its own
 // flutter_tester process with a fresh libisar native worker pool (see
 // docs/TESTING_ISAR_CI.md).
@@ -102,7 +101,6 @@ void main() {
         ],
       ),
     );
-    // A session with two sets of the same exercise still counts once.
     await repo.sessions.put(
       WorkoutSession(
         title: 'Bench day',

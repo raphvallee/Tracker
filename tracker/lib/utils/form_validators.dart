@@ -14,7 +14,6 @@ String? requiredDouble(
   return number != null && number > minimum ? null : msg;
 }
 
-/// Validates a whole-number field that must be at least [minimum].
 String? requiredInt(
   String? value, {
   int minimum = 1,
@@ -24,8 +23,6 @@ String? requiredInt(
   return number != null && number >= minimum ? null : msg;
 }
 
-/// Validates a typed weight: a decimal from [minimumWeight] to [maximumWeight]
-/// (inclusive). Zero is a valid bodyweight entry.
 String? requiredWeight(
   String? value, {
   String msg = 'Must be between -1000 and 10000',

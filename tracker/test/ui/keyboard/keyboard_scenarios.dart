@@ -1,12 +1,3 @@
-// Interactive keyboard-reveal verification for the two flows called out in
-// Refine.md follow-up: (1) the add-graph sheet keeps its full card reachable
-// while the title is focused under the keyboard, and (2) the settings rep
-// range Min/Max inputs keep their 8px gap when the Max input is focused.
-//
-// Like the visual screenshot sweep this is an inspection capture (PNGs in
-// build/test_screenshots), plus hard geometry assertions so the keyboard
-// reveal and the input spacing cannot silently regress.
-//
 // Shared body: one keyboard_<scenario>_test.dart per scenario runs it, so
 // each Isar-backed case gets its own process (docs/TESTING_ISAR_CI.md).
 
@@ -39,13 +30,9 @@ import '../../../testing/test_helpers.dart';
 
 const double _keyboardHeight = 300;
 
-/// The sweep's minimum window size only: the keyboard leaves the least room
-/// there and the sheet must scroll, so a larger phone viewport adds no
-/// coverage.
 const String _sizeLabel = '320x568-min';
 const Size _viewport = Size(320, 568);
 
-/// The [FTextField] whose label text is exactly [label].
 Finder fieldWithLabel(String label) => find.byWidgetPredicate(
   (widget) =>
       widget is FTextField &&
@@ -53,8 +40,6 @@ Finder fieldWithLabel(String label) => find.byWidgetPredicate(
       (widget.label as Text).data == label,
 );
 
-/// Pumps the seeded app at the minimum window size, then runs [scenario].
-/// Called by one `keyboard_<scenario>_test.dart` per scenario.
 Future<void> runKeyboardScenario(
   WidgetTester tester,
   String scenario,
@@ -130,8 +115,6 @@ Future<void> runKeyboardScenario(
   debugDefaultTargetPlatformOverride = null;
 }
 
-/// Opens the add-graph sheet, focuses the title with the keyboard up, and
-/// checks the whole card stays reachable above the keyboard.
 Future<void> addGraphSheetScenario(
   WidgetTester tester,
   ScreenshotRecorder recorder,
@@ -160,8 +143,6 @@ Future<void> addGraphSheetScenario(
     reason: 'the focused title field must be fully visible above the keyboard',
   );
 
-  // The whole card must remain reachable: scroll to the Save button and
-  // confirm it clears the keyboard too.
   await tester.dragUntilVisible(
     find.text('Save'),
     find.descendant(
@@ -180,8 +161,6 @@ Future<void> addGraphSheetScenario(
   await recorder.capture('add-graph sheet, scrolled to Save');
 }
 
-/// Focuses the rep-range Max input under the keyboard and checks the
-/// Min/Max inputs keep their 8px horizontal gap.
 Future<void> settingsRepRangeScenario(
   WidgetTester tester,
   ScreenshotRecorder recorder,
@@ -234,7 +213,6 @@ Future<void> _openKeyboard(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
-/// Bottom edge of the faked keyboard, in logical pixels (devicePixelRatio 1).
 double _keyboardTop(WidgetTester tester) =>
     tester.view.physicalSize.height / tester.view.devicePixelRatio -
     _keyboardHeight;

@@ -1,18 +1,6 @@
 import 'package:flutter/widgets.dart';
 import 'package:forui/forui.dart';
 
-/// Breathing room kept between a revealed widget and the keyboard's top edge.
-///
-/// Used twice, on purpose with the same value: a focused field's caret reveal
-/// overshoots by this much ([keyboardAwareFieldReveal] grows the field's
-/// scroll padding), and scrollables pad their content by it
-/// ([keyboardClearanceOf]) so the reveal always has the scroll room to reach
-/// that gap - even for the last item, where the scroll offset would otherwise
-/// clamp and leave the widget flush against the keyboard.
-///
-/// 32 leaves the text line 32px above the keyboard and the input box itself
-/// roughly 20px above it (the field's internal bottom padding eats into the
-/// visual gap), which reads as clearly separated rather than touching.
 const double kKeyboardRevealGap = 40;
 
 /// Height of the on-screen keyboard (the bottom view inset).
@@ -26,9 +14,6 @@ const double kKeyboardRevealGap = 40;
 double keyboardInsetOf(BuildContext context) =>
     MediaQuery.viewInsetsOf(context).bottom;
 
-/// Bottom padding a scrollable should add for keyboard clearance: the
-/// keyboard's height plus [kKeyboardRevealGap], so content never rests
-/// directly against the keyboard's top edge.
 double keyboardClearanceOf(BuildContext context) =>
     keyboardInsetOf(context) + kKeyboardRevealGap;
 

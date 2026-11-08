@@ -1,6 +1,5 @@
-// Layout overflow sweep (Windows desktop regression) - shared body.
 // ignore_for_file: avoid_print
-//
+
 // The sweep body is split from the *_test.dart entries because of a libisar
 // limitation: its native worker pool is sized to the CPU count (4 on the CI
 // runner), and one process running 6 size cases in a row wedges native IO
@@ -8,18 +7,6 @@
 // size gives each case its own flutter_tester process, and with it a fresh
 // native pool, so every case sees the always-passes "one open instance"
 // condition that CI previously met only for the first 4 sizes.
-//
-// Only sizes the visual screenshot sweep (test/ui/visual_screenshots/) does
-// not render get an entry file: that sweep already fails on render exceptions
-// at 320x568, 800x600 and 1280x720 over the same pages.
-//
-// Pumps the full app stack (ForUI desktop theme, real Isar data) at one of
-// the window sizes a Windows desktop session can hit and visits every page,
-// dialog and sheet. Any RenderFlex/RenderBox overflow throws through
-// FlutterError and fails the sweep; the "SWEEP:" lines name the current page.
-//
-// The test font is wider than Inter, so this over-reports relative to real
-// Windows rendering - a deliberate safety margin.
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
@@ -181,14 +168,12 @@ Future<void> sweepSize(WidgetTester tester, String label, Size size) async {
     await settle();
   }
 
-  // Tab roots.
   await visit('FeedPage', const FeedPage());
   await visit('HistoryPage', const HistoryPage());
   await visit('WorkoutPage (in progress)', const WorkoutPage());
   await visit('EditorPage', const EditorPage());
   await visit('ExercisesPage', const ExercisesPage());
 
-  // Pushed pages.
   await visit('SettingsPage', const SettingsPage());
   await visit('GymsPage', const GymsPage());
   await visit('ProgressionPage', const ProgressionPage());
@@ -207,8 +192,6 @@ Future<void> sweepSize(WidgetTester tester, String label, Size size) async {
   );
   await visit(
     'HistoryCalendar',
-    // Standalone HistoryCalendar has no FTabs Material ancestor here;
-    // the real app hosts it inside the History page's tabs.
     Material(
       type: MaterialType.transparency,
       child: HistoryCalendar(
@@ -235,8 +218,6 @@ Future<void> sweepSize(WidgetTester tester, String label, Size size) async {
   );
   await visit('ExercisePickerPage', const ExercisePickerPage());
 
-  // Dialogs and sheets. These open from the tab page's nested navigator
-  // (how the app really presents them), so pop via that navigator.
   final pageContext = tester.element(find.byType(FeedPage));
 
   Future<void> openAndClose(String what, Future<void> Function() open) async {
@@ -274,7 +255,6 @@ Future<void> sweepSize(WidgetTester tester, String label, Size size) async {
     () => promptGym(pageContext, sweepFixtures.allGyms),
   );
 
-  // End-workout confirmation dialog (in-progress WorkoutPage).
   _mark('End-workout dialog @ $label');
   unawaited(
     navigator.push(

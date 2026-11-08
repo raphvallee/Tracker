@@ -1,4 +1,3 @@
-// WorkoutSession persistence and date queries.
 // One Isar-backed case per file: each *_test.dart runs in its own
 // flutter_tester process with a fresh libisar native worker pool (see
 // docs/TESTING_ISAR_CI.md).

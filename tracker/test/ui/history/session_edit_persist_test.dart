@@ -1,4 +1,3 @@
-// A saved session edit re-renders the detail page and persists.
 // One Isar-backed case per file: each *_test.dart runs in its own
 // flutter_tester process with a fresh libisar native worker pool (see
 // docs/TESTING_ISAR_CI.md).
@@ -38,14 +37,12 @@ void main() {
       find.descendant(of: find.byType(FDialog), matching: find.text('Save')),
     );
     await settleSessionFlow(tester);
-    await tester.tap(find.text('Save')); // editor header action
+    await tester.tap(find.text('Save'));
     await settleSessionFlow(tester);
 
-    // The detail page applied the edit immediately.
     expect(find.text('90 kg × 5'), findsOneWidget);
     expect(find.text('80 kg × 5'), findsNothing);
 
-    // The save reached the repository: read the record back from Isar.
     final id = seeded.session.id;
     await waitForRealIo(tester, () async {
       final saved = await seeded.repo.sessions.getById(id);

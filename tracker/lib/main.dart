@@ -25,9 +25,6 @@ Future<void> main() async {
   return runZonedGuarded(() async {
     WidgetsFlutterBinding.ensureInitialized();
 
-    // Centralized error handling (PRODUCTION_READINESS.md Phase 1): every
-    // error channel routes into the local ring-buffer logger. Nothing is
-    // ever uploaded off-device.
     FlutterError.onError = (details) {
       AppLog.error('flutter', details.exception, details.stack);
       FlutterError.presentError(details);
@@ -46,8 +43,6 @@ Future<void> main() async {
 }
 
 Future<void> _bootstrap() async {
-  // Documents dir hosts both the HydratedBloc storage and the AppLog mirror
-  // file, so fetch it once and share it.
   final documentsPath = (await getApplicationDocumentsDirectory()).path;
 
   HydratedBloc.storage = await HydratedStorage.build(
@@ -100,9 +95,6 @@ Future<void> _seedExercises(
   try {
     await seedExercisesIfNeeded(repository);
   } catch (error, stackTrace) {
-    // Keep startup alive and make the failure observable. If the collection is
-    // still empty, retry once after transient startup/IO failures. The report
-    // flows through FlutterError.onError into the AppLog ring buffer.
     FlutterError.reportError(
       FlutterErrorDetails(
         exception: error,
@@ -125,12 +117,6 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    /// Try changing this and hot reloading the application.
-    ///
-    /// To create a custom theme:
-    /// ```shell
-    /// dart forui theme create
-    /// ```
     final (lightTheme, darkTheme) =
         const <TargetPlatform>{
           .android,
@@ -165,12 +151,6 @@ class MyApp extends StatelessWidget {
       theme: navLightTheme.toCustomMaterialTheme(),
       darkTheme: navDarkTheme.toCustomMaterialTheme(),
       builder: (context, child) => GestureDetector(
-        // Tapping anywhere outside a text field clears focus (dismisses the
-        // on-screen keyboard). Flutter's built-in tap-outside handling does
-        // not unfocus on touch events outside web, so this fills that gap.
-        // It wraps the Navigator, so it applies to every page, including
-        // pushed routes. Inner widgets (buttons, fields, scrollables) win the
-        // gesture arena, so this only fires for taps on unconsumed areas.
         onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
         child: FTheme(
           data: keyboardAwareFieldReveal(
@@ -188,12 +168,6 @@ class MyApp extends StatelessWidget {
   }
 }
 
-/// Rendered in place of widgets that threw during build.
-///
-/// Dev builds keep Flutter's classic red error screen; store builds
-/// (`APP_ENV=prod`) show a quiet recovery screen instead of leaking stack
-/// traces into the UI. The failure itself is already logged via
-/// [ErrorWidget.builder].
 class _ErrorFallback extends StatelessWidget {
   const _ErrorFallback({required this.details});
 

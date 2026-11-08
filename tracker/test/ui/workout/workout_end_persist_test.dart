@@ -1,4 +1,3 @@
-// WorkoutCubit.endWorkout writes the session to Isar.
 // One Isar-backed case per file: each *_test.dart runs in its own
 // flutter_tester process with a fresh libisar native worker pool (see
 // docs/TESTING_ISAR_CI.md).
@@ -69,7 +68,6 @@ void main() {
     expect(session.gymId, gymId);
     expect(session.sets, hasLength(3));
     expect(session.sets[1].type, SetType.warmup);
-    // Duration computed from now − start and stored as endTime.
     expect(session.endTime, isNotNull);
     expect(
       session.endTime!.difference(session.startTime),

@@ -1,4 +1,3 @@
-// WorkoutSplit persistence with embedded days and sets.
 // One Isar-backed case per file: each *_test.dart runs in its own
 // flutter_tester process with a fresh libisar native worker pool (see
 // docs/TESTING_ISAR_CI.md).
@@ -67,14 +66,12 @@ void main() {
       expect(fetched.splitDays.first.exercises, hasLength(2));
       expect(fetched.splitDays.first.exercises.first.exerciseId, 1);
       expect(fetched.splitDays.first.exercises.first.targetSets, 4);
-      // Nested planned sets round-trip, including fixed vs. range.
       final sets = fetched.splitDays.first.exercises.first.sets;
       expect(sets, hasLength(2));
       expect(sets[0].minReps, 8);
       expect(sets[0].maxReps, isNull);
       expect(sets[1].minReps, 8);
       expect(sets[1].maxReps, 12);
-      // Legacy items without sets persist with an empty list.
       expect(fetched.splitDays.first.exercises.last.sets, isEmpty);
 
       expect(await repo.splits.delete(id), isTrue);

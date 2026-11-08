@@ -19,10 +19,6 @@ class CustomAppBar extends StatelessWidget {
     return SliverPersistentHeader(
       pinned: true,
       delegate: _PinnedHeaderDelegate(
-        // FHeader is a plain widget, so it needs a pinned sliver wrapper to
-        // keep the old SliverAppBar's pin-while-scrolling behavior. The extra
-        // extent covers the status-bar inset that FHeader's internal SafeArea
-        // consumes.
         extent: style.constraints.minHeight + topInset,
         background: context.theme.colors.background,
         child: FHeader.nested(

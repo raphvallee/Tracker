@@ -1,7 +1,3 @@
-// Add/edit gym dialog: the name error appears only after Save, and typing in
-// the field clears it. The empty-name rejection happens before any repository
-// lookup, so no Isar is opened here.
-
 import 'dart:async';
 
 import 'package:flutter/material.dart';

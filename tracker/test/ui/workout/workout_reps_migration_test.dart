@@ -1,4 +1,3 @@
-// Reps storage widening (int to double): a legacy DB migrates intact.
 // One Isar-backed case per file: each *_test.dart runs in its own
 // flutter_tester process with a fresh libisar native worker pool (see
 // docs/TESTING_ISAR_CI.md).
@@ -41,7 +40,6 @@ void main() {
     final sessions = await repo.sessions.getAll();
     expect(sessions, hasLength(1));
     expect(sessions.single.title, 'Old session');
-    // Whole-number int reps load as whole doubles - no zeroes, no rounding.
     expect(sessions.single.sets.map((s) => s.reps).toList(), [5.0, 8.0]);
     expect(sessions.single.sets.map((s) => s.weight).toList(), [100.0, 90.0]);
     expect(sessions.single.sets.last.isWarmup, isTrue);

@@ -18,18 +18,11 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:tracker/ui/history/widgets/session_edit_page.dart';
 import 'package:tracker/ui/workout/view_models/workout_cubit.dart';
 
-/// Full view of a single past [WorkoutSession] (Plan.md §1.2): header stats
-/// plus every logged set with its warm-up/working indicator and working volume.
-///
-/// Reached from the history list and the calendar's day logs (Checkpoint 5).
-/// Offers Edit (a past-session editor that persists through the session
-/// repository) and Delete (with a confirmation dialog).
 class SessionDetailPage extends StatefulWidget {
   const SessionDetailPage({super.key, required this.session, this.gymName});
 
   final WorkoutSession session;
 
-  /// Resolved gym display name (nullable - a session may have no gym).
   final String? gymName;
 
   @override
@@ -37,8 +30,6 @@ class SessionDetailPage extends StatefulWidget {
 }
 
 class _SessionDetailPageState extends State<SessionDetailPage> {
-  // Tracks edits/deletes made after this page was opened; the widget's session
-  // is just the snapshot the caller had.
   late WorkoutSession _session;
   String? _gymName;
   Map<int, String> _exerciseNames = const {};
@@ -54,7 +45,6 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // RepositoryScope is an inherited widget, so read it after initState.
     if (!_didLoad) {
       _didLoad = true;
       _loadExerciseNames();
@@ -81,9 +71,6 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
     setState(() => _gymName = gym?.name);
   }
 
-  /// Opens the editor, applies its draft optimistically and persists through
-  /// the repository (error-surfacing contract for writes, mirroring the
-  /// workout cubit: a failed save keeps the edited view and toasts once).
   Future<void> _edit() async {
     final repo = RepositoryScope.maybeOf(context);
     final updated = await pushTo(context, SessionEditPage(session: _session));
@@ -108,8 +95,6 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
     }
   }
 
-  /// Re-reads the session after a save lands so the page reflects what was
-  /// actually persisted (and keeps gym names fresh if the gym was edited).
   Future<void> _refresh(TrackerRepository repo) async {
     final fresh = await repo.sessions.getById(_session.id);
     if (!mounted) return;
@@ -117,10 +102,6 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
     await _resolveGymName();
   }
 
-  /// Deletes the session (and its embedded sets) permanently after
-  /// confirmation, pops back to the list immediately and removes the record
-  /// through the repository in the background (the lists refresh via their
-  /// watch streams).
   Future<void> _delete() async {
     final repo = RepositoryScope.maybeOf(context);
     if (repo == null) return;
@@ -217,9 +198,6 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
                             'Exercise ${set.exerciseId}',
                         set: set,
                       ),
-                  // Bottom padding grows by the keyboard height plus the
-                  // reveal gap so the delete action can scroll above the
-                  // keyboard (see keyboard_inset).
                   const SizedBox(height: 24),
                   if (!cubit.state.isInProgress &&
                       cubit.state.savedSessionId == _session.id) ...[

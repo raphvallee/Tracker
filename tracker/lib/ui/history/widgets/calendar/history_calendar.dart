@@ -8,7 +8,6 @@ import 'package:tracker/ui/core/ui/weight_format.dart';
 import '../session_detail_page.dart';
 import 'calendar_grid.dart';
 
-/// Interactive month calendar of workout days (Plan.md §2.5).
 class HistoryCalendar extends StatefulWidget {
   const HistoryCalendar({
     super.key,
@@ -47,7 +46,6 @@ class _HistoryCalendarState extends State<HistoryCalendar> {
     _dateIndex = WorkoutDateIndex.fromSessions(widget.sessions);
     _selectedDayNotifier = ValueNotifier(_day(now));
 
-    // Calculate streak ONLY ONCE on init
     _streak = _dateIndex.currentStreak();
     _updateMonthData();
   }
@@ -57,8 +55,7 @@ class _HistoryCalendarState extends State<HistoryCalendar> {
     super.didUpdateWidget(oldWidget);
     if (!identical(oldWidget.sessions, widget.sessions)) {
       _dateIndex = WorkoutDateIndex.fromSessions(widget.sessions);
-      _streak = _dateIndex
-          .currentStreak(); // Recalculate streak only when sessions change
+      _streak = _dateIndex.currentStreak();
       _updateMonthData();
     }
   }
@@ -77,7 +74,6 @@ class _HistoryCalendarState extends State<HistoryCalendar> {
     _grid = CalendarGrid(_year, _month);
     _monthWorkoutDays = _dateIndex.monthWorkoutDays(_year, _month);
 
-    // Pre-calculate days with workouts in an O(1) Set for the grid cells
     final days = <int>{};
     for (final dayVal in _grid.days) {
       if (dayVal != null && _dateIndex.hasWorkoutOn(_year, _month, dayVal)) {

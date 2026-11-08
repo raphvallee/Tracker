@@ -1,12 +1,3 @@
-// Tier 2 capture: opens a past session's detail page (History tab > session
-// tile) with throwaway data (in-memory HydratedBloc storage + temp Isar).
-//
-// Works on the base commit (read-only detail) and on the session edit/delete
-// feature branch (detail with Edit/Delete actions), so the same test produces
-// the BEFORE and AFTER screenshots:
-//
-//   pwsh ./capture-app-media.ps1 -Mode screenshot -Settle 8 \
-//     -Test tracker/integration_test/capture_session_detail_test.dart
 import 'dart:io';
 
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -31,7 +22,6 @@ import '../testing/test_helpers.dart';
 
 Future<void> main() async {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
-  // Fully live frames so what the window shows matches what the test pumps.
   binding.framePolicy = LiveTestWidgetsFlutterBindingFramePolicy.fullyLive;
   setUpAll(initIsarCore);
 
@@ -53,7 +43,6 @@ Future<void> main() async {
     await seedExercisesIfNeeded(repo);
     final cubit = WorkoutCubit(repository: repo);
 
-    // One past session at a gym, with a warm-up and working sets.
     final exercises = await repo.exercises.getAll();
     final bench = exercises.firstWhere((e) => e.title == 'Bench Press');
     final gymId = await repo.gyms.put(
@@ -93,18 +82,13 @@ Future<void> main() async {
     );
     await tester.pumpAndSettle();
 
-    // ---- drive the UI ----------------------------------------------------
-    // History tab, then open the past session's detail page.
     tester
         .widget<FBottomNavigationBar>(find.byType(FBottomNavigationBar))
         .onChange!(1);
     await tester.pumpAndSettle();
     await tester.tap(find.textContaining('Push Day'));
     await tester.pumpAndSettle();
-    // ----------------------------------------------------------------------
 
-    // The script captures the window externally. Keep the window on screen
-    // until it signals "capture finished" via build/captures/.capture-done.
     const doneFile = 'build/captures/.capture-done';
     final deadline = DateTime.now().add(const Duration(seconds: 15));
     while (!File(doneFile).existsSync() && DateTime.now().isBefore(deadline)) {

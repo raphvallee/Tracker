@@ -1,17 +1,3 @@
-// Tier 2 capture: agent-driven video walkthrough of every app page.
-// Boots the real Windows app window with throwaway data (in-memory HydratedBloc
-// storage + temp Isar, never the user's real app data), then walks:
-//
-//   Feed -> Settings -> Gyms -> Progression -> Session detail -> Session edit
-//   -> History (list + calendar + day page) -> Workout idle -> Editor
-//   -> SplitDayPage -> start workout (gym picker sheet) -> in-progress + log a
-//   set -> end workout dialog -> SplitEditorPage -> SplitDayEditorPage
-//   -> ExercisePickerPage -> New Split -> Exercises -> Exercise detail
-//   -> New exercise -> Feed (with graph editor sheet).
-//
-// Run with (see docs/CAPTURING_MEDIA.md):
-//
-//   pwsh ./capture-app-media.ps1 -Mode video -Seconds 75 -Test tracker/integration_test/capture_full_walkthrough_test.dart
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -39,7 +25,6 @@ import '../testing/test_helpers.dart';
 
 Future<void> main() async {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
-  // Fully live frames so what the window shows matches what the test pumps.
   binding.framePolicy = LiveTestWidgetsFlutterBindingFramePolicy.fullyLive;
   setUpAll(initIsarCore);
 
@@ -80,10 +65,6 @@ Future<void> main() async {
     );
     await tester.pump(const Duration(milliseconds: 500));
 
-    // ---- drive the UI (edit only this section in copies) ----------------
-
-    // Watchable pacing: real (non-fake-async) delay + a pump to flush the
-    // frame queue after each step.
     Future<void> pause([int ms = 1400]) async {
       await Future<void>.delayed(Duration(milliseconds: ms));
       await tester.pump();
@@ -91,8 +72,6 @@ Future<void> main() async {
 
     Future<void> afterTap() => tester.pump(const Duration(milliseconds: 400));
 
-    /// Empty-safe finder check: pre-restricted finders (`.first`, `.at`)
-    /// throw StateError when nothing matches; plain finders do not.
     bool has(Finder finder) {
       try {
         return tester.any(finder);
@@ -113,8 +92,6 @@ Future<void> main() async {
       }
     }
 
-    /// Brings [finder] on screen if it lives inside a scrollable; never
-    /// throws (pages without a scrollable are simply already visible).
     Future<void> show(Finder finder) async {
       try {
         await tester.ensureVisible(finder.first);
@@ -122,7 +99,6 @@ Future<void> main() async {
       } catch (_) {}
     }
 
-    // 1) Feed: sessions, graph cards, Progression entry.
     await pause(2200);
     await tester.drag(
       find.byType(CustomScrollView).first,
@@ -131,7 +107,6 @@ Future<void> main() async {
     await afterTap();
     await pause(1000);
 
-    // 2) Feed graph card menu -> graph editor sheet -> close.
     final kebab = find.byIcon(FLucideIcons.ellipsisVertical);
     if (tester.any(kebab)) {
       await show(kebab);
@@ -152,7 +127,6 @@ Future<void> main() async {
       }
     }
 
-    // 3) Settings -> Gyms (expand + collapse a gym's menu).
     await tester.tap(find.text('Settings'), warnIfMissed: false);
     await afterTap();
     await pause(1500);
@@ -168,12 +142,11 @@ Future<void> main() async {
       await afterTap();
       await pause(700);
     }
-    await back(); // Gyms -> Settings
+    await back();
     await pause(700);
-    await back(); // Settings -> Feed
+    await back();
     await pause(700);
 
-    // 4) Progression page.
     final progression = find.text('Progression');
     await show(progression);
     await tester.tap(progression.first, warnIfMissed: false);
@@ -182,7 +155,6 @@ Future<void> main() async {
     await back();
     await pause(700);
 
-    // 5) Session detail -> session edit.
     final pushCard = find.textContaining('Push Day');
     if (tester.any(pushCard)) {
       await show(pushCard);
@@ -194,14 +166,13 @@ Future<void> main() async {
         await tester.tap(editAction.first, warnIfMissed: false);
         await afterTap();
         await pause(1500);
-        await back(); // edit -> detail
+        await back();
         await pause(700);
       }
-      await back(); // detail -> feed
+      await back();
       await pause(700);
     }
 
-    // 6) History: list, calendar, calendar day page, back to list.
     switchTab(1);
     await pause(1800);
     final calendarToggle = find.text('Calendar');
@@ -214,7 +185,7 @@ Future<void> main() async {
         await tester.tap(day21.first, warnIfMissed: false);
         await afterTap();
         await pause(1600);
-        await back(); // day page -> calendar
+        await back();
         await pause(700);
       }
       final listToggle = find.text('List');
@@ -229,15 +200,13 @@ Future<void> main() async {
       await tester.tap(pullTile.first, warnIfMissed: false);
       await afterTap();
       await pause(1800);
-      await back(); // detail -> history
+      await back();
       await pause(700);
     }
 
-    // 7) Workout tab idle state.
     switchTab(2);
     await pause(1600);
 
-    // 8) Editor tab -> split day page -> start plan workout.
     switchTab(3);
     await pause(1600);
     final pushDayRow = find.text('Push Day');
@@ -250,18 +219,15 @@ Future<void> main() async {
     if (tester.any(startThis)) {
       await tester.tap(startThis.first, warnIfMissed: false);
       await afterTap();
-      await pause(1300); // gym picker sheet
+      await pause(1300);
       final gymChoice = find.text('Iron Temple');
       if (tester.any(gymChoice)) {
         await tester.tap(gymChoice.first, warnIfMissed: false);
         await afterTap();
       }
-      await pause(2000); // workout tab, in progress
+      await pause(2000);
     }
 
-    // 9) Log a set on the in-progress workout. The add-set form sits at the
-    // bottom of the page: scroll it into view first (off-screen list children
-    // are not built, so the fields may not exist in the tree yet).
     for (var i = 0; i < 3 && !has(find.byType(FTextField)); i++) {
       await tester.drag(
         find.byType(CustomScrollView).first,
@@ -287,60 +253,57 @@ Future<void> main() async {
       }
     }
 
-    // 10) End the workout through the confirmation dialog.
     final endWorkout = find.text('End Workout');
     if (tester.any(endWorkout)) {
       await show(endWorkout);
       await tester.tap(endWorkout.first, warnIfMissed: false);
       await afterTap();
-      await pause(1500); // confirmation dialog
+      await pause(1500);
       final endSave = find.text('End & save');
       if (tester.any(endSave)) {
         await tester.tap(endSave.first, warnIfMissed: false);
         await afterTap();
-        await pause(2200); // session written to Isar
+        await pause(2200);
       }
     }
 
-    // 11) Split editor -> split day editor -> exercise picker.
-    switchTab(3); // back to the Editor tab (still shows SplitDayPage)
+    switchTab(3);
     await pause(900);
-    switchTab(3); // re-tap pops the tab back to its root (EditorPage)
+    switchTab(3);
     await pause(900);
     final splitHeader = find.text('Push Pull Legs - Complete Program');
     if (tester.any(splitHeader)) {
       await tester.tap(splitHeader.first, warnIfMissed: false);
       await afterTap();
-      await pause(1500); // split editor (edit)
+      await pause(1500);
       if (tester.any(pushDayRow)) {
         await tester.tap(pushDayRow.first, warnIfMissed: false);
         await afterTap();
-        await pause(1500); // split day editor
+        await pause(1500);
       }
       final addExercise = find.text('Add');
       if (tester.any(addExercise)) {
         await tester.tap(addExercise.first, warnIfMissed: false);
         await afterTap();
-        await pause(1200); // exercise picker
+        await pause(1200);
         final bench = find.text('Bench Press');
         if (tester.any(bench)) {
           await show(bench);
           await tester.tap(bench.first, warnIfMissed: false);
           await afterTap();
-          await pause(1000); // back on day editor with the exercise added
+          await pause(1000);
         }
       }
       final done = find.text('Done');
       if (tester.any(done)) {
         await tester.tap(done.first, warnIfMissed: false);
         await afterTap();
-        await pause(900); // back on split editor
+        await pause(900);
       }
-      await back(); // split editor -> Editor tab root
+      await back();
       await pause(700);
     }
 
-    // 12) New split (blank editor).
     final newSplit = find.text('New Split');
     if (tester.any(newSplit)) {
       await tester.tap(newSplit.first, warnIfMissed: false);
@@ -350,7 +313,6 @@ Future<void> main() async {
       await pause(700);
     }
 
-    // 13) Exercises: accordion -> exercise detail -> new exercise.
     switchTab(4);
     await pause(1600);
     if (!tester.any(find.text('Bench Press'))) {
@@ -366,7 +328,7 @@ Future<void> main() async {
       await show(benchItem);
       await tester.tap(benchItem.first, warnIfMissed: false);
       await afterTap();
-      await pause(2000); // exercise detail with 1RM chart
+      await pause(2000);
       await back();
       await pause(700);
     }
@@ -374,20 +336,14 @@ Future<void> main() async {
     if (tester.any(newExercise)) {
       await tester.tap(newExercise.first, warnIfMissed: false);
       await afterTap();
-      await pause(1500); // new exercise page
+      await pause(1500);
       await back();
       await pause(700);
     }
 
-    // 14) Feed: now shows the session saved by the ended workout.
     switchTab(0);
     await pause(1800);
-    // ----------------------------------------------------------------------
 
-    // The script captures the window externally. Keep the window on screen
-    // until it signals "capture finished" by creating
-    // build/captures/.capture-done (it deletes the file at the start of each
-    // run). Cap the wait so a bare `flutter test` run still terminates.
     const doneFile = 'build/captures/.capture-done';
     final deadline = DateTime.now().add(const Duration(seconds: 15));
     while (!File(doneFile).existsSync() && DateTime.now().isBefore(deadline)) {

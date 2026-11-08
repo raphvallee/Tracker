@@ -68,8 +68,6 @@ class _ExercisesPageState extends State<ExercisesPage> {
 
   @override
   void deactivate() {
-    // Keep the explicit tab contract separate from Flutter deactivation: the
-    // nested navigator remains mounted while its tab is inactive.
     super.deactivate();
   }
 

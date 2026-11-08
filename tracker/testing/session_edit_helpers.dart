@@ -142,7 +142,6 @@ Future<void> settleSessionFlow(WidgetTester tester) async {
   await tester.pump(const Duration(milliseconds: 400));
 }
 
-/// The session editor's title input (its first [FTextField]).
 Finder sessionTitleField() => find
     .descendant(
       of: find.byType(FTextField),
@@ -150,7 +149,5 @@ Finder sessionTitleField() => find
     )
     .first;
 
-/// The editor's gym lookups resolve in real time, so poll until [text]
-/// renders.
 Future<void> waitForText(WidgetTester tester, String text) =>
     waitForRealIo(tester, () async => find.text(text).evaluate().isNotEmpty);

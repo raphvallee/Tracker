@@ -30,13 +30,11 @@ class WorkoutSessionLegacy {
   DateTime startTime;
   DateTime? endTime;
 
-  /// Foreign key to a [Gym] (see Plan.md §2.2). Null if no gym was recorded.
   int? gymId;
 
   List<LegacyWorkoutSet> sets;
 }
 
-/// Pre-widening mirror of [WorkoutSet]: [reps] is the int it used to be.
 @embedded
 @Name('WorkoutSet')
 class LegacyWorkoutSet {

@@ -31,7 +31,6 @@ void main() {
     expect(find.text('Cannot be empty'), findsOneWidget);
     expect(find.text('Pick at least one target muscle'), findsOneWidget);
 
-    // Picking a target muscle clears the inline error without another save.
     final chest = find.text('pectoralis major').first;
     await tester.ensureVisible(chest);
     await tester.pumpAndSettle();

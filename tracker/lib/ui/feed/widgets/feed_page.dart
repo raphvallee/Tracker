@@ -19,7 +19,6 @@ import 'package:tracker/ui/core/ui/weight_format.dart';
 import 'package:tracker/ui/settings/widgets/settings_page.dart';
 import 'package:tracker/ui/workout/view_models/workout_cubit.dart';
 
-/// Personal activity feed built from completed workout sessions.
 class FeedPage extends StatefulWidget {
   const FeedPage({super.key});
 
@@ -207,8 +206,6 @@ class _FeedPageState extends State<FeedPage> {
   @override
   Widget build(BuildContext context) {
     final cubit = _cubit;
-    // Without a repository scope (isolate tests) there is nothing to watch:
-    // render the empty feed directly.
     if (cubit == null) {
       return _buildBody(context, const FeedState(status: FeedStatus.ready));
     }

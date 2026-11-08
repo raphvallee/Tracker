@@ -69,7 +69,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(cubit.state.sets, hasLength(1));
     expect(cubit.state.sets.single.reps, 12);
-    // The extra row was used up, so the three planned rows remain.
     expect(find.byType(FTextField), findsNWidgets(6));
   });
 }

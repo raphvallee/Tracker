@@ -1,4 +1,3 @@
-// A discarded workout is restorable for 15 minutes, never persisted.
 // One Isar-backed case per file: each *_test.dart runs in its own
 // flutter_tester process with a fresh libisar native worker pool (see
 // docs/TESTING_ISAR_CI.md).
@@ -45,7 +44,6 @@ void main() {
     timed.logSet(exerciseId: 1, exerciseName: 'Squat', weight: 100, reps: 5);
     await timed.discardWorkout();
 
-    // Never persisted, but held in memory for the window.
     expect(timed.state.isInProgress, isFalse);
     expect(timed.state.canRestoreDiscarded(now: now), isTrue);
     expect(timed.state.savedSnapshot, isNull);
@@ -56,8 +54,6 @@ void main() {
     expect(timed.state.sets.single.weight, 100);
     expect(timed.state.canRestoreDiscarded(now: now), isFalse);
 
-    // Discard again and let the window lapse: restore becomes a no-op and
-    // drops the stale snapshot.
     await timed.discardWorkout();
     now = now.add(const Duration(minutes: 16));
     expect(timed.state.canRestoreDiscarded(now: now), isFalse);

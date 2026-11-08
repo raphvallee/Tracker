@@ -12,8 +12,6 @@ import 'package:tracker/ui/core/ui/max_width.dart';
 import 'package:tracker/ui/settings/widgets/gyms_page.dart';
 import 'package:tracker/ui/settings/view_models/settings_cubit.dart';
 
-/// Shared padding for every settings row so they line up (e.g. Units matches
-/// the gyms, notifications and workout-default rows).
 const EdgeInsets _kSettingsRowPadding = EdgeInsets.symmetric(
   horizontal: 16,
   vertical: 6,
@@ -31,9 +29,6 @@ class SettingsPage extends StatelessWidget {
           child: BlocBuilder<SettingsCubit, SettingsState>(
             builder: (context, state) => MaxWidth(
               child: ListView(
-                // Bottom padding tracks the keyboard (plus the reveal gap) so
-                // the workout-defaults fields scroll above it (shell no
-                // longer resizes for the keyboard).
                 padding: EdgeInsets.fromLTRB(
                   0,
                   12,
@@ -214,15 +209,9 @@ class SettingsPage extends StatelessWidget {
   }
 }
 
-/// "Workout defaults" section: the rep mode, rep count and rep range
-/// pre-filled when adding sets to exercises in the split editor. Numeric
-/// fields commit on every valid change; invalid input shows an inline error
-/// and keeps the last persisted value.
 class _WorkoutDefaultsSection extends StatefulWidget {
   const _WorkoutDefaultsSection({required this.state});
 
-  /// Current settings, lifted from the enclosing BlocBuilder so the
-  /// rep-mode dropdown reflects the persisted value.
   final SettingsState state;
 
   @override
@@ -241,7 +230,6 @@ class _WorkoutDefaultsSectionState extends State<_WorkoutDefaultsSection> {
   @override
   void initState() {
     super.initState();
-    // context.read is allowed in initState; the provider sits above the page.
     final state = SettingsCubit.maybeOf(context)?.state ?? widget.state;
     _reps = TextEditingController(text: '${state.defaultReps}');
     _rangeMin = TextEditingController(text: '${state.defaultRepRangeMin}');

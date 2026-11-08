@@ -36,8 +36,6 @@ class WorkoutDateIndex {
 
   final Map<int, List<WorkoutSession>> _byDay;
 
-  /// Days with at least one session, as date-only DateTimes. Built on first
-  /// access; the calendar itself uses the int-keyed lookups below.
   late final Set<DateTime> workoutDays = UnmodifiableSetView(<DateTime>{
     for (final key in _byDay.keys) _dateOf(key),
   });
@@ -62,7 +60,7 @@ class WorkoutDateIndex {
 class CalendarGrid {
   CalendarGrid(this.year, this.month) {
     final first = DateTime(year, month);
-    final leading = first.weekday - 1; // 0 for Mon, 6 for Sun
+    final leading = first.weekday - 1;
     final daysInMonth = DateTime(year, month + 1, 0).day;
     final totalCount = leading + daysInMonth;
     final totalCells = (totalCount + 6) ~/ 7 * 7;
@@ -77,15 +75,11 @@ class CalendarGrid {
   final int year;
   final int month;
 
-  /// 42 cells (6 rows × 7 columns); [int?] day-of-month, null for a blank slot.
   late final List<int?> days;
 
   DateTime dateFor(int index) => DateTime(year, month, days[index] ?? 1);
 }
 
-/// Number of consecutive days (ending today, or the last workout day if today
-/// has none) that each contain at least one workout. Dates should be passed
-/// date-only (midnight). Pure → unit-testable.
 int currentStreak(Set<DateTime> workoutDays) {
   final keys = <int>{
     for (final day in workoutDays) _dayKey(day.year, day.month, day.day),

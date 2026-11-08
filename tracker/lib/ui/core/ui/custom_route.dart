@@ -1,9 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
 
-/// Pushes [destination] with the app's slide transition and returns the
-/// `Navigator.push` future so callers can await a value popped back by the
-/// destination (e.g. an editor returning its edited draft).
 Future<T?> pushTo<T>(BuildContext context, Widget destination) {
   final Color backgroundColor = context.theme.colors.background;
   return Navigator.of(context)

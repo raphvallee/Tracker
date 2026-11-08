@@ -1,15 +1,3 @@
-// Demo of the unsaved-changes discard guard on the split editors, driven
-// through the real Windows window. Seeded with one split, then:
-//
-// 1. Edit an real split, make changes, press back: "Discard changes?"
-//    appears; Cancel keeps the editor; a second back + Discard leaves
-//    without saving.
-// 2. Open a day editor clean, press back: it pops immediately, no dialog.
-//
-// Run: `flutter test integration_test/split_discard_demo_test.dart -d windows`
-// Prints DEMO: progress lines; pair with an ffmpeg gdigrab capture of the
-// window for the walkthrough video.
-
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -51,7 +39,6 @@ void main() {
     ], name: 'isar_split_discard_demo');
     repo = TrackerRepository(isar);
 
-    // Seed a minimal real DB: one exercise, one gym, one saved split.
     final exercise = Exercise(
       title: 'Bench Press',
       primaryMuscle: [Muscle.chest],
@@ -106,33 +93,26 @@ void main() {
     );
     await _settle(tester);
 
-    // Long pauses so a viewer can follow along in the capture.
     Future<void> pause([int ms = 900]) async {
       await Future<void>.delayed(Duration(milliseconds: ms));
       await tester.pump();
     }
 
-    // Land on the Editor tab.
     _mark('open Editor tab');
     HomePageSingleton().changeTab(TabName.editor);
     await _settle(tester);
     await pause(1200);
 
-    // Open the saved split for editing.
     _mark('open split editor');
     await tester.tap(find.text('Push Pull Legs'));
     await _settle(tester);
     await pause(1200);
 
-    // The app-bar chevron drives every pop in this demo.
-
-    // Scene 1: clean editor, back pops immediately.
     _mark('back on a clean editor - pops immediately');
     await tester.tap(find.byIcon(FLucideIcons.chevronLeft));
     await _settle(tester);
     await pause(1200);
 
-    // Scene 2: reopen, rename the split, back asks.
     _mark('reopen split and rename it');
     await tester.tap(find.text('Push Pull Legs'));
     await _settle(tester);
@@ -162,7 +142,6 @@ void main() {
     await _settle(tester);
     await pause(1400);
 
-    // Scene 3: the rename was NOT saved.
     _mark('rename was not saved');
     await tester.tap(find.text('Push Pull Legs'));
     await _settle(tester);
@@ -178,14 +157,10 @@ void main() {
     _mark('title in editor: "${editable.controller.text}"');
     expect(editable.controller.text, 'Push Pull Legs');
 
-    // Back to the split list (clean editor: pops immediately).
     await tester.tap(find.byIcon(FLucideIcons.chevronLeft));
     await _settle(tester);
     await pause(1000);
 
-    // Scene 4: day editor, clean back pops, dirty back asks. The day
-    // EDITOR opens from inside the split editor (the Editor tab's day rows
-    // open the read-only SplitDayPage instead).
     _mark('open day editor (clean)');
     await tester.tap(find.text('Push Pull Legs'));
     await _settle(tester);
@@ -219,7 +194,6 @@ void main() {
     await _settle(tester);
     await pause(1200);
 
-    // Leave the split editor (clean again after the discard).
     await tester.tap(find.byIcon(FLucideIcons.chevronLeft));
     await _settle(tester);
 

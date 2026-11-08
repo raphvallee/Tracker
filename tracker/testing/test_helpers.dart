@@ -1,9 +1,3 @@
-// Shared test infrastructure for both unit/ and integration/ tests.
-//
-// unit/ tests are pure Dart and need none of this. integration/ tests that
-// open a real Isar DB or pump the widget tree call initIsarCore() (setUpAll),
-// openTestIsar() (setUp), and pumpApp() for the app shell.
-
 import 'dart:async';
 import 'dart:ffi';
 import 'dart:io';
@@ -21,8 +15,6 @@ import 'package:tracker/ui/workout/view_models/workout_cubit.dart';
 
 import 'fakes/in_memory_storage.dart';
 
-/// Load Isar's native core once. Call from `setUpAll` in any integration test
-/// that opens a real Isar instance.
 Future<void> initIsarCore() async {
   await Isar.initializeIsarCore(
     libraries: {
@@ -50,16 +42,10 @@ Future<Isar> openTestIsar(
   return Isar.open(schemas, directory: dir.path, name: name);
 }
 
-/// Finds an icon-only [FButton] by its semantics tooltip (AppIconButton).
-///
-/// Material's `find.byTooltip` matched the old `Tooltip` widgets; since the
-/// Forui swap the tooltip lives on `FButton.semanticsTooltip` instead.
 Finder fButtonByTooltip(String tooltip) => find.byWidgetPredicate(
   (w) => w is FButton && w.semanticsTooltip == tooltip,
 );
 
-/// Pump the app shell ([MyApp]) with a fresh [WorkoutCubit]; returns the cubit.
-/// [unit] sets the display unit of the app's [SettingsCubit].
 Future<WorkoutCubit> pumpApp(
   WidgetTester tester, {
   WeightUnit unit = WeightUnit.kilograms,
@@ -84,9 +70,6 @@ Future<WorkoutCubit> pumpApp(
   return cubit;
 }
 
-/// Pump the full app shell via [pumpApp], then push [page] onto the root
-/// navigator so the page under test sits inside the real stack (FTheme +
-/// FToaster + the Material bridge theme), not a bare `MaterialApp`.
 Future<WorkoutCubit> pumpAppPage(
   WidgetTester tester,
   Widget page, {
@@ -99,8 +82,6 @@ Future<WorkoutCubit> pumpAppPage(
   return cubit;
 }
 
-/// Poll `condition` until true (bounded), failing on timeout. For async
-/// sources like Isar watchers / streams.
 Future<void> waitFor(bool Function() condition) async {
   for (var i = 0; i < 100 && !condition(); i++) {
     await Future<void>.delayed(const Duration(milliseconds: 5));

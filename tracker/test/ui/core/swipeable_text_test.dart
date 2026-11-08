@@ -1,6 +1,3 @@
-// SwipeableText: long text scrolls sideways with touch and mouse, on one line,
-// and never shows a scrollbar, even under a scroll behavior that adds them.
-
 import 'dart:ui' show PointerDeviceKind;
 
 import 'package:flutter/material.dart';

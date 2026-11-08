@@ -1,11 +1,3 @@
-// PNG capture infrastructure for the visual screenshot sweep.
-//
-// Captures are plain inspection images (NOT baseline goldens): the sweep saves
-// every visited state so a human or an agent can visually check for overflow,
-// clipped text, misalignment and tofu glyphs. Output lands in
-// `<packageRoot>/build/test_screenshots/` (gitignored) with a manifest.json
-// mapping every file to the page/size it shows.
-//
 // Fake-async caveats (all load-bearing):
 //  * Every capture's IO/encoding runs inside `tester.runAsync` - real file IO
 //    and PNG encoding never complete in the testWidgets fake-async zone.
@@ -50,12 +42,6 @@ Directory screenshotDir() {
   return out;
 }
 
-/// Captures the [screenshotBoundaryKey] boundary to numbered PNG files.
-///
-/// Naming: `NNN_<sanitized-label>@<W>x<H>.png` - the counter resets per
-/// [beginRun] and the `@WxH` suffix keeps names collision-proof across size
-/// runs and deterministic across runs (no timestamps), e.g.
-/// `003_history-calendar@800x600.png`. Failure captures insert `_FAIL`.
 class ScreenshotRecorder {
   ScreenshotRecorder(this.tester);
 
@@ -67,7 +53,6 @@ class ScreenshotRecorder {
   bool _manifestAnnounced = false;
   final List<Map<String, Object?>> _entries = [];
 
-  /// Reset the per-size counter; call once at the start of each size run.
   void beginRun({
     required String sizeLabel,
     required int width,

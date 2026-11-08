@@ -1,4 +1,3 @@
-// Restoring a saved workout takes it out of history.
 // One Isar-backed case per file: each *_test.dart runs in its own
 // flutter_tester process with a fresh libisar native worker pool (see
 // docs/TESTING_ISAR_CI.md).
@@ -58,8 +57,6 @@ void main() {
 
     await cubit.restoreSavedWorkout();
 
-    // The saved session left history and is ongoing again, verbatim,
-    // split plan included.
     expect(cubit.state.isInProgress, isTrue);
     expect(cubit.state.planTitle, 'PPL · Push');
     expect(cubit.state.plan.single.name, 'Bench Press');
@@ -68,9 +65,6 @@ void main() {
     expect(cubit.state.canRestoreSaved(), isFalse);
     expect(await repo.sessions.getAll(), isEmpty);
 
-    // Re-saving the restored session works and becomes the new restore
-    // target - no duplicate entries from the restore round-trip, and the
-    // original start time is replayed verbatim (not the restore time).
     await cubit.endWorkout();
     expect(cubit.state.isInProgress, isFalse);
     expect(cubit.state.canRestoreSaved(), isTrue);

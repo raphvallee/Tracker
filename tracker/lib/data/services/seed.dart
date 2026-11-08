@@ -11,12 +11,6 @@ Future<void> seedExercisesIfNeeded(TrackerRepository repository) {
   return repository.exercises.putAllIfEmpty(seedExercises());
 }
 
-/// The seed is the initial cast of the exercise library. `dart run build_runner
-/// build` has already generated `*Schema`; these records are inserted on first
-/// run (see [seedExercisesIfNeeded]).
-///
-/// Keep it curated, not exhaustive: enough to make splits, logging and the
-/// exercises tab meaningful without opinionating the whole library.
 List<Exercise> seedExercises() => [
   Exercise(
     title: 'Bench Press',

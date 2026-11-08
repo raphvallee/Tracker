@@ -1,11 +1,3 @@
-// Regression tests for the keyboard hiding a focused field (Refine.md,
-// General #1). The shell Scaffolds do not resize for the on-screen keyboard
-// (it overlays them), so Flutter's own caret reveal - which only scrolls
-// until the caret clears the scrollable's bounds - leaves the field behind
-// the keyboard unless the field's scroll padding includes the keyboard
-// height. keyboardAwareFieldReveal (applied app-wide in MyApp's builder)
-// grows that padding; these tests pump the same wiring in isolation.
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forui/forui.dart';
@@ -35,15 +27,9 @@ Widget _page({required bool keyboardAwareReveal}) => MaterialApp(
     child: child!,
   ),
   home: Scaffold(
-    // Mirrors the shell Scaffolds: the keyboard overlays instead of resizing,
-    // so scrollables must be able to scroll past it.
     resizeToAvoidBottomInset: false,
     body: Builder(
       builder: (context) => SingleChildScrollView(
-        // Same contract as real pages: the bottom padding grows by the
-        // keyboard height plus the reveal gap (keyboardClearanceOf) so the
-        // focused field has the scroll room its reveal needs above the
-        // keyboard.
         padding: EdgeInsets.only(bottom: keyboardClearanceOf(context)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -63,8 +49,6 @@ Widget _page({required bool keyboardAwareReveal}) => MaterialApp(
   ),
 );
 
-/// Scrolls the page to the end (the field lands near the screen bottom),
-/// then opens the fake keyboard without moving the content.
 Future<void> _pumpScrolledBehindKeyboard(
   WidgetTester tester, {
   required bool keyboardAwareReveal,
@@ -98,9 +82,6 @@ void main() {
       lessThan(screenHeight - _keyboardHeight),
       reason: 'the focused field must end up fully visible above the keyboard',
     );
-    // The reveal must also leave breathing room: the field box may not rest
-    // directly against the keyboard's top edge (kKeyboardRevealGap applies to
-    // the caret line; the box rides a little higher still).
     expect(
       after,
       lessThanOrEqualTo(screenHeight - _keyboardHeight - 24),

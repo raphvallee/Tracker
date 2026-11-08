@@ -6,8 +6,6 @@ import 'package:tracker/ui/core/ui/keyboard_inset.dart';
 import 'package:tracker/ui/core/ui/max_width.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
 
-/// Picks one exercise from the library for a split day (§1.3.1.1.1). Pops the
-/// selected [Exercise] (or null if dismissed).
 class ExercisePickerPage extends StatefulWidget {
   const ExercisePickerPage({super.key});
 
@@ -67,10 +65,6 @@ class _ExercisePickerPageState extends State<ExercisePickerPage> {
           ),
         ),
         SliverPadding(
-          // Keyboard-aware bottom padding (keyboard height + reveal gap): the
-          // search field stays pinned at the top while list rows can scroll
-          // above the keyboard (the shell Scaffold no longer resizes for the
-          // keyboard).
           padding: EdgeInsets.only(bottom: keyboardClearanceOf(context)),
           sliver: SliverList(
             delegate: SliverChildBuilderDelegate((context, index) {

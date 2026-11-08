@@ -1,4 +1,3 @@
-// ExerciseRepository.getByTitle duplicate detection.
 // One Isar-backed case per file: each *_test.dart runs in its own
 // flutter_tester process with a fresh libisar native worker pool (see
 // docs/TESTING_ISAR_CI.md).
@@ -47,7 +46,6 @@ void main() {
       expect((await repo.exercises.getByTitle('bench press'))!.id, id);
       expect((await repo.exercises.getByTitle('BENCH PRESS'))!.id, id);
       expect(await repo.exercises.getByTitle('Squat'), isNull);
-      // Renaming must not collide with the exercise's own current title.
       expect(
         await repo.exercises.getByTitle('Bench Press', excludeId: id),
         isNull,

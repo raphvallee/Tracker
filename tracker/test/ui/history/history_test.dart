@@ -1,9 +1,3 @@
-// History integration tests (lib/pages/history/). The SessionDetailPage widget:
-// it declares no dependency on repository data (exercise names degrade to ids)
-// and the sets/gym/duration come straight from the session passed in. The
-// calendar/streak math it can render is unit-tested separately:
-// test/unit/calendar_test.dart.
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tracker/domain/models/workout_session.dart';
 import 'package:tracker/domain/models/workout_set.dart';
@@ -44,15 +38,12 @@ void main() {
         SessionDetailPage(session: session, gymName: 'Home'),
       );
 
-      expect(find.text('Home workout'), findsOneWidget); // app bar title
-      expect(
-        find.text('Home · 1h 0m'),
-        findsOneWidget,
-      ); // gym + duration in header
+      expect(find.text('Home workout'), findsOneWidget);
+      expect(find.text('Home · 1h 0m'), findsOneWidget);
       expect(find.text('80 kg × 5'), findsOneWidget);
       expect(find.text('60 kg × 8'), findsOneWidget);
-      expect(find.text('W'), findsOneWidget); // warmup marker
-      expect(find.text('S'), findsOneWidget); // working marker
+      expect(find.text('W'), findsOneWidget);
+      expect(find.text('S'), findsOneWidget);
     });
 
     testWidgets('shows a working volume that excludes warmup sets', (
@@ -86,7 +77,6 @@ void main() {
         ),
       );
 
-      // 100×5 = 500 kg working volume; the 60×8 warmup is excluded.
       expect(find.text('500 kg'), findsOneWidget);
     });
   });

@@ -1,6 +1,3 @@
-// Split day page layout: exercise cards on the day's detail screen are
-// separated by a fixed gap, and the gap is not added below the last card.
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forui/forui.dart';
 import 'package:tracker/domain/models/workout_split.dart';
@@ -32,13 +29,11 @@ void main() {
           order: 1,
           sets: [PlannedSet(order: 0, minReps: 5)],
         ),
-        // Legacy item saved before planned sets existed.
         ExerciseItem(exerciseId: 3, order: 2, targetSets: 4, targetReps: 6),
       ],
     );
     await pumpAppPage(tester, SplitDayPage(splitTitle: 'PPL', day: day));
 
-    // Orders are 1, 2, 3 and set counts are 3, 1, 4.
     expect(find.text('1'), findsNWidgets(2));
     expect(find.text('2'), findsOneWidget);
     expect(find.text('3'), findsNWidgets(2));
@@ -61,7 +56,6 @@ void main() {
     expect(find.text('Exercises'), findsOneWidget);
     expect(find.text('PPL'), findsNothing);
     expect(find.textContaining('PPL ·'), findsNothing);
-    // The day title stays in the app bar only.
     expect(find.text('Push Day'), findsOneWidget);
   });
 

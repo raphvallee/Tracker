@@ -2,9 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
 import 'package:tracker/domain/models/workout_split.dart';
 
-/// Shows an exercise's plan at a glance: one tile per planned set in order, so
-/// the number of sets and each set's rep target read directly from the tiles.
-/// Tiles wrap onto new lines on narrow windows.
 class PlannedSetsView extends StatelessWidget {
   const PlannedSetsView({super.key, required this.sets});
 

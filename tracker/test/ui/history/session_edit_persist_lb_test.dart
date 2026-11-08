@@ -1,4 +1,3 @@
-// Pounds: saving an untouched set keeps its stored kilograms exactly.
 // One Isar-backed case per file: each *_test.dart runs in its own
 // flutter_tester process with a fresh libisar native worker pool (see
 // docs/TESTING_ISAR_CI.md).
@@ -32,7 +31,6 @@ void main() {
       await tester.tap(find.text('Edit'));
       await settleSessionFlow(tester);
 
-      // Rename the session so the save has an observable effect to wait on.
       final title = find
           .descendant(
             of: find.byType(FTextField),
@@ -49,7 +47,7 @@ void main() {
         find.descendant(of: find.byType(FDialog), matching: find.text('Save')),
       );
       await settleSessionFlow(tester);
-      await tester.tap(find.text('Save')); // editor header action
+      await tester.tap(find.text('Save'));
       await settleSessionFlow(tester);
 
       final id = seeded.session.id;

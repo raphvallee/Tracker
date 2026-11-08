@@ -1,7 +1,3 @@
-// Analytics widget integration tests — DB-free chart/page smoke tests (no
-// repository). The pure analytics math they render is unit-tested separately:
-// test/unit/analytics_test.dart.
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forui/forui.dart';
@@ -59,7 +55,6 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Cannot be empty'), findsOneWidget);
-      // The sheet stays open instead of silently doing nothing.
       expect(find.text('Add graph'), findsOneWidget);
     });
 
@@ -91,14 +86,10 @@ void main() {
             )
             .first,
       );
-      // Tap the far-left of the row: the label/value area, as far as possible
-      // from the trailing chevron, which used to be the only hit target.
       await tester.tapAt(Offset(field.left + 8, field.center.dy));
       await tester.pumpAndSettle();
       expect(find.text('Select exercise'), findsOneWidget);
 
-      // Back to the sheet, then tap the middle of the row (between the value
-      // and the chevron) to prove there is no dead zone in between either.
       await tester.tap(find.byIcon(FLucideIcons.chevronLeft));
       await tester.pumpAndSettle();
       expect(find.text('Add graph'), findsOneWidget);

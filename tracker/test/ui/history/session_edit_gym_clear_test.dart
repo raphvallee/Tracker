@@ -1,4 +1,3 @@
-// Picking Other gym in the session editor clears the gym.
 // One Isar-backed case per file: each *_test.dart runs in its own
 // flutter_tester process with a fresh libisar native worker pool (see
 // docs/TESTING_ISAR_CI.md).
@@ -23,18 +22,17 @@ void main() {
     await settleSessionFlow(tester);
     await waitForText(tester, 'Home');
 
-    // Opening the picker loads the gym list (real IO) before the sheet shows.
     await tester.tap(find.text('Home'));
     await settleSessionFlow(tester);
     await waitForText(tester, 'Which gym?');
-    await settleSessionFlow(tester); // let the sheet finish sliding in
+    await settleSessionFlow(tester);
     expect(find.text('Which gym?'), findsOneWidget);
     await tester.tap(find.text('Other gym'));
     await settleSessionFlow(tester);
     expect(find.text('Other gym'), findsOneWidget);
 
     await tester.enterText(sessionTitleField(), 'Pull');
-    await tester.tap(find.text('Save')); // editor header action
+    await tester.tap(find.text('Save'));
     await settleSessionFlow(tester);
 
     final id = seeded.session.id;

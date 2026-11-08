@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
 
-/// W / S chip marking a logged set as warm-up or working. Muted/foreground
-/// pairing so the W chip reads on white cards.
 class SetTypeChip extends StatelessWidget {
   const SetTypeChip({super.key, required this.isWarmup});
 

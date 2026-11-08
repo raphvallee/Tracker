@@ -1,7 +1,3 @@
-// Unit tests for history/calendar math (lib/pages/history/calendar_grid.dart) -
-// pure functions/classes, no Isar, no widgets. The SessionDetailPage widget
-// that renders this data is an integration test: test/ui/history/history_test.dart.
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tracker/domain/models/workout_session.dart';
@@ -10,15 +6,11 @@ import 'package:tracker/ui/history/widgets/calendar/calendar_grid.dart';
 void main() {
   group('CalendarGrid math', () {
     test('Monday-start grid, correct leading blanks and day count', () {
-      // March 2026 starts on a Sunday → 6 leading blanks (Mon..Sat of week),
-      // then days 1..31. Verify via the last day landing in its cell.
       final grid = CalendarGrid(2026, 3);
       expect(grid.days, hasLength(42));
-      // March 1 2026 is a Sunday: index 6 (0=Mon..6=Sun).
       expect(grid.days.sublist(0, 6).where((d) => d != null), isEmpty);
       expect(grid.days[6], 1);
-      expect(grid.days[36], 31); // March has 31 days
-      // Cells after the month end are blank.
+      expect(grid.days[36], 31);
       expect(grid.days.sublist(37).where((d) => d != null), isEmpty);
     });
 

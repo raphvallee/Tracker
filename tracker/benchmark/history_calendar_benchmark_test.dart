@@ -1,15 +1,5 @@
-// Widget-level benchmark for the History calendar (HistoryCalendar), run in
-// flutter test (debug JIT). Quick to iterate on; numbers are pessimistic
-// versus profile mode, so the device harness is the authoritative check.
-//
-// Each sample times the pump that performs the work (build + layout + paint,
-// no GPU raster). Taps are timed together with the pump that renders them, and
-// each tap is checked against the UI so a dropped tap can't pass as a fast
-// sample. Outside test/ on purpose so CI's `flutter test` never runs
-// timing-sensitive code.
-//
-// Run from tracker/:
-//   flutter test benchmark/history_calendar_benchmark_test.dart
+// Outside test/ on purpose so CI's `flutter test` never runs timing-sensitive
+// code.
 // ignore_for_file: avoid_print
 
 import 'package:flutter/material.dart';

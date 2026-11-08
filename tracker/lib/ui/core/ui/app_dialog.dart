@@ -1,9 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
 
-/// Shared layout for the app's dialogs: a title, an optional message or custom
-/// content, and a row of actions aligned to the end. Dialogs are still opened
-/// with [showFDialog]; this widget only builds the body.
 class AppDialog extends StatelessWidget {
   const AppDialog({
     super.key,
@@ -19,22 +16,16 @@ class AppDialog extends StatelessWidget {
 
   final String title;
 
-  /// Widget placed at the end of the title row, such as an icon button.
   final Widget? titleTrailing;
 
-  /// Body text shown under the title.
   final String? message;
 
-  /// Body content shown under the title, for forms and pickers.
   final Widget? child;
 
-  /// Space between the title and the message or child.
   final double headerGap;
 
-  /// Space between the body and the actions.
   final double actionsGap;
 
-  /// Wraps the body in a scroll view so the keyboard can't clip the actions.
   final bool scrollable;
 
   final List<Widget> actions;
@@ -83,8 +74,6 @@ class AppDialog extends StatelessWidget {
   }
 }
 
-/// Confirm/cancel dialog. Resolves to true when confirmed; cancel, or
-/// dismissing the barrier, resolves to false.
 Future<bool> showConfirmDialog(
   BuildContext context, {
   required String title,

@@ -4,10 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
 import 'package:tracker/domain/services/analytics.dart';
 
-/// Minimal dependency-free line chart for [ProgressionPoint] series
-/// (Milestone 6 analytics). A plain [CustomPainter] - no charting package -
-/// plotting a polyline + point dots over a light grid with y-axis tick
-/// labels and x-axis date labels.
 class LineChart extends StatelessWidget {
   const LineChart({
     super.key,
@@ -16,7 +12,6 @@ class LineChart extends StatelessWidget {
     this.unit = '',
   });
 
-  /// Sorted ascending by date.
   final List<ProgressionPoint> points;
   final double height;
   final String unit;
@@ -45,8 +40,6 @@ class LineChart extends StatelessWidget {
           unit: unit,
           lineColor: theme.colors.primary,
           dotColor: theme.colors.primary,
-          // Full theme style (family included) so labels don't fall back to
-          // the blocky test/default font.
           labelStyle: theme.typography.body.xs.copyWith(
             color: theme.colors.mutedForeground,
           ),
@@ -73,8 +66,18 @@ class _LineChartPainter extends CustomPainter {
   static const int _maxXLabels = 5;
 
   static const List<String> _monthAbbrev = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', //
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', //
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
   ];
 
   final List<ProgressionPoint> points;
@@ -85,21 +88,16 @@ class _LineChartPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    // Labels are painted through a clip so an over-long value can never
-    // bleed past the chart bounds.
     canvas.save();
     canvas.clipRect(Offset.zero & size);
 
     var minY = points.map((p) => p.value).reduce((a, b) => a < b ? a : b);
     var maxY = points.map((p) => p.value).reduce((a, b) => a > b ? a : b);
     if (maxY - minY < 1e-9) {
-      // Flat series: give the line vertical room.
       minY -= 1;
       maxY += 1;
     }
 
-    // Y-axis ticks: lay out the labels first so the left gutter always fits
-    // the widest one.
     final ticks = <(double, TextPainter)>[
       for (var i = 0; i < _tickCount; i++)
         _tickLabel(
@@ -128,8 +126,6 @@ class _LineChartPainter extends CustomPainter {
     double yFor(double value) =>
         _topPad + chartHeight * (1 - (value - minY) / (maxY - minY));
 
-    // X positions: proportional to the point dates, spanning the full chart
-    // width (min date at the left edge, max date at the right edge).
     final minDate = points
         .map((p) => p.date)
         .reduce((a, b) => a.isBefore(b) ? a : b);
@@ -151,7 +147,6 @@ class _LineChartPainter extends CustomPainter {
               dateRangeMs;
     }
 
-    // Gridlines + tick labels.
     final gridPaint = Paint()
       ..color = lineColor.withValues(alpha: 0.12)
       ..strokeWidth = 1;
@@ -175,20 +170,16 @@ class _LineChartPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round;
     final dotPaint = Paint()..color = dotColor;
 
-    // Polyline.
     final path = Path()..moveTo(xFor(0), yFor(points[0].value));
     for (var i = 1; i < points.length; i++) {
       path.lineTo(xFor(i), yFor(points[i].value));
     }
     canvas.drawPath(path, linePaint);
 
-    // Point dots.
     for (var i = 0; i < points.length; i++) {
       canvas.drawCircle(Offset(xFor(i), yFor(points[i].value)), 3, dotPaint);
     }
 
-    // X-axis date labels in the reserved bottom gutter. Same clip as the y
-    // labels keeps an over-long label from bleeding past the chart bounds.
     final xLabels = <(double, TextPainter)>[
       if (!centered)
         for (final (date, text) in _xLabels(minDate, maxDate))
@@ -221,27 +212,20 @@ class _LineChartPainter extends CustomPainter {
     canvas.restore();
   }
 
-  /// ~3-5 label dates on nice calendar boundaries (start of day/week/month/
-  /// year depending on the span), clamped to [minDate, maxDate], each with
-  /// its formatted label. May come back short or empty for degenerate spans.
   List<(DateTime, String)> _xLabels(DateTime minDate, DateTime maxDate) {
     final span = maxDate.difference(minDate);
     String dayMonth(DateTime d) => '${d.day} ${_monthAbbrev[d.month - 1]}';
-    // Under ~2 days: daily boundaries.
     if (span <= const Duration(days: 2)) {
       return _cap([
         for (final d in _dayBoundaries(minDate, maxDate, 1)) (d, dayMonth(d)),
       ]);
     }
-    // Under ~1 month: weekly (start of week) boundaries.
     if (span <= const Duration(days: 31)) {
       return _cap([
         for (final d in _dayBoundaries(minDate, maxDate, 7, weekStart: true))
           (d, dayMonth(d)),
       ]);
     }
-    // Under ~2 years: start-of-month boundaries, stepping whole months so
-    // the labels stay evenly spaced.
     if (span < const Duration(days: 730)) {
       final step = math.max(1, (span.inDays / 30.44 / 4).ceil());
       return _cap([
@@ -249,22 +233,17 @@ class _LineChartPainter extends CustomPainter {
           (d, '${_monthAbbrev[d.month - 1]} ${d.year % 100}'),
       ]);
     }
-    // Longer: year boundaries.
     return _cap([
       for (final d in _yearBoundaries(minDate, maxDate)) (d, '${d.year}'),
     ]);
   }
 
-  /// Evenly downsamples [labels] to at most [_maxXLabels] entries so a dense
-  /// boundary list can never crowd the gutter.
   List<(DateTime, String)> _cap(List<(DateTime, String)> labels) {
     if (labels.length <= _maxXLabels) return labels;
     final stride = labels.length / _maxXLabels;
     return [for (var i = 0; i < _maxXLabels; i++) labels[(i * stride).floor()]];
   }
 
-  /// Midnights every [stepDays] days from [minDate]'s day, aligned to Monday
-  /// when [weekStart] is set.
   List<DateTime> _dayBoundaries(
     DateTime minDate,
     DateTime maxDate,
@@ -273,7 +252,6 @@ class _LineChartPainter extends CustomPainter {
   }) {
     var d = DateTime(minDate.year, minDate.month, minDate.day);
     if (weekStart) {
-      // Align to Monday (DateTime.monday == 1).
       d = d.subtract(Duration(days: (d.weekday + 6) % 7));
     }
     final out = <DateTime>[];
@@ -284,14 +262,11 @@ class _LineChartPainter extends CustomPainter {
     return out;
   }
 
-  /// Starts of every [stepMonths]-th month from [minDate] to [maxDate],
-  /// anchored so boundaries stay on stable calendar multiples of the step.
   List<DateTime> _monthBoundaries(
     DateTime minDate,
     DateTime maxDate,
     int stepMonths,
   ) {
-    // Month count from a fixed epoch so the step alignment is stable.
     final firstMonth = minDate.year * 12 + minDate.month - 1;
     final out = <DateTime>[];
     for (var m = (firstMonth ~/ stepMonths) * stepMonths; ; m += stepMonths) {
@@ -302,7 +277,6 @@ class _LineChartPainter extends CustomPainter {
     return out;
   }
 
-  /// Starts of each year from [minDate] to [maxDate].
   List<DateTime> _yearBoundaries(DateTime minDate, DateTime maxDate) {
     final out = <DateTime>[];
     for (var y = minDate.year; y <= maxDate.year; y++) {

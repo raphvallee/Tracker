@@ -18,13 +18,6 @@ import 'package:tracker/ui/workout/widgets/gym_picker.dart';
 import 'package:tracker/utils/decimal_input.dart';
 import 'package:tracker/utils/form_validators.dart';
 
-/// Editor for a completed past [WorkoutSession], reached from the session
-/// detail page's Edit action.
-///
-/// Focused form over the session's own fields (title, gym, start time) and
-/// every logged set (weight, reps, warm-up/working type); the in-progress
-/// workout flow is untouched. The page only builds a draft and pops with it -
-/// the caller persists it through the session repository.
 class SessionEditPage extends StatefulWidget {
   const SessionEditPage({super.key, required this.session});
 
@@ -40,8 +33,6 @@ class _SessionEditPageState extends State<SessionEditPage> {
   late DateTime? _end;
   late List<WorkoutSet> _sets;
 
-  /// The gym saved with the session. Seeded from the session itself, so saving
-  /// before [_gym] resolves keeps the original gym; only the picker changes it.
   int? _gymId;
   Gym? _gym;
   bool _gymLoaded = false;
@@ -49,8 +40,6 @@ class _SessionEditPageState extends State<SessionEditPage> {
   Map<int, String> _exerciseNames = const {};
   bool _didLoad = false;
 
-  /// Snapshot of the session as loaded; compared against the live draft to
-  /// detect unsaved changes when the user tries to leave without saving.
   _SessionDraftSnapshot? _initial;
 
   @override
@@ -62,7 +51,6 @@ class _SessionEditPageState extends State<SessionEditPage> {
     _end = widget.session.endTime;
     _gymId = widget.session.gymId;
     _sets = List.of(widget.session.sets);
-    // Rebuild on edits so the PopScope discard guard tracks changes.
     _title.addListener(() => setState(() {}));
     _initial = _snapshot(gymId: widget.session.gymId);
   }
@@ -81,7 +69,6 @@ class _SessionEditPageState extends State<SessionEditPage> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // RepositoryScope is an inherited widget, so read it after initState.
     if (!_didLoad) {
       _didLoad = true;
       _loadGym();
@@ -95,12 +82,6 @@ class _SessionEditPageState extends State<SessionEditPage> {
     super.dispose();
   }
 
-  /// A normalized copy of the current draft, used as the dirty-check
-  /// baseline. Normalization mirrors [_save] (trimmed title) so only
-  /// content differences read as unsaved changes.
-  ///
-  /// The draft's gym id comes from [_gym], which resolves asynchronously;
-  /// the baseline is therefore taken with the session's own [gymId].
   _SessionDraftSnapshot _snapshot({int? gymId}) => _SessionDraftSnapshot(
     title: _title.text.trim(),
     start: _start,
@@ -118,8 +99,6 @@ class _SessionEditPageState extends State<SessionEditPage> {
     ],
   );
 
-  /// True when the draft differs from what was loaded (see [_initial]):
-  /// title, start/end times, gym, or any set's fields.
   bool get _hasUnsavedChanges {
     final initial = _initial;
     if (initial == null) return false;
@@ -162,9 +141,6 @@ class _SessionEditPageState extends State<SessionEditPage> {
     });
   }
 
-  /// Applies the picked start time. The end time stays fixed, so editing the
-  /// start time changes the session duration (the user forgot to start but
-  /// remembered to finish).
   void _applyStart(DateTime picked) {
     setState(() {
       _start = picked;
@@ -228,9 +204,6 @@ class _SessionEditPageState extends State<SessionEditPage> {
   Widget build(BuildContext context) {
     final theme = context.theme;
     return PopScope(
-      // Guard back navigation (app-bar chevron and system back) so an edit
-      // with unsaved changes asks before being thrown away. Save pops with a
-      // result through _save, which is not intercepted.
       canPop: !_hasUnsavedChanges,
       onPopInvokedWithResult: (didPop, _) async {
         if (didPop) return;
@@ -401,7 +374,6 @@ class _SessionFieldsCard extends StatelessWidget {
   String _p(int v) => v.toString().padLeft(2, '0');
 }
 
-/// Set row in the editor; tapping opens the per-set dialog.
 class _EditSetRow extends StatelessWidget {
   const _EditSetRow({
     required this.name,
@@ -433,9 +405,6 @@ class _EditSetRow extends StatelessWidget {
   }
 }
 
-/// Immutable snapshot of the editor's draft, used as the dirty-check
-/// baseline (mirrors new_split_page.dart). Sets are deep copies so later
-/// edits cannot mutate the snapshot.
 final class _SessionDraftSnapshot {
   const _SessionDraftSnapshot({
     required this.title,
@@ -452,8 +421,6 @@ final class _SessionDraftSnapshot {
   final List<WorkoutSet> sets;
 }
 
-/// Date + time wheels in a dialog; returns the picked [DateTime] or null on
-/// cancel. Captures wheel changes in a local, so Save just pops with it.
 Future<DateTime?> _pickDateTime(
   BuildContext context,
   DateTime initial,
@@ -491,8 +458,6 @@ Future<DateTime?> _pickDateTime(
   );
 }
 
-/// Weight/reps/type editor for one logged set; returns the updated [WorkoutSet]
-/// or null on cancel.
 Future<WorkoutSet?> _editSetDialog(
   BuildContext context, {
   required WorkoutSet set,
@@ -523,8 +488,6 @@ class _EditSetDialogState extends State<_EditSetDialog> {
   @override
   void initState() {
     super.initState();
-    // context.read inside SettingsCubit.maybeOf works here, so the display-unit
-    // conversion is safe before the first frame.
     _prefilledWeight = formatDecimal(
       displayWeightOf(context, widget.initial.weight),
     );
@@ -544,8 +507,6 @@ class _EditSetDialogState extends State<_EditSetDialog> {
 
   @override
   Widget build(BuildContext context) {
-    // Scrollable like the app's reference EditGymDialog: weight/reps errors
-    // push content taller and the keyboard must not clip the actions.
     return AppDialog(
       title: 'Edit set',
       headerGap: 16,

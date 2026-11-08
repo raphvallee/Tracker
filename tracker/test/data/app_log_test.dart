@@ -1,6 +1,3 @@
-// Unit tests for the AppLog ring buffer + file mirror
-// (lib/data/services/app_log.dart). Pure Dart file I/O, no Isar/Flutter.
-
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -33,7 +30,7 @@ void main() {
   });
 
   test('entries logged before init land in the file after init', () async {
-    AppLog.reset(); // back to uninitialized
+    AppLog.reset();
     AppLog.error('test', 'early error');
     AppLog.init(tempDir.path);
     AppLog.error('test', 'late error');
@@ -54,7 +51,6 @@ void main() {
     final content = File('${tempDir.path}/tracker.log').readAsStringSync();
     final lines = content.trim().split('\n');
     expect(lines, hasLength(AppLog.maxLines));
-    // Newest entries survive; the oldest were evicted.
     expect(content, contains('line ${AppLog.maxLines + 24}'));
     expect(content, isNot(contains('line 0')));
   });

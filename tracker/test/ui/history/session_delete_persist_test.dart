@@ -30,11 +30,9 @@ void main() {
       await settleSessionFlow(tester);
       await settleSessionFlow(tester);
 
-      // The detail page popped back to the shell.
       expect(find.text('Delete session'), findsNothing);
       expect(find.text('Delete session?'), findsNothing);
 
-      // The delete reached the repository: the record is gone from Isar.
       final id = seeded.session.id;
       await waitForRealIo(
         tester,

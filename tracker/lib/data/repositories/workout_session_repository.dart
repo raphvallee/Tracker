@@ -3,8 +3,6 @@ import 'package:isar_community/isar.dart';
 import 'package:tracker/domain/models/workout_session.dart';
 import 'package:tracker/domain/models/workout_set.dart';
 
-/// Pages and cubits talk to these repositories, never to [Isar] directly.
-/// Each wraps the [Isar] collection query API for one entity.
 class WorkoutSessionRepository {
   WorkoutSessionRepository(this._isar);
 
@@ -13,7 +11,6 @@ class WorkoutSessionRepository {
   Future<List<WorkoutSession>> getAll() =>
       _isar.workoutSessions.where().sortByEndTime().findAll();
 
-  /// Returns completed sessions newest first, capped at [limit].
   Future<List<WorkoutSession>> getRecent({int limit = 5}) {
     if (limit < 1) {
       throw ArgumentError.value(limit, 'limit', 'must be at least 1');
@@ -27,7 +24,6 @@ class WorkoutSessionRepository {
         .findAll();
   }
 
-  /// Watches completed sessions newest first, capped at [limit].
   Stream<List<WorkoutSession>> watchRecent({int limit = 5}) {
     if (limit < 1) {
       throw ArgumentError.value(limit, 'limit', 'must be at least 1');
@@ -41,7 +37,6 @@ class WorkoutSessionRepository {
         .watch(fireImmediately: true);
   }
 
-  /// Returns sessions whose start date falls on [date], newest first.
   Future<List<WorkoutSession>> getForDate(DateTime date) {
     final start = DateTime(date.year, date.month, date.day);
     final end = start.add(const Duration(days: 1));
@@ -52,8 +47,6 @@ class WorkoutSessionRepository {
         .findAll();
   }
 
-  /// Returns sessions whose start time is within the inclusive [start, end]
-  /// range, newest first.
   Future<List<WorkoutSession>> getBetween(DateTime start, DateTime end) {
     if (end.isBefore(start)) {
       throw ArgumentError.value(end, 'end', 'must not be before start');
@@ -73,8 +66,6 @@ class WorkoutSessionRepository {
   Future<bool> delete(int id) =>
       _isar.writeTxn(() => _isar.workoutSessions.delete(id));
 
-  /// Number of sessions that logged at least one set of [exerciseId], used to
-  /// guard exercise deletion.
   Future<int> countLoggingSessions(int exerciseId) async {
     final sessions = await _isar.workoutSessions
         .filter()
