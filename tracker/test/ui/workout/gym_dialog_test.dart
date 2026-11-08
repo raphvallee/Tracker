@@ -43,4 +43,46 @@ void main() {
 
     expect(find.text(emptyError), findsNothing);
   });
+
+  group('promptGym', () {
+    final gyms = [
+      Gym(name: 'Home', isPrimary: true),
+      Gym(name: 'Commercial', order: 1),
+    ];
+
+    testWidgets('picking a gym returns it', (tester) async {
+      await pumpApp(tester);
+      final context = tester.element(find.byType(Navigator).first);
+      GymPick? pick;
+      unawaited(promptGym(context, gyms).then((r) => pick = r));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Commercial'));
+      await tester.pumpAndSettle();
+
+      expect(pick?.gym?.name, 'Commercial');
+    });
+
+    testWidgets('closing the picker without a choice returns no pick', (
+      tester,
+    ) async {
+      await pumpApp(tester);
+      final context = tester.element(find.byType(Navigator).first);
+      var completed = false;
+      GymPick? pick;
+      unawaited(
+        promptGym(context, gyms).then((r) {
+          completed = true;
+          pick = r;
+        }),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+
+      expect(completed, isTrue);
+      expect(pick, isNull);
+    });
+  });
 }

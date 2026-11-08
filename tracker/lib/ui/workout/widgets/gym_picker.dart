@@ -9,15 +9,16 @@ class NoGym {
   const NoGym();
 }
 
-Future<Gym?> promptGym(BuildContext context, List<Gym> gyms) async {
+/// Gym a new workout starts at. `gym` is null when no gym is saved.
+typedef GymPick = ({Gym? gym});
+
+/// Null when the picker closes without a choice, so the workout must not start.
+Future<GymPick?> promptGym(BuildContext context, List<Gym> gyms) async {
   if (gyms.length <= 1) {
-    return gyms.isEmpty ? null : gyms.first;
+    return (gym: gyms.isEmpty ? null : gyms.first);
   }
-  return showGymPicker(
-    context,
-    gyms,
-    isDismissible: false,
-  ).then((r) => r is Gym ? r : null);
+  final picked = await showGymPicker(context, gyms, isDismissible: false);
+  return picked is Gym ? (gym: picked) : null;
 }
 
 Future<Object?> showGymPicker(
