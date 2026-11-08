@@ -31,6 +31,7 @@ import 'package:tracker/ui/history/widgets/session_detail_page.dart';
 import 'package:tracker/ui/history/widgets/session_edit_page.dart';
 import 'package:tracker/ui/settings/view_models/settings_cubit.dart';
 import 'package:tracker/ui/settings/widgets/gyms_page.dart';
+import 'package:tracker/ui/settings/widgets/rep_defaults_dialogs.dart';
 import 'package:tracker/ui/settings/widgets/settings_page.dart';
 import 'package:tracker/ui/workout/view_models/workout_cubit.dart';
 import 'package:tracker/ui/workout/widgets/exercise_picker_page.dart';
@@ -365,6 +366,14 @@ Future<void> captureScreensAt(
   await openAndClose(
     'Gym picker sheet',
     () => promptGym(pageContext, fixtures.allGyms),
+  );
+  await openAndClose(
+    'Default reps dialog',
+    () => editDefaultRepsDialog(pageContext, initial: 10),
+  );
+  await openAndClose(
+    'Default rep range dialog',
+    () => editDefaultRepRangeDialog(pageContext, min: 8, max: 12),
   );
 
   await guarded('End-workout dialog', () async {

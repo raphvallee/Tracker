@@ -29,6 +29,7 @@ import 'package:tracker/ui/history/widgets/session_detail_page.dart';
 import 'package:tracker/ui/history/widgets/session_edit_page.dart';
 import 'package:tracker/ui/settings/view_models/settings_cubit.dart';
 import 'package:tracker/ui/settings/widgets/gyms_page.dart';
+import 'package:tracker/ui/settings/widgets/rep_defaults_dialogs.dart';
 import 'package:tracker/ui/settings/widgets/settings_page.dart';
 import 'package:tracker/ui/workout/view_models/workout_cubit.dart';
 import 'package:tracker/ui/workout/widgets/exercise_picker_page.dart';
@@ -301,6 +302,14 @@ void main() {
       await openAndClose(
         'Gym picker sheet',
         () => promptGym(pageContext, fixtures.allGyms),
+      );
+      await openAndClose(
+        'DefaultRepsDialog',
+        () => editDefaultRepsDialog(pageContext, initial: 10),
+      );
+      await openAndClose(
+        'DefaultRepRangeDialog',
+        () => editDefaultRepRangeDialog(pageContext, min: 8, max: 12),
       );
 
       _mark('End-workout dialog @ $label');
