@@ -553,6 +553,66 @@ class WorkoutCubit extends HydratedCubit<WorkoutState> {
     emit(state.copyWith(gymId: gym.id, gymName: gym.name));
   }
 
+  /// Add an exercise card to the session. Free workouts build their plan
+  /// this way, one picked exercise at a time, so the cards survive restarts
+  /// and restores. Returns false (and changes nothing) when the exercise is
+  /// already in the session.
+  bool addExercise({required int exerciseId, required String name}) {
+    final present =
+        state.plan.any((e) => e.exerciseId == exerciseId) ||
+        state.sets.any((s) => s.exerciseId == exerciseId);
+    if (present) return false;
+    emit(
+      state.copyWith(
+        plan: [
+          ...state.plan,
+          PlanExercise(
+            exerciseId: exerciseId,
+            name: name,
+            order: state.plan.length,
+          ),
+        ],
+      ),
+    );
+    return true;
+  }
+
+  /// Remove an exercise card and every set logged for it.
+  void removeExercise(int exerciseId) {
+    final plan = [
+      for (final e in state.plan)
+        if (e.exerciseId != exerciseId) e,
+    ];
+    final sets = [
+      for (final s in state.sets)
+        if (s.exerciseId != exerciseId) s,
+    ];
+    emit(
+      state.copyWith(
+        plan: [
+          for (var i = 0; i < plan.length; i++)
+            PlanExercise(
+              exerciseId: plan[i].exerciseId,
+              name: plan[i].name,
+              order: i,
+              sets: plan[i].sets,
+            ),
+        ],
+        sets: [
+          for (var i = 0; i < sets.length; i++)
+            ActiveSet(
+              exerciseId: sets[i].exerciseId,
+              exerciseName: sets[i].exerciseName,
+              weight: sets[i].weight,
+              reps: sets[i].reps,
+              type: sets[i].type,
+              order: i,
+            ),
+        ],
+      ),
+    );
+  }
+
   void logSet({
     required int exerciseId,
     required String exerciseName,
@@ -589,7 +649,7 @@ class WorkoutCubit extends HydratedCubit<WorkoutState> {
     emit(state.copyWith(sets: sets));
   }
 
-  void updateSet(int order, {double? weight, double? reps}) {
+  void updateSet(int order, {double? weight, double? reps, SetType? type}) {
     emit(
       state.copyWith(
         sets: [
@@ -600,7 +660,7 @@ class WorkoutCubit extends HydratedCubit<WorkoutState> {
                 exerciseName: set.exerciseName,
                 weight: weight ?? set.weight,
                 reps: reps ?? set.reps,
-                type: set.type,
+                type: type ?? set.type,
                 order: set.order,
               )
             else

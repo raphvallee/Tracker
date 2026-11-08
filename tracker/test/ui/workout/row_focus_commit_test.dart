@@ -71,4 +71,51 @@ void main() {
     expect(cubit.state.sets.single.reps, 12);
     expect(find.byType(FTextField), findsNWidgets(6));
   });
+
+  String textOf(WidgetTester tester, int index) =>
+      tester.widget<EditableText>(field(index)).controller.text;
+
+  testWidgets('a row filled out of order logs into the first open row', (
+    tester,
+  ) async {
+    final cubit = await pumpPlan(tester);
+
+    await tester.enterText(field(4), '80');
+    await tester.enterText(field(5), '6');
+    await tester.tap(find.text('Bench Press'));
+    await tester.pumpAndSettle();
+
+    expect(cubit.state.sets, hasLength(1));
+    expect(find.byType(FTextField), findsNWidgets(6));
+    expect(
+      [for (var i = 0; i < 6; i++) textOf(tester, i)],
+      ['80', '6', '', '', '', ''],
+    );
+  });
+
+  testWidgets('clearing a logged row leaves no stale copy behind', (
+    tester,
+  ) async {
+    final cubit = await pumpPlan(tester);
+    for (final weight in [60.0, 70.0, 80.0]) {
+      cubit.logSet(
+        exerciseId: 1,
+        exerciseName: 'Bench Press',
+        weight: weight,
+        reps: 5,
+      );
+    }
+    await tester.pumpAndSettle();
+
+    await tester.enterText(field(2), '');
+    await tester.enterText(field(3), '');
+    await tester.tap(find.text('Bench Press'));
+    await tester.pumpAndSettle();
+
+    expect(cubit.state.sets.map((s) => s.weight).toList(), [60, 80]);
+    expect(
+      [for (var i = 0; i < 6; i++) textOf(tester, i)],
+      ['60', '5', '80', '5', '', ''],
+    );
+  });
 }
