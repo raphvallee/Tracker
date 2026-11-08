@@ -3,13 +3,13 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:forui/forui.dart';
 import 'package:tracker/domain/models/rep_mode.dart';
 import 'package:tracker/domain/models/weight_unit.dart';
-import 'package:tracker/utils/form_validators.dart';
 
 import 'package:tracker/ui/core/ui/custom_app_bar.dart';
 import 'package:tracker/ui/core/ui/custom_route.dart';
 import 'package:tracker/ui/core/ui/keyboard_inset.dart';
 import 'package:tracker/ui/core/ui/max_width.dart';
 import 'package:tracker/ui/settings/widgets/gyms_page.dart';
+import 'package:tracker/ui/settings/widgets/rep_defaults_dialogs.dart';
 import 'package:tracker/ui/settings/view_models/settings_cubit.dart';
 
 const EdgeInsets _kSettingsRowPadding = EdgeInsets.symmetric(
@@ -105,19 +105,10 @@ class SettingsPage extends StatelessWidget {
               color: context.theme.colors.mutedForeground,
             ),
           ),
-          suffix: SizedBox(
-            width: 120,
-            child: FSelect<WeightUnit>(
-              items: {for (final unit in WeightUnit.values) unit.symbol: unit},
-              control: FSelectControl<WeightUnit>.lifted(
-                value: value,
-                onChange: (unit) {
-                  if (unit != null) {
-                    onChanged(unit);
-                  }
-                },
-              ),
-            ),
+          suffix: _MenuSelect<WeightUnit>(
+            options: {for (final unit in WeightUnit.values) unit.symbol: unit},
+            value: value,
+            onChanged: onChanged,
           ),
         ),
       ),
@@ -140,25 +131,14 @@ class SettingsPage extends StatelessWidget {
               color: context.theme.colors.mutedForeground,
             ),
           ),
-          suffix: SizedBox(
-            width: 140,
-            child: FSelect<FreeStartPlacement>(
-              items: const {
-                'Before splits': FreeStartPlacement.before,
-                'After splits': FreeStartPlacement.after,
-                'Hidden': FreeStartPlacement.disabled,
-              },
-              control: FSelectControl<FreeStartPlacement>.lifted(
-                value: state.freeStartPlacement,
-                onChange: (placement) {
-                  if (placement != null) {
-                    context.read<SettingsCubit>().setFreeStartPlacement(
-                      placement,
-                    );
-                  }
-                },
-              ),
-            ),
+          suffix: _MenuSelect<FreeStartPlacement>(
+            options: const {
+              'Before splits': FreeStartPlacement.before,
+              'After splits': FreeStartPlacement.after,
+              'Hidden': FreeStartPlacement.disabled,
+            },
+            value: state.freeStartPlacement,
+            onChanged: context.read<SettingsCubit>().setFreeStartPlacement,
           ),
         ),
       ),
@@ -209,66 +189,81 @@ class SettingsPage extends StatelessWidget {
   }
 }
 
-class _WorkoutDefaultsSection extends StatefulWidget {
+/// A dropdown for a settings row: a button showing the selected option that
+/// opens a menu of the options. Unlike [FSelect] it builds no text field,
+/// which made Settings' first frame several times slower.
+class _MenuSelect<T> extends StatelessWidget {
+  const _MenuSelect({
+    required this.options,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final Map<String, T> options;
+  final T value;
+  final ValueChanged<T> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = options.entries.firstWhere(
+      (option) => option.value == value,
+    );
+    return FPopoverMenu.tiles(
+      menuAnchor: .topRight,
+      childAnchor: .bottomRight,
+      // Built when the menu opens, not with the page.
+      menuBuilder: (context, controller, _) => [
+        .group(
+          children: [
+            for (final MapEntry(key: label, value: option) in options.entries)
+              .tile(
+                title: Text(label),
+                selected: option == value,
+                suffix: option == value
+                    ? const Icon(FLucideIcons.check, size: 16)
+                    : null,
+                onPress: () {
+                  controller.hide();
+                  if (option != value) onChanged(option);
+                },
+              ),
+          ],
+        ),
+      ],
+      builder: (_, controller, _) => FButton(
+        variant: .outline,
+        mainAxisSize: .min,
+        onPress: controller.toggle,
+        suffix: const Icon(FLucideIcons.chevronDown, size: 16),
+        child: Text(selected.key),
+      ),
+    );
+  }
+}
+
+class _WorkoutDefaultsSection extends StatelessWidget {
   const _WorkoutDefaultsSection({required this.state});
 
   final SettingsState state;
 
-  @override
-  State<_WorkoutDefaultsSection> createState() =>
-      _WorkoutDefaultsSectionState();
-}
-
-class _WorkoutDefaultsSectionState extends State<_WorkoutDefaultsSection> {
-  late final TextEditingController _reps;
-  late final TextEditingController _rangeMin;
-  late final TextEditingController _rangeMax;
-  String? _repsError;
-  String? _minError;
-  String? _maxError;
-
-  @override
-  void initState() {
-    super.initState();
-    final state = SettingsCubit.maybeOf(context)?.state ?? widget.state;
-    _reps = TextEditingController(text: '${state.defaultReps}');
-    _rangeMin = TextEditingController(text: '${state.defaultRepRangeMin}');
-    _rangeMax = TextEditingController(text: '${state.defaultRepRangeMax}');
+  Future<void> _editReps(BuildContext context) async {
+    final cubit = context.read<SettingsCubit>();
+    final reps = await editDefaultRepsDialog(
+      context,
+      initial: state.defaultReps,
+    );
+    if (reps != null) cubit.setDefaultReps(reps);
   }
 
-  @override
-  void dispose() {
-    _reps.dispose();
-    _rangeMin.dispose();
-    _rangeMax.dispose();
-    super.dispose();
-  }
-
-  void _commitReps(TextEditingValue value) {
-    final error = requiredInt(value.text);
-    setState(() => _repsError = error);
-    if (error == null) {
-      context.read<SettingsCubit>().setDefaultReps(
-        int.parse(value.text.trim()),
-      );
-    }
-  }
-
-  void _commitRange() {
-    final minError = requiredInt(_rangeMin.text);
-    final maxError = requiredInt(_rangeMax.text);
-    var crossedError = maxError;
-    final min = int.tryParse(_rangeMin.text.trim());
-    final max = int.tryParse(_rangeMax.text.trim());
-    if (minError == null && maxError == null && min! > max!) {
-      crossedError = 'Must be at least the min';
-    }
-    setState(() {
-      _minError = minError;
-      _maxError = crossedError;
-    });
-    if (minError == null && crossedError == null) {
-      context.read<SettingsCubit>().setDefaultRepRange(min: min!, max: max!);
+  Future<void> _editRange(BuildContext context) async {
+    final cubit = context.read<SettingsCubit>();
+    final range = await editDefaultRepRangeDialog(
+      context,
+      min: state.defaultRepRangeMin,
+      max: state.defaultRepRangeMax,
+    );
+    if (range case (final min, final max)) {
+      cubit.setDefaultRepRange(min: min, max: max);
     }
   }
 
@@ -314,23 +309,13 @@ class _WorkoutDefaultsSectionState extends State<_WorkoutDefaultsSection> {
                       ],
                     ),
                   ),
-                  IntrinsicWidth(
-                    child: FSelect<RepMode>(
-                      items: const {
-                        'Rep range': RepMode.range,
-                        'Fixed reps': RepMode.fixed,
-                      },
-                      control: FSelectControl<RepMode>.lifted(
-                        value: widget.state.defaultRepMode,
-                        onChange: (mode) {
-                          if (mode != null) {
-                            context.read<SettingsCubit>().setDefaultRepMode(
-                              mode,
-                            );
-                          }
-                        },
-                      ),
-                    ),
+                  _MenuSelect<RepMode>(
+                    options: const {
+                      'Rep range': RepMode.range,
+                      'Fixed reps': RepMode.fixed,
+                    },
+                    value: state.defaultRepMode,
+                    onChanged: context.read<SettingsCubit>().setDefaultRepMode,
                   ),
                 ],
               ),
@@ -352,18 +337,9 @@ class _WorkoutDefaultsSectionState extends State<_WorkoutDefaultsSection> {
                   color: context.theme.colors.mutedForeground,
                 ),
               ),
-              suffix: SizedBox(
-                width: 120,
-                child: FTextField(
-                  control: FTextFieldControl.managed(
-                    controller: _reps,
-                    onChange: _commitReps,
-                  ),
-                  keyboardType: TextInputType.number,
-                  label: const Text('Reps'),
-                  error: _repsError == null ? null : Text(_repsError!),
-                ),
-              ),
+              details: Text('${state.defaultReps}'),
+              suffix: const Icon(FLucideIcons.chevronRight, size: 16),
+              onPress: () => _editReps(context),
             ),
           ),
         ),
@@ -382,38 +358,11 @@ class _WorkoutDefaultsSectionState extends State<_WorkoutDefaultsSection> {
                   color: context.theme.colors.mutedForeground,
                 ),
               ),
-              suffix: SizedBox(
-                width: 150,
-                child: Row(
-                  children: [
-                    SizedBox(
-                      width: 70,
-                      child: FTextField(
-                        control: FTextFieldControl.managed(
-                          controller: _rangeMin,
-                          onChange: (_) => _commitRange(),
-                        ),
-                        keyboardType: TextInputType.number,
-                        label: const Text('Min'),
-                        error: _minError == null ? null : Text(_minError!),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    SizedBox(
-                      width: 70,
-                      child: FTextField(
-                        control: FTextFieldControl.managed(
-                          controller: _rangeMax,
-                          onChange: (_) => _commitRange(),
-                        ),
-                        keyboardType: TextInputType.number,
-                        label: const Text('Max'),
-                        error: _maxError == null ? null : Text(_maxError!),
-                      ),
-                    ),
-                  ],
-                ),
+              details: Text(
+                '${state.defaultRepRangeMin}-${state.defaultRepRangeMax}',
               ),
+              suffix: const Icon(FLucideIcons.chevronRight, size: 16),
+              onPress: () => _editRange(context),
             ),
           ),
         ),

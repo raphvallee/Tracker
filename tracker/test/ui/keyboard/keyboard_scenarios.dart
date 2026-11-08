@@ -170,6 +170,10 @@ Future<void> settingsRepRangeScenario(
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 350));
   await tester.pumpAndSettle();
+  await tester.ensureVisible(find.text('Default rep range'));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('Default rep range'));
+  await tester.pumpAndSettle();
 
   final minField = fieldWithLabel('Min');
   final maxField = fieldWithLabel('Max');
