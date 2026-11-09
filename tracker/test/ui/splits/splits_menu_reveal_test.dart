@@ -53,7 +53,9 @@ void main() {
         .onChange!(3);
     await pumpUntil(tester, find.text('Split 0'));
 
-    final position = tester
+    // Read fresh each time: the scrollable swaps its position object when its
+    // dependencies change.
+    ScrollPosition position() => tester
         .state<ScrollableState>(
           find
               .descendant(
@@ -63,26 +65,56 @@ void main() {
               .first,
         )
         .position;
-    final fullExtent = position.maxScrollExtent;
+    final fullExtent = position().maxScrollExtent;
     expect(fullExtent, greaterThan(0), reason: 'the list must scroll');
-    position.jumpTo(fullExtent);
-    await pumpRounds(tester, 2);
-
-    // The last split's menu opens below its button, past the list's end.
-    await tester.tap(fButtonByTooltip('Split options').last);
-    await pumpRounds(tester, 8);
     final navTop = tester.getTopLeft(find.byType(FBottomNavigationBar)).dy;
     final delete = find.ancestor(
       of: find.text('Delete'),
       matching: find.byType(FTile),
     );
-    expect(tester.getBottomLeft(delete).dy, lessThanOrEqualTo(navTop - 8));
-    expect(position.pixels, greaterThan(fullExtent), reason: 'made room');
+    Finder button(int split) => fButtonByTooltip('Split options').at(split);
 
-    // Closed: the room shrinks away again.
-    await tester.tapAt(const Offset(400, 40));
+    Future<void> closeMenu() async {
+      await tester.tapAt(const Offset(400, 40));
+      await pumpRounds(tester, 8);
+      expect(find.text('Delete'), findsNothing);
+    }
+
+    // How far below its button a menu ends, measured where it fits, on a
+    // split that is not current (the current one has no Make current row).
+    await tester.tap(button(1));
     await pumpRounds(tester, 8);
-    expect(find.text('Delete'), findsNothing);
-    expect(position.maxScrollExtent, moreOrLessEquals(fullExtent));
+    expect(find.text('Make current'), findsOneWidget);
+    final reach =
+        tester.getBottomLeft(delete).dy - tester.getBottomLeft(button(1)).dy;
+    expect(position().pixels, 0, reason: 'nothing to reveal up there');
+    await closeMenu();
+
+    // A split scrolled so its menu would end 30px into the nav bar: still
+    // on screen, so the menu opens downwards, under the bar. Picked with
+    // list to spare below it, so revealing the menu is a plain scroll (the
+    // short-list test covers making room). Measured, not hard-coded: text
+    // metrics vary by platform.
+    double shiftFor(int split) =>
+        tester.getBottomLeft(button(split)).dy + reach - (navTop + 30);
+    final split = [for (var i = 8; i > 1; i--) i]
+        .firstWhere((i) => shiftFor(i) >= 0 && shiftFor(i) + 100 <= fullExtent);
+    final shift = shiftFor(split);
+    position().jumpTo(shift);
+    await pumpRounds(tester, 2);
+    expect(tester.getBottomLeft(button(split)).dy + reach, navTop + 30);
+
+    await tester.tap(button(split));
+    await pumpRounds(tester, 8);
+    expect(tester.getBottomLeft(delete).dy, lessThanOrEqualTo(navTop - 8));
+    expect(position().pixels, greaterThan(shift), reason: 'scrolled it clear');
+    expect(
+      position().maxScrollExtent,
+      fullExtent,
+      reason: 'the list had the room already',
+    );
+
+    await closeMenu();
+    expect(position().maxScrollExtent, moreOrLessEquals(fullExtent));
   });
 }

@@ -47,17 +47,9 @@ void main() {
         .onChange!(3);
     await pumpUntil(tester, find.text('Split 2'));
 
-    // A screen just tall enough for the splits: the last one sits right
-    // above the nav bar, its menu would open under it.
-    final addDayBottom = tester.getBottomLeft(find.text('Add day').last).dy;
-    var navTop = tester.getTopLeft(find.byType(FBottomNavigationBar)).dy;
-    tester.view.physicalSize = Size(
-      800,
-      tester.view.physicalSize.height - (navTop - (addDayBottom + 80)),
-    );
-    await pumpRounds(tester, 2);
-    navTop = tester.getTopLeft(find.byType(FBottomNavigationBar)).dy;
-    final position = tester
+    // Read fresh each time: the scrollable swaps its position object when its
+    // dependencies change.
+    ScrollPosition position() => tester
         .state<ScrollableState>(
           find
               .descendant(
@@ -67,20 +59,44 @@ void main() {
               .first,
         )
         .position;
-    expect(position.maxScrollExtent, 0, reason: 'nothing to scroll yet');
-
-    await tester.tap(fButtonByTooltip('Split options').last);
-    await pumpRounds(tester, 8);
+    final menu = fButtonByTooltip('Split options').last;
     final delete = find.ancestor(
       of: find.text('Delete'),
       matching: find.byType(FTile),
     );
-    expect(tester.getBottomLeft(delete).dy, lessThanOrEqualTo(navTop - 8));
-    expect(position.pixels, greaterThan(0), reason: 'scrolled up');
+    Future<void> closeMenu() async {
+      await tester.tapAt(const Offset(400, 40));
+      await pumpRounds(tester, 8);
+      expect(find.text('Delete'), findsNothing);
+    }
 
-    await tester.tapAt(const Offset(400, 40));
+    // How far below its button the last split's menu ends, measured while
+    // the screen is tall enough for it.
+    await tester.tap(menu);
     await pumpRounds(tester, 8);
-    expect(find.text('Delete'), findsNothing);
-    expect(position.maxScrollExtent, 0, reason: 'the room is gone');
+    final reach =
+        tester.getBottomLeft(delete).dy - tester.getBottomLeft(menu).dy;
+    await closeMenu();
+
+    // A screen just short enough that the menu would end 30px into the nav
+    // bar, still on screen: it opens downwards, under the bar. Measured, not
+    // hard-coded: text metrics vary by platform.
+    final navAt = tester.getBottomLeft(menu).dy + reach - 30;
+    final navTop = tester.getTopLeft(find.byType(FBottomNavigationBar)).dy;
+    tester.view.physicalSize = Size(
+      800,
+      tester.view.physicalSize.height - (navTop - navAt),
+    );
+    await pumpRounds(tester, 2);
+    expect(tester.getTopLeft(find.byType(FBottomNavigationBar)).dy, navAt);
+    expect(position().maxScrollExtent, 0, reason: 'nothing to scroll yet');
+
+    await tester.tap(menu);
+    await pumpRounds(tester, 8);
+    expect(tester.getBottomLeft(delete).dy, lessThanOrEqualTo(navAt - 8));
+    expect(position().pixels, greaterThan(0), reason: 'scrolled up');
+
+    await closeMenu();
+    expect(position().maxScrollExtent, 0, reason: 'the room is gone');
   });
 }
