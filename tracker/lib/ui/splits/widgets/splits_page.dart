@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -36,8 +37,21 @@ class SplitsPage extends StatefulWidget {
   State<SplitsPage> createState() => _SplitsPageState();
 }
 
-class _SplitsPageState extends State<SplitsPage> {
+class _SplitsPageState extends State<SplitsPage>
+    with SingleTickerProviderStateMixin {
   final List<StreamSubscription<Object?>> _subscriptions = [];
+
+  /// Space past the last split, made while a menu needs it to scroll clear
+  /// of the bottom bar.
+  late final AnimationController _room = AnimationController.unbounded(
+    vsync: this,
+  );
+
+  /// Each split menu's last row, by split id: measured when the menu opens.
+  final Map<int, GlobalKey> _menuEnds = {};
+
+  /// The room's box: its top is where the splits end.
+  final GlobalKey _roomKey = GlobalKey(debugLabel: 'splits room');
   List<WorkoutSplit>? _splits;
 
   /// Null until first loaded: they order the list, which would otherwise
@@ -92,7 +106,75 @@ class _SplitsPageState extends State<SplitsPage> {
     for (final subscription in _subscriptions) {
       subscription.cancel();
     }
+    _room.dispose();
     super.dispose();
+  }
+
+  /// A split's menu opens below its button and the page knows nothing of it:
+  /// once it has grown in (the menu reports shown after its entrance), scroll
+  /// the page up until its last row clears the bottom of the list, making
+  /// room past the last split when that is short.
+  void _revealMenu(BuildContext section, GlobalKey menuEnd) {
+    // Measured once this frame lays the menu out at full size.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !section.mounted) return;
+      final scrollable = Scrollable.maybeOf(section);
+      final viewport = scrollable?.context.findRenderObject();
+      final row = _tileBox(menuEnd.currentContext);
+      if (scrollable == null || viewport is! RenderBox || row == null) return;
+      final menuBottom =
+          row.localToGlobal(Offset(0, row.size.height)).dy + _menuMargin;
+      final visibleBottom = viewport
+          .localToGlobal(Offset(0, viewport.size.height))
+          .dy;
+      final overflow = menuBottom - visibleBottom;
+      if (overflow <= 0) return;
+      final position = scrollable.position;
+      final target = position.pixels + overflow;
+      void scroll() {
+        if (!position.hasPixels) return;
+        position.animateTo(
+          target.clamp(position.minScrollExtent, position.maxScrollExtent),
+          duration: const Duration(milliseconds: 280),
+          curve: Curves.easeOutCubic,
+        );
+      }
+
+      if (target <= position.maxScrollExtent) return scroll();
+      // Enough room for the end of the splits to scroll [overflow] up and
+      // still reach the bottom of the list. Measured from where they end:
+      // splits that fill less than a screen leave a gap no scroll can use.
+      final room = _roomKey.currentContext?.findRenderObject();
+      if (room is! RenderBox || !room.hasSize) return;
+      final splitsEnd = room.localToGlobal(Offset.zero).dy;
+      _room.value = math.max(_room.value, visibleBottom + overflow - splitsEnd);
+      // The room lays out with the next frame: scroll after it.
+      WidgetsBinding.instance.addPostFrameCallback((_) => scroll());
+    });
+  }
+
+  /// The menu closed: let the room it made shrink away.
+  void _releaseRoom() {
+    if (_room.value <= 0) return;
+    _room.animateTo(
+      0,
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  /// Below the menu's last row: its group's padding and some air.
+  static const _menuMargin = 16.0;
+
+  static RenderBox? _tileBox(BuildContext? context) {
+    RenderBox? box;
+    context?.visitAncestorElements((element) {
+      if (element.widget is! FTile) return true;
+      final object = element.findRenderObject();
+      if (object is RenderBox && object.hasSize) box = object;
+      return false;
+    });
+    return box;
   }
 
   @override
@@ -140,6 +222,12 @@ class _SplitsPageState extends State<SplitsPage> {
                                       currentId: ordered.first.id,
                                       lastTrained: lastTrained[split.id],
                                       names: _names,
+                                      menuEnd: _menuEnds.putIfAbsent(
+                                        split.id,
+                                        GlobalKey.new,
+                                      ),
+                                      onMenuShown: _revealMenu,
+                                      onMenuHidden: _releaseRoom,
                                     ),
                                 ],
                               );
@@ -147,6 +235,13 @@ class _SplitsPageState extends State<SplitsPage> {
                           ),
                     ),
             ),
+          ),
+        ),
+        SliverToBoxAdapter(
+          child: AnimatedBuilder(
+            animation: _room,
+            builder: (context, _) =>
+                SizedBox(key: _roomKey, height: _room.value),
           ),
         ),
       ],
@@ -207,6 +302,9 @@ class _SplitSection extends StatelessWidget {
     required this.currentId,
     required this.lastTrained,
     required this.names,
+    required this.menuEnd,
+    required this.onMenuShown,
+    required this.onMenuHidden,
   });
 
   final WorkoutSplit split;
@@ -215,6 +313,11 @@ class _SplitSection extends StatelessWidget {
   final int currentId;
   final DateTime? lastTrained;
   final Map<int, String> names;
+
+  /// Keys the menu's last row, so the page can scroll it into view.
+  final GlobalKey menuEnd;
+  final void Function(BuildContext section, GlobalKey menuEnd) onMenuShown;
+  final VoidCallback onMenuHidden;
 
   bool get isCurrent => split.id == currentId;
 
@@ -302,6 +405,10 @@ class _SplitSection extends StatelessWidget {
   Widget _menu(BuildContext context, SplitDraft draft) {
     final destructive = context.theme.colors.destructive;
     return FPopoverMenu.tiles(
+      control: .managed(
+        onChange: (shown) =>
+            shown ? onMenuShown(context, menuEnd) : onMenuHidden(),
+      ),
       menuAnchor: .topRight,
       childAnchor: .bottomRight,
       menuBuilder: (menuContext, controller, _) => [
@@ -334,7 +441,11 @@ class _SplitSection extends StatelessWidget {
             ),
             .tile(
               prefix: Icon(FLucideIcons.trash2, color: destructive),
-              title: Text('Delete', style: TextStyle(color: destructive)),
+              title: Text(
+                'Delete',
+                key: menuEnd,
+                style: TextStyle(color: destructive),
+              ),
               onPress: () {
                 controller.hide();
                 _onAction(context, _SplitAction.delete, draft);

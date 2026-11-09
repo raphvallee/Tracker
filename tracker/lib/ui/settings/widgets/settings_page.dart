@@ -124,7 +124,7 @@ class SettingsPage extends StatelessWidget {
                           FLucideIcons.gauge,
                           color: context.theme.colors.primary,
                         ),
-                        title: const Text('Effort'),
+                        title: const Text('Set Effort Rating'),
                         subtitle: Text(
                           'RPE (exertion) or RIR (reps in reserve), 0 to 10',
                           style: context.theme.typography.body.xs.copyWith(
