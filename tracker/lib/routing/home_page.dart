@@ -5,7 +5,6 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart' show SystemNavigator;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:forui/forui.dart';
-import 'package:tracker/ui/core/themes/accents.dart';
 import 'package:tracker/ui/workout/view_models/workout_cubit.dart';
 import 'package:tracker/routing/tab_navigation.dart';
 
@@ -197,28 +196,18 @@ class _HomePageState extends State<HomePage> {
                   previous.isInProgress != current.isInProgress ||
                   previous.startTime != current.startTime,
               builder: (context, state) {
-                // While a workout runs the tab shows its live time, in the
-                // live accent, from every tab.
+                // While a workout runs the tab shows its live time, from
+                // every tab; like any tab it is colored only when selected.
                 final start = state.isInProgress ? state.startTime : null;
-                final accent = TrackerAccents.of(context).live;
                 return FBottomNavigationBarItem(
                   key: const ValueKey('workout-tab'),
                   icon: Transform.translate(
                     offset: const Offset(0, -6),
-                    child: Icon(
-                      FLucideIcons.dumbbell,
-                      color: start == null ? null : accent,
-                    ),
+                    child: const Icon(FLucideIcons.dumbbell),
                   ),
                   label: start == null
                       ? const Text('Workout')
-                      : ElapsedClock(
-                          start: start,
-                          style: TextStyle(
-                            color: accent,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
+                      : ElapsedClock(start: start),
                   semanticsLabel: start == null
                       ? 'Workout'
                       : 'Workout in progress',

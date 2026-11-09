@@ -380,9 +380,7 @@ void main() {
       expect(labelled('Set 1 RIR, not rated'), findsOneWidget);
     });
 
-    testWidgets('swiping a logged set away deletes it after confirming', (
-      tester,
-    ) async {
+    testWidgets('a logged set goes in two swipes, never one', (tester) async {
       final cubit = await pumpPush(tester);
       cubit.logSet(
         exerciseId: 1,
@@ -398,22 +396,37 @@ void main() {
       );
       await openExercise(tester, 'Bench Press');
 
-      await tester.timedDrag(
-        weightField(0),
-        const Offset(-700, 0),
-        const Duration(milliseconds: 300),
-      );
+      Future<void> swipe() async {
+        await tester.timedDrag(
+          weightField(0),
+          const Offset(-700, 0),
+          const Duration(milliseconds: 300),
+        );
+        await tester.pumpAndSettle();
+      }
+
+      // However far it goes, one swipe only opens the row on Delete.
+      await swipe();
+      expect(cubit.state.sets, hasLength(2));
+      expect(find.text('Delete'), findsOneWidget);
+      // A tap on the row closes it again.
+      await tester.tap(weightField(0), warnIfMissed: false);
       await tester.pumpAndSettle();
-      expect(find.text('Delete this set?'), findsOneWidget);
-      await tester.tap(
-        find.descendant(
-          of: find.byType(FDialog),
-          matching: find.text('Delete'),
-        ),
-      );
-      await tester.pumpAndSettle();
+      expect(find.text('Delete'), findsNothing);
+      expect(cubit.state.sets, hasLength(2));
+
+      // Two swipes delete it, no dialog.
+      await swipe();
+      await swipe();
+      expect(find.byType(FDialog), findsNothing);
       expect(cubit.state.sets.single.weight, 65);
       expect(textIn(tester, weightField(0)), '65');
+
+      // The revealed Delete is the other second step.
+      await swipe();
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+      expect(cubit.state.sets, isEmpty);
     });
 
     testWidgets('Remove from workout leaves the page', (tester) async {

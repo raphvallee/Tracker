@@ -2,6 +2,7 @@
 // flutter_tester process with a fresh libisar native worker pool (see
 // docs/TESTING_ISAR_CI.md).
 
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forui/forui.dart';
 import 'package:hydrated_bloc/hydrated_bloc.dart';
@@ -61,17 +62,17 @@ void main() {
     await pumpUntil(tester, find.text('Pull'));
     expect(find.text('2 days, not trained yet'), findsOneWidget);
 
-    // Renaming lands in the draft, not in the database.
+    // Renaming edits the name in place and lands in the draft, not in the
+    // database.
     await tester.tap(fButtonByTooltip('Split options').first);
     await pumpRounds(tester, 3);
     await tester.tap(find.text('Rename'));
-    await pumpUntil(tester, find.text('Split name'));
-    await pumpRounds(tester, 3);
-    await tester.enterText(
-      find.widgetWithText(FTextField, 'Split name'),
-      'Push Pull Legs',
-    );
-    await tester.tap(find.text('Done'));
+    await pumpRounds(tester, 4);
+    final field = find.byType(TextField);
+    expect(field, findsOneWidget);
+    expect(tester.testTextInput.isVisible, isTrue, reason: 'keyboard up');
+    await tester.enterText(field, 'Push Pull Legs');
+    await tester.tap(fButtonByTooltip('Done renaming'));
     await pumpUntil(tester, find.text('1 unsaved change'));
     await pumpRounds(tester, 4);
     expect(find.text('Push Pull Legs'), findsOneWidget);

@@ -18,6 +18,7 @@ import 'package:tracker/ui/core/ui/icon_button.dart';
 import 'package:tracker/ui/core/ui/keyboard_inset.dart';
 import 'package:tracker/ui/core/ui/max_width.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
+import 'package:tracker/ui/core/ui/swipe_to_delete.dart';
 import 'package:tracker/ui/core/ui/weight_format.dart';
 import 'package:tracker/ui/splits/view_models/split_drafts_cubit.dart';
 import 'package:tracker/ui/workout/widgets/exercise_picker_page.dart';
@@ -405,11 +406,18 @@ class _SplitDayEditorPageState extends State<SplitDayEditorPage> {
               _editDay((day) => day.reorderExercise(oldIndex, newIndex)),
           children: <Widget>[
             for (final (k, exercise) in day.exercises.indexed)
-              Padding(
+              // Two swipes left remove the exercise: the first only opens
+              // it on Delete. A swipe on a set chip stays the chip's.
+              SwipeToDelete(
                 key: ValueKey(
                   'day-exercise-${exercise.origin ?? 'new'}-'
                   '${exercise.exerciseId}-$k',
                 ),
+                canDelete: true,
+                onDelete: () => _editDay((day) => day.removeExercise(k)),
+                surface: theme.colors.background,
+                // Over the grip, a drag reorders instead.
+                ignoreFromStart: 40,
                 padding: const EdgeInsets.only(bottom: 8),
                 child: _ExerciseBlock(
                   index: k,
@@ -427,6 +435,10 @@ class _SplitDayEditorPageState extends State<SplitDayEditorPage> {
                     ),
                   ),
                   onRemove: () => _editDay((day) => day.removeExercise(k)),
+                  onRemoveSet: (set) => _editDay(
+                    (day) =>
+                        day.updateExercise(k, (item) => item.removeSet(set)),
+                  ),
                 ),
               ),
           ],
@@ -458,6 +470,7 @@ class _ExerciseBlock extends StatelessWidget {
     required this.onSet,
     required this.onAddSet,
     required this.onRemove,
+    required this.onRemoveSet,
   });
 
   final int index;
@@ -469,6 +482,9 @@ class _ExerciseBlock extends StatelessWidget {
   final void Function(int set) onSet;
   final VoidCallback onAddSet;
   final VoidCallback onRemove;
+
+  /// Removes a set; an exercise keeps at least one.
+  final void Function(int set) onRemoveSet;
 
   @override
   Widget build(BuildContext context) {
@@ -564,11 +580,16 @@ class _ExerciseBlock extends StatelessWidget {
             child: _SetGrid(
               children: <Widget>[
                 for (final (j, set) in exercise.sets.indexed)
-                  _SetChip(
-                    target: set,
-                    setNumber: j + 1,
-                    changed: changedSet(j),
-                    onPress: () => onSet(j),
+                  // Two swipes left delete it: the first only arms it.
+                  SwipeToDeleteChip(
+                    canDelete: exercise.sets.length > 1,
+                    onDelete: () => onRemoveSet(j),
+                    child: _SetChip(
+                      target: set,
+                      setNumber: j + 1,
+                      changed: changedSet(j),
+                      onPress: () => onSet(j),
+                    ),
                   ),
                 _AddSetChip(onPress: onAddSet),
               ],

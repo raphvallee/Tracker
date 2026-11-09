@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:forui/forui.dart';
 import 'package:tracker/data/services/app_log.dart';
@@ -14,10 +15,13 @@ import 'package:tracker/ui/core/ui/app_dialog.dart';
 import 'package:tracker/ui/core/ui/custom_app_bar.dart';
 import 'package:tracker/ui/core/ui/custom_route.dart';
 import 'package:tracker/ui/core/ui/icon_button.dart';
+import 'package:tracker/ui/core/ui/keyboard_inset.dart';
 import 'package:tracker/ui/core/ui/max_width.dart';
+import 'package:tracker/ui/core/ui/peek.dart';
 import 'package:tracker/ui/core/ui/relative_dates.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
 import 'package:tracker/ui/core/ui/sliding_column.dart';
+import 'package:tracker/ui/core/ui/swipe_to_delete.dart';
 import 'package:tracker/ui/core/ui/weight_format.dart';
 import 'package:tracker/ui/settings/view_models/settings_cubit.dart';
 import 'package:tracker/ui/splits/view_models/split_drafts_cubit.dart';
@@ -181,6 +185,10 @@ class _SplitsPageState extends State<SplitsPage>
   Widget build(BuildContext context) {
     final splits = _splits;
     final visits = _visits;
+    // Room to scroll a name being typed above the keyboard.
+    final keyboard = keyboardInsetOf(context) > 0
+        ? keyboardClearanceOf(context)
+        : 0.0;
     return CustomScrollView(
       slivers: <Widget>[
         CustomAppBar(
@@ -195,7 +203,7 @@ class _SplitsPageState extends State<SplitsPage>
         SliverToBoxAdapter(
           child: MaxWidth(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
+              padding: EdgeInsets.fromLTRB(16, 4, 16, 32 + keyboard),
               child: splits == null || visits == null
                   ? const SizedBox.shrink()
                   : splits.isEmpty
@@ -221,6 +229,7 @@ class _SplitsPageState extends State<SplitsPage>
                                       split: split,
                                       currentId: ordered.first.id,
                                       lastTrained: lastTrained[split.id],
+                                      lastDone: lastDoneByDay(split, visits),
                                       names: _names,
                                       menuEnd: _menuEnds.putIfAbsent(
                                         split.id,
@@ -293,7 +302,7 @@ class _NoSplits extends StatelessWidget {
   }
 }
 
-enum _SplitAction { rename, makeCurrent, duplicate, delete }
+enum _SplitAction { makeCurrent, duplicate, delete }
 
 class _SplitSection extends StatelessWidget {
   const _SplitSection({
@@ -301,6 +310,7 @@ class _SplitSection extends StatelessWidget {
     required this.split,
     required this.currentId,
     required this.lastTrained,
+    required this.lastDone,
     required this.names,
     required this.menuEnd,
     required this.onMenuShown,
@@ -312,6 +322,9 @@ class _SplitSection extends StatelessWidget {
   /// The current split's id.
   final int currentId;
   final DateTime? lastTrained;
+
+  /// When each saved day (by position) was last trained.
+  final Map<int, DateTime> lastDone;
   final Map<int, String> names;
 
   /// Keys the menu's last row, so the page can scroll it into view.
@@ -341,20 +354,14 @@ class _SplitSection extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
-            Row(
-              children: <Widget>[
-                Expanded(
-                  child: Text(
-                    draft.title.isEmpty ? 'Untitled split' : draft.title,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.typography.body.md.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-                _menu(context, draft),
-              ],
+            _SplitHeader(
+              title: draft.title,
+              onRename: (title) => drafts.edit(
+                split,
+                (current) => current.copyWith(title: title),
+                fallback: fallback,
+              ),
+              menu: (rename) => _menu(context, draft, rename),
             ),
             Row(
               children: <Widget>[
@@ -395,6 +402,8 @@ class _SplitSection extends StatelessWidget {
               base: base,
               diff: diff,
               fallback: fallback,
+              lastDone: lastDone,
+              names: names,
             ),
           ],
         ),
@@ -402,7 +411,7 @@ class _SplitSection extends StatelessWidget {
     );
   }
 
-  Widget _menu(BuildContext context, SplitDraft draft) {
+  Widget _menu(BuildContext context, SplitDraft draft, VoidCallback rename) {
     final destructive = context.theme.colors.destructive;
     return FPopoverMenu.tiles(
       control: .managed(
@@ -417,9 +426,10 @@ class _SplitSection extends StatelessWidget {
             .tile(
               prefix: const Icon(FLucideIcons.pencil),
               title: const Text('Rename'),
-              onPress: () {
-                controller.hide();
-                _onAction(context, _SplitAction.rename, draft);
+              // Once the menu is gone, so the name keeps the focus.
+              onPress: () async {
+                await controller.hide();
+                rename();
               },
             ),
             if (!isCurrent)
@@ -470,25 +480,7 @@ class _SplitSection extends StatelessWidget {
     final drafts = context.read<SplitDraftsCubit>();
     final settings = SettingsCubit.maybeOf(context);
     final repo = RepositoryScope.maybeOf(context);
-    final fallback = defaultSetTargetOf(context);
     switch (action) {
-      case _SplitAction.rename:
-        final details = await editSplitDetails(
-          context,
-          title: 'Rename split',
-          confirmLabel: 'Done',
-          name: draft.title,
-          description: draft.description,
-        );
-        if (details == null) return;
-        drafts.edit(
-          split,
-          (current) => current.copyWith(
-            title: details.title,
-            description: details.description,
-          ),
-          fallback: fallback,
-        );
       case _SplitAction.makeCurrent:
         settings?.setCurrentSplit(split.id, previous: currentId);
         // Follow it to the top of the list.
@@ -541,6 +533,8 @@ class _DayList extends StatelessWidget {
     required this.base,
     required this.diff,
     required this.fallback,
+    required this.lastDone,
+    required this.names,
   });
 
   final WorkoutSplit split;
@@ -548,15 +542,13 @@ class _DayList extends StatelessWidget {
   final SplitDraft base;
   final SplitDiff diff;
   final SetTarget fallback;
+  final Map<int, DateTime> lastDone;
+  final Map<int, String> names;
 
   @override
   Widget build(BuildContext context) {
     final theme = context.theme;
     final drafts = context.read<SplitDraftsCubit>();
-    final muted = theme.typography.body.xs.copyWith(
-      color: theme.colors.mutedForeground,
-    );
-    final divider = BorderSide(color: theme.colors.border);
     return Container(
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(borderRadius: BorderRadius.circular(12)),
@@ -579,74 +571,24 @@ class _DayList extends StatelessWidget {
             ),
             children: <Widget>[
               for (final (i, day) in draft.days.indexed)
-                Material(
+                _DayRow(
                   key: ValueKey(
                     'split-day-${split.id}-${day.origin ?? 'new'}-$i',
                   ),
-                  color: theme.colors.background,
-                  child: FTappable(
-                    onPress: () => pushTo<void>(
-                      context,
-                      SplitDayEditorPage(splitId: split.id, dayIndex: i),
-                    ),
-                    child: Container(
-                      constraints: const BoxConstraints(minHeight: 58),
-                      padding: const EdgeInsets.fromLTRB(4, 8, 12, 8),
-                      decoration: BoxDecoration(
-                        border: Border(bottom: divider),
-                      ),
-                      child: Row(
-                        children: <Widget>[
-                          ReorderableDragStartListener(
-                            index: i,
-                            child: SizedBox(
-                              width: 36,
-                              height: 40,
-                              child: Icon(
-                                FLucideIcons.gripVertical,
-                                size: 18,
-                                color: theme.colors.mutedForeground,
-                              ),
-                            ),
-                          ),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: <Widget>[
-                                Wrap(
-                                  crossAxisAlignment: WrapCrossAlignment.center,
-                                  spacing: 6,
-                                  children: <Widget>[
-                                    Text(
-                                      day.title.isEmpty
-                                          ? 'Untitled day'
-                                          : day.title,
-                                      style: theme.typography.body.sm.copyWith(
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                    if (diff.newDays.contains(i))
-                                      const DraftTag('New')
-                                    else if (diff.changedDays.contains(i))
-                                      const DraftTag('Edited'),
-                                  ],
-                                ),
-                                Text(
-                                  '${plural('exercise', day.exercises.length)}, '
-                                  '${plural('set', day.setCount)}',
-                                  style: muted,
-                                ),
-                              ],
-                            ),
-                          ),
-                          Icon(
-                            FLucideIcons.chevronRight,
-                            size: 18,
-                            color: theme.colors.mutedForeground,
-                          ),
-                        ],
-                      ),
-                    ),
+                  split: split,
+                  index: i,
+                  day: day,
+                  tag: diff.newDays.contains(i)
+                      ? 'New'
+                      : diff.changedDays.contains(i)
+                      ? 'Edited'
+                      : null,
+                  lastDone: day.origin == null ? null : lastDone[day.origin],
+                  names: names,
+                  onDelete: () => drafts.edit(
+                    split,
+                    (current) => current.removeDay(i),
+                    fallback: fallback,
                   ),
                 ),
             ],
@@ -696,6 +638,482 @@ class _DayList extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// The split's name with its menu. Rename turns the name itself into the
+/// field: a field grows out around it (the name never moves), the keyboard
+/// comes up with the name selected, and the menu gives way to Done.
+class _SplitHeader extends StatefulWidget {
+  const _SplitHeader({
+    required this.title,
+    required this.onRename,
+    required this.menu,
+  });
+
+  final String title;
+  final ValueChanged<String> onRename;
+
+  /// The split's menu; its Rename calls the callback it is given.
+  final Widget Function(VoidCallback rename) menu;
+
+  @override
+  State<_SplitHeader> createState() => _SplitHeaderState();
+}
+
+class _SplitHeaderState extends State<_SplitHeader>
+    with SingleTickerProviderStateMixin {
+  final _controller = TextEditingController();
+  final _focus = FocusNode(debugLabel: 'split name');
+  late final AnimationController _field = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 240),
+    reverseDuration: const Duration(milliseconds: 200),
+  );
+  late final CurvedAnimation _grow = CurvedAnimation(
+    parent: _field,
+    curve: Curves.easeOutCubic,
+  );
+  bool _editing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Leaving the field saves, as Done does.
+    _focus.addListener(() {
+      if (!_focus.hasFocus) _finish();
+    });
+  }
+
+  @override
+  void dispose() {
+    _grow.dispose();
+    _field.dispose();
+    _focus.dispose();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _rename() {
+    if (_editing || !mounted) return;
+    _controller.text = widget.title;
+    setState(() => _editing = true);
+    _field.forward();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_editing) return;
+      _focus.requestFocus();
+      _controller.selection = TextSelection(
+        baseOffset: 0,
+        extentOffset: _controller.text.length,
+      );
+    });
+  }
+
+  /// A blank name keeps the old one.
+  void _finish({bool save = true}) {
+    if (!_editing) return;
+    final name = _controller.text.trim();
+    setState(() => _editing = false);
+    _field.reverse();
+    if (_focus.hasFocus) _focus.unfocus();
+    if (save && name.isNotEmpty && name != widget.title) {
+      widget.onRename(name);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = context.theme;
+    final base = theme.typography.body.md;
+    // Spelled out, so the field draws the name exactly where the text did.
+    final style = base.copyWith(
+      fontWeight: FontWeight.w700,
+      letterSpacing: base.letterSpacing ?? 0,
+      wordSpacing: base.wordSpacing ?? 0,
+      color: theme.colors.foreground,
+    );
+    final name = widget.title.isEmpty ? 'Untitled split' : widget.title;
+    return Row(
+      children: <Widget>[
+        Expanded(
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: <Widget>[
+              AnimatedBuilder(
+                animation: _grow,
+                builder: (context, _) {
+                  final t = _grow.value;
+                  if (t == 0) return const SizedBox.shrink();
+                  return Positioned(
+                    left: -10 * t,
+                    right: -10 * t,
+                    top: -7 * t,
+                    bottom: -7 * t,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: theme.colors.muted.withValues(alpha: t),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: theme.colors.primary.withValues(
+                            alpha: 0.55 * t,
+                          ),
+                          width: 1.5,
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+              if (_editing)
+                Material(
+                  type: MaterialType.transparency,
+                  child: CallbackShortcuts(
+                    bindings: {
+                      const SingleActivator(LogicalKeyboardKey.escape): () =>
+                          _finish(save: false),
+                    },
+                    child: TextField(
+                      controller: _controller,
+                      focusNode: _focus,
+                      style: style,
+                      maxLines: null,
+                      keyboardType: TextInputType.text,
+                      textInputAction: TextInputAction.done,
+                      textCapitalization: TextCapitalization.words,
+                      cursorColor: theme.colors.primary,
+                      onSubmitted: (_) => _finish(),
+                      onTapOutside: (_) => _focus.unfocus(),
+                      decoration: InputDecoration.collapsed(
+                        hintText: 'Split name',
+                        hintStyle: style.copyWith(
+                          color: theme.colors.mutedForeground,
+                        ),
+                      ),
+                    ),
+                  ),
+                )
+              else
+                Text(
+                  name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: style,
+                ),
+            ],
+          ),
+        ),
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 200),
+          transitionBuilder: (child, animation) => FadeTransition(
+            opacity: animation,
+            child: ScaleTransition(
+              scale: Tween<double>(begin: 0.8, end: 1).animate(animation),
+              child: child,
+            ),
+          ),
+          child: _editing
+              ? AppIconButton(
+                  key: const ValueKey('done'),
+                  icon: FLucideIcons.check,
+                  tooltip: 'Done renaming',
+                  onPress: _finish,
+                )
+              : KeyedSubtree(
+                  key: const ValueKey('menu'),
+                  child: widget.menu(_rename),
+                ),
+        ),
+      ],
+    );
+  }
+}
+
+/// A day of the split: a tap edits it; holding it (or hovering it with a
+/// mouse) peeks at what it holds; two swipes left delete it.
+class _DayRow extends StatefulWidget {
+  const _DayRow({
+    super.key,
+    required this.split,
+    required this.index,
+    required this.day,
+    required this.tag,
+    required this.lastDone,
+    required this.names,
+    required this.onDelete,
+  });
+
+  final WorkoutSplit split;
+  final int index;
+  final DayDraft day;
+
+  /// "New" or "Edited" while it has unsaved changes.
+  final String? tag;
+  final DateTime? lastDone;
+  final Map<int, String> names;
+  final VoidCallback onDelete;
+
+  @override
+  State<_DayRow> createState() => _DayRowState();
+}
+
+class _DayRowState extends State<_DayRow> {
+  bool _hovered = false;
+  Timer? _hoverTimer;
+  Peek? _peek;
+  bool _hoverPeek = false;
+
+  @override
+  void dispose() {
+    _hoverTimer?.cancel();
+    _peek?.close();
+    super.dispose();
+  }
+
+  void _showPeek({required bool modal}) {
+    _peek?.close();
+    if (!mounted) return;
+    _hoverPeek = !modal;
+    final day = widget.day;
+    _peek = Peek.show(
+      context,
+      modal: modal,
+      builder: (_) => _DayPeekCard(
+        day: day,
+        tag: widget.tag,
+        lastDone: widget.lastDone,
+        names: widget.names,
+      ),
+    );
+  }
+
+  void _onHover(bool hovered) {
+    setState(() => _hovered = hovered);
+    _hoverTimer?.cancel();
+    if (hovered) {
+      _hoverTimer = Timer(
+        const Duration(milliseconds: 450),
+        () => _showPeek(modal: false),
+      );
+    } else if (_hoverPeek) {
+      _peek?.close();
+    }
+  }
+
+  void _open() {
+    _hoverTimer?.cancel();
+    _peek?.close();
+    pushTo<void>(
+      context,
+      SplitDayEditorPage(splitId: widget.split.id, dayIndex: widget.index),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = context.theme;
+    final day = widget.day;
+    final tag = widget.tag;
+    return SwipeToDelete(
+      canDelete: true,
+      onDelete: widget.onDelete,
+      surface: theme.colors.background,
+      // Over the grip, a drag reorders instead.
+      ignoreFromStart: 40,
+      child: Material(
+        type: MaterialType.transparency,
+        child: FTappable(
+          onPress: _open,
+          onLongPress: () {
+            _hoverTimer?.cancel();
+            HapticFeedback.selectionClick();
+            _showPeek(modal: true);
+          },
+          onHoverChange: _onHover,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            constraints: const BoxConstraints(minHeight: 58),
+            padding: const EdgeInsets.fromLTRB(4, 8, 12, 8),
+            decoration: BoxDecoration(
+              color: _hovered
+                  ? theme.colors.secondary
+                  : theme.colors.background,
+              border: Border(bottom: BorderSide(color: theme.colors.border)),
+            ),
+            child: Row(
+              children: <Widget>[
+                ReorderableDragStartListener(
+                  index: widget.index,
+                  child: SizedBox(
+                    width: 36,
+                    height: 40,
+                    child: Icon(
+                      FLucideIcons.gripVertical,
+                      size: 18,
+                      color: theme.colors.mutedForeground,
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Wrap(
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: 6,
+                        children: <Widget>[
+                          Text(
+                            day.title.isEmpty ? 'Untitled day' : day.title,
+                            style: theme.typography.body.sm.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          if (tag != null) DraftTag(tag),
+                        ],
+                      ),
+                      Text(
+                        '${plural('exercise', day.exercises.length)}, '
+                        '${plural('set', day.setCount)}',
+                        style: theme.typography.body.xs.copyWith(
+                          color: theme.colors.mutedForeground,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  FLucideIcons.chevronRight,
+                  size: 18,
+                  color: theme.colors.mutedForeground,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// What a day holds, at a glance: its exercises with their planned sets,
+/// and when it was last trained.
+class _DayPeekCard extends StatelessWidget {
+  const _DayPeekCard({
+    required this.day,
+    required this.tag,
+    required this.lastDone,
+    required this.names,
+  });
+
+  final DayDraft day;
+  final String? tag;
+  final DateTime? lastDone;
+  final Map<int, String> names;
+
+  /// Exercises listed before "and N more".
+  static const _listed = 6;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = context.theme;
+    final muted = theme.typography.body.xs.copyWith(
+      color: theme.colors.mutedForeground,
+    );
+    final exercises = day.exercises;
+    final last = lastDone;
+    final tag = this.tag;
+    return Material(
+      type: MaterialType.transparency,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 6),
+        decoration: BoxDecoration(
+          color: theme.colors.background,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: theme.colors.border),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x33000000),
+              blurRadius: 24,
+              offset: Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            Row(
+              children: <Widget>[
+                Expanded(
+                  child: Text(
+                    day.title.isEmpty ? 'Untitled day' : day.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.typography.body.md.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                if (tag != null) DraftTag(tag),
+              ],
+            ),
+            const SizedBox(height: 2),
+            Text(
+              '${plural('exercise', exercises.length)}, '
+              '${plural('set', day.setCount)} · '
+              '${last == null ? 'not done yet' : 'last done ${agoLabel(last)}'}',
+              style: muted,
+            ),
+            if (day.description.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(
+                day.description,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: muted,
+              ),
+            ],
+            const SizedBox(height: 10),
+            if (exercises.isEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Text(
+                  'No exercises yet. Tap the day to add some.',
+                  style: muted,
+                ),
+              )
+            else ...[
+              for (final exercise in exercises.take(_listed))
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        names[exercise.exerciseId] ??
+                            'Exercise ${exercise.exerciseId}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.typography.body.sm.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      Text(setsSummary(exercise.sets), style: muted),
+                    ],
+                  ),
+                ),
+              if (exercises.length > _listed)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Text(
+                    'and ${exercises.length - _listed} more',
+                    style: muted,
+                  ),
+                ),
+            ],
+          ],
+        ),
       ),
     );
   }

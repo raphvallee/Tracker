@@ -2,8 +2,8 @@ import 'package:flutter/widgets.dart';
 import 'package:forui/forui.dart';
 
 /// The two accents layered on the neutral Forui theme, each with one job:
-/// blue marks a live workout and the actions that start one, amber marks
-/// split edits that are not saved yet.
+/// blue marks a live workout, the actions that start one and the selected
+/// tab, amber marks split edits that are not saved yet.
 class TrackerAccents {
   const TrackerAccents._({
     required this.live,
@@ -57,5 +57,8 @@ class TrackerAccents {
   );
 
   static TrackerAccents of(BuildContext context) =>
-      context.theme.colors.brightness == Brightness.dark ? _dark : _light;
+      forBrightness(context.theme.colors.brightness);
+
+  static TrackerAccents forBrightness(Brightness brightness) =>
+      brightness == Brightness.dark ? _dark : _light;
 }

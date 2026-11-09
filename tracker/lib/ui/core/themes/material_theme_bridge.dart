@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
+import 'package:tracker/ui/core/themes/accents.dart';
 
 extension FThemeMaterialBridge on FThemeData {
   ThemeData toCustomMaterialTheme() {
@@ -419,19 +420,28 @@ extension FThemeMaterialBridge on FThemeData {
   }
 }
 
+/// Bottom nav labels readable at rest, and the selected tab in the blue
+/// accent: the only colored tab is the one showing.
 FThemeData strengthenNavLabels(FThemeData data) {
   final inactive = data.colors.brightness == Brightness.light
       ? const Color(0xFF525252)
       : const Color(0xFFD4D4D4);
+  final selected = TrackerAccents.forBrightness(data.colors.brightness).live;
   final itemStyle = data.bottomNavigationBarStyle.itemStyle;
   return data.copyWith(
     bottomNavigationBarStyle: data.bottomNavigationBarStyle.copyWith(
       itemStyle: itemStyle.copyWith(
         iconStyle: itemStyle.iconStyle.apply([
           FVariantOperation.base(IconThemeDataDelta.delta(color: inactive)),
+          FVariantOperation.match({
+            FTappableVariant.selected,
+          }, IconThemeDataDelta.delta(color: selected)),
         ]),
         textStyle: itemStyle.textStyle.apply([
           FVariantOperation.base(TextStyleDelta.delta(color: inactive)),
+          FVariantOperation.match({
+            FTappableVariant.selected,
+          }, TextStyleDelta.delta(color: selected)),
         ]),
       ),
     ),

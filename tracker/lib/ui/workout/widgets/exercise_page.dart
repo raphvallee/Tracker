@@ -753,25 +753,12 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
     return _rows[index].hasText || _rows.length > 1;
   }
 
-  Future<bool> _confirmDelete(_Row row) async {
-    final index = _rows.indexOf(row);
-    // Double guard: the gesture never reaches here for an undeletable row,
-    // but a stale gesture must not remove one either.
-    if (index < 0 || !_canDelete(index)) return false;
-    final mapped = index < _liveSets.length;
-    if (!mapped && !row.hasText) return true;
-    return showConfirmDialog(
-      context,
-      title: 'Delete this set?',
-      message: 'This will remove the set from this workout.',
-      confirmLabel: 'Delete',
-      destructive: true,
-    );
-  }
-
+  /// The row's second swipe (or its Delete tap) removes it; the first only
+  /// slid it open, so no dialog asks again.
   void _onDeleted(_Row row) {
     final index = _rows.indexOf(row);
-    if (index < 0) return;
+    // A stale gesture must not remove a row that can no longer go.
+    if (index < 0 || !_canDelete(index)) return;
     final sets = _liveSets;
     if (index < sets.length) {
       _removeLoggedSet(index, sets, sets[index]);
@@ -1103,8 +1090,7 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
         children: <Widget>[
           SwipeToDelete(
             canDelete: _canDelete(index),
-            onConfirm: () => _confirmDelete(row),
-            onConfirmed: () => _onDeleted(row),
+            onDelete: () => _onDeleted(row),
             // The page color under the row's own rounded tint: the delete
             // background never shows at rest, the corners stay round.
             surface: colors.background,
