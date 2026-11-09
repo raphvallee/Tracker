@@ -1,3 +1,4 @@
+import 'package:flutter/widgets.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forui/forui.dart';
@@ -21,6 +22,18 @@ void main() {
       BlocProvider.value(value: cubit, child: const SettingsPage()),
     );
 
+    // The page is a lazy list: bring the section into view first.
+    await tester.scrollUntilVisible(
+      find.text('Workout defaults'),
+      200,
+      scrollable: find
+          .descendant(
+            of: find.byType(SettingsPage),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    await tester.pumpAndSettle();
     expect(find.text('Workout defaults'), findsOneWidget);
     // The page builds no text field; the values are edited in dialogs.
     expect(find.byType(FTextField), findsNothing);

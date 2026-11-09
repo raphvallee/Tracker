@@ -20,10 +20,48 @@ void main() {
   ];
 
   test('a row takes last session set at its position, type included', () {
-    final warmup = ghostForRow(index: 0, previous: previous, planned: planned);
+    // Last session's opening warm-up comes first, ahead of the plan.
+    final lead = leadingWarmupRows(planned, previous);
+    expect(lead, 1);
+    final warmup = ghostForRow(
+      index: 0,
+      previous: previous,
+      planned: planned,
+      lead: lead,
+    );
     expect((warmup.weight, warmup.reps, warmup.warmup), (14, 12, true));
-    final second = ghostForRow(index: 2, previous: previous, planned: planned);
+    final second = ghostForRow(
+      index: 2,
+      previous: previous,
+      planned: planned,
+      lead: lead,
+    );
     expect((second.weight, second.reps, second.warmup), (30, 9, false));
+  });
+
+  test('planned warm-ups type their rows and take no extra ones', () {
+    final withWarmup = [
+      PlannedSet(minReps: 10, isWarmup: true),
+      PlannedSet(order: 1, minReps: 8, maxReps: 12),
+    ];
+    final working = PreviousPerformance(
+      date: DateTime(2026, 3, 1),
+      sets: [
+        WorkoutSet(weight: 60, reps: 8),
+        WorkoutSet(weight: 20, reps: 10, type: SetType.warmup, order: 1),
+      ],
+    );
+    expect(leadingWarmupRows(withWarmup, previous), 0);
+    expect(leadingWarmupRows(const [], previous), 0, reason: 'no plan');
+    expect(leadingWarmupRows(planned, null), 0);
+    final first = ghostForRow(index: 0, previous: working, planned: withWarmup);
+    expect((first.weight, first.warmup), (60, true), reason: 'plan wins');
+    final next = ghostForRow(index: 1, previous: working, planned: withWarmup);
+    expect(next.warmup, isFalse);
+    final blank = ghostForRow(index: 0, planned: withWarmup);
+    expect((blank.reps, blank.warmup), (10, true));
+    expect(plannedForRow(0, withWarmup, lead: 1), isNull);
+    expect(plannedForRow(1, withWarmup, lead: 1), withWarmup.first);
   });
 
   test('past last session, the plan gives the reps and the row above the '
@@ -32,6 +70,7 @@ void main() {
       index: 3,
       previous: previous,
       planned: planned,
+      lead: 1,
       previousWeight: 32.5,
       previousReps: 9,
     );

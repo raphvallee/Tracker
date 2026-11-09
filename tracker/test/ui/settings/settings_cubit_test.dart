@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hydrated_bloc/hydrated_bloc.dart';
+import 'package:tracker/domain/models/effort_scale.dart';
 import 'package:tracker/domain/models/graph_config.dart';
 import 'package:tracker/domain/models/number_entry.dart';
 import 'package:tracker/domain/models/weight_unit.dart';
@@ -158,6 +159,19 @@ void main() {
       expect(restored.currentSplitId, 4);
       expect(restored, state);
       expect(restored.copyWith(currentSplitId: null).currentSplitId, isNull);
+    });
+
+    test('v2 carries the effort scale, RPE by default', () {
+      expect(SettingsState().effortScale, EffortScale.rpe);
+      final state = SettingsState(effortScale: EffortScale.rir);
+      final restored = SettingsState.fromJson(state.toJson());
+      expect(restored.effortScale, EffortScale.rir);
+      expect(restored, state);
+      expect(
+        SettingsState.fromJson({'v': 2, 'effortScale': 'borg'}).effortScale,
+        EffortScale.rpe,
+      );
+      expect(SettingsState.fromJson({'v': 1}).effortScale, EffortScale.rpe);
     });
 
     test('v2 carries when splits were last used and skips junk', () {

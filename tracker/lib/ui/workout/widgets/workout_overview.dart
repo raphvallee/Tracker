@@ -38,7 +38,8 @@ class WorkoutEntry {
   /// before free workouts kept their exercises): they cannot be reordered.
   final bool listed;
 
-  int get planned => exercise.sets.length;
+  /// Planned working sets: planned warm-ups do not count.
+  int get planned => exercise.sets.where((set) => !set.isWarmup).length;
 
   int get workingLogged => sets.where((set) => !set.isWarmup).length;
 
@@ -763,10 +764,13 @@ class _NextSetState extends State<_NextSet> {
         final entry = widget.entry;
         final index = entry.sets.length;
         final last = entry.sets.isEmpty ? null : entry.sets.last;
+        final previous = prefill ? snapshot.data : null;
+        final lead = leadingWarmupRows(entry.exercise.sets, previous);
         final ghost = ghostForRow(
           index: index,
-          previous: prefill ? snapshot.data : null,
+          previous: previous,
           planned: entry.exercise.sets,
+          lead: lead,
           previousWeight: last?.weight,
           previousReps: last?.reps,
         );
@@ -778,9 +782,10 @@ class _NextSetState extends State<_NextSet> {
             style: style,
           );
         }
-        final target = index < entry.exercise.sets.length
-            ? SetTarget.fromPlanned(entry.exercise.sets[index]).description
-            : null;
+        final planned = plannedForRow(index, entry.exercise.sets, lead: lead);
+        final target = planned == null
+            ? null
+            : SetTarget.fromPlanned(planned).description;
         return Text(
           target == null ? 'Next: set ${index + 1}' : 'Next set: $target',
           style: style,

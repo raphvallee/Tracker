@@ -211,6 +211,28 @@ void main() {
     ]);
   });
 
+  test('a set made a warm-up is reported with its new type', () {
+    final draft = _base.updateDay(
+      0,
+      (day) => day.updateExercise(
+        0,
+        (e) => e.withSet(0, const SetTarget.warmup(8, 12)),
+      ),
+    );
+    final diff = diffSplit(_base, draft, nameOf: _nameOf);
+    expect(_rows(diff), [
+      (
+        SplitChangeKind.changed,
+        'Push',
+        'Bench Press, set 1',
+        '8-12 reps',
+        '8-12 warm-up reps',
+        null,
+      ),
+    ]);
+    expect(diff.isChangedSet(0, 0, 0), isTrue);
+  });
+
   test('a removed set is named with what it was', () {
     final draft = _base.updateDay(
       0,

@@ -55,6 +55,7 @@ void main() {
       exerciseName: 'Bench Press',
       weight: 80,
       reps: 6,
+      rpe: 8.5,
     );
     await cubit.endWorkout();
 
@@ -63,6 +64,7 @@ void main() {
     expect(session.splitId, 12);
     expect(session.splitDayIndex, 0);
     expect(session.sets.single.exerciseId, 1);
+    expect(session.sets.single.rpe, 8.5, reason: 'the rating is saved');
     final visits = await repo.sessions.getSplitVisits();
     expect(visits.single.splitId, 12);
   });

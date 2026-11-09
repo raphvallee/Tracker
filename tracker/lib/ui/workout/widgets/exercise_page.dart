@@ -4,10 +4,12 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:forui/forui.dart';
+import 'package:tracker/domain/models/effort_scale.dart';
 import 'package:tracker/domain/models/number_entry.dart';
 import 'package:tracker/domain/models/split_draft.dart';
 import 'package:tracker/domain/models/weight_unit.dart';
 import 'package:tracker/domain/models/workout_set.dart';
+import 'package:tracker/domain/models/workout_split.dart';
 import 'package:tracker/domain/services/set_prefill.dart';
 import 'package:tracker/routing/tab_navigation.dart';
 import 'package:tracker/ui/core/themes/accents.dart';
@@ -16,6 +18,7 @@ import 'package:tracker/ui/core/ui/app_dialog.dart';
 import 'package:tracker/ui/core/ui/custom_app_bar.dart';
 import 'package:tracker/ui/core/ui/custom_route.dart';
 import 'package:tracker/ui/core/ui/decimal_input_formatter.dart';
+import 'package:tracker/ui/core/ui/effort_format.dart';
 import 'package:tracker/ui/core/ui/icon_button.dart';
 import 'package:tracker/ui/core/ui/max_width.dart';
 import 'package:tracker/ui/core/ui/relative_dates.dart';
@@ -28,6 +31,7 @@ import 'package:tracker/ui/workout/view_models/workout_cubit.dart';
 import 'package:tracker/utils/decimal_input.dart';
 import 'package:tracker/utils/form_validators.dart';
 
+import 'effort_sheet.dart';
 import 'number_entry.dart';
 import 'workout_overview.dart';
 
@@ -89,6 +93,7 @@ class _ExercisePageState extends State<ExercisePage> {
           previous: _previous,
           prefill: settings.prefillSets,
           entryMode: settings.numberEntry,
+          effort: settings.effortScale,
         );
         if (SettingsCubit.maybeOf(context) == null) {
           return body(SettingsState());
@@ -97,6 +102,7 @@ class _ExercisePageState extends State<ExercisePage> {
           buildWhen: (a, b) =>
               a.prefillSets != b.prefillSets ||
               a.numberEntry != b.numberEntry ||
+              a.effortScale != b.effortScale ||
               a.unit != b.unit,
           builder: (context, settings) => body(settings),
         );
@@ -123,8 +129,12 @@ class _Row {
   double? lastWeightKg;
   double? lastReps;
 
-  /// The set type a pending row logs with; null follows its placeholder.
+  /// The set type a pending row logs with; null follows its plan or
+  /// placeholder.
   bool? warmup;
+
+  /// The rating (RPE) a pending row logs with.
+  double? rpe;
 
   /// A commit is waiting on a dialog: a second one must not log twice.
   bool busy = false;
@@ -151,6 +161,7 @@ class _Row {
     lastWeightKg = null;
     lastReps = null;
     warmup = null;
+    rpe = null;
   }
 
   void dispose() {
@@ -168,6 +179,7 @@ class _ExerciseBody extends StatefulWidget {
     required this.previous,
     required this.prefill,
     required this.entryMode,
+    required this.effort,
   });
 
   final WorkoutEntry entry;
@@ -175,6 +187,7 @@ class _ExerciseBody extends StatefulWidget {
   final PreviousPerformance? previous;
   final bool prefill;
   final NumberEntry entryMode;
+  final EffortScale effort;
 
   @override
   State<_ExerciseBody> createState() => _ExerciseBodyState();
@@ -211,13 +224,20 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
       context.read<WorkoutCubit>().state.setsByExercise[_exerciseId] ??
       const [];
 
-  /// Rows the page starts with: one per planned set (plus last session's
-  /// opening warm-ups when prefilling); a free exercise gets last session's
-  /// row count, or one blank row.
+  List<PlannedSet> get _plan => widget.entry.exercise.sets;
+
+  /// Rows ahead of the first planned one (see [leadingWarmupRows]).
+  int get _lead =>
+      leadingWarmupRows(_plan, widget.prefill ? widget.previous : null);
+
+  PlannedSet? _plannedAt(int index) => plannedForRow(index, _plan, lead: _lead);
+
+  /// Rows the page starts with: one per planned set, warm-ups included (plus
+  /// last session's opening warm-ups when prefilling a plan without any); a
+  /// free exercise gets last session's row count, or one blank row.
   int get _baseRows {
-    final planned = widget.entry.planned;
+    if (_plan.isNotEmpty) return _plan.length + _lead;
     final previous = widget.prefill ? widget.previous : null;
-    if (planned > 0) return planned + (previous?.leadingWarmups ?? 0);
     final count = previous?.sets.length ?? 0;
     return count > 0 ? count : 1;
   }
@@ -292,6 +312,7 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
 
   List<SetGhost> _ghosts(List<ActiveSet> sets) {
     final ghosts = <SetGhost>[];
+    final lead = _lead;
     double? previousWeight;
     double? previousReps;
     for (var i = 0; i < _rows.length; i++) {
@@ -306,7 +327,8 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
           ? ghostForRow(
               index: i,
               previous: widget.previous,
-              planned: widget.entry.exercise.sets,
+              planned: _plan,
+              lead: lead,
               previousWeight: previousWeight,
               previousReps: previousReps,
             )
@@ -326,10 +348,17 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
     return index >= 0 && index < ghosts.length ? ghosts[index] : SetGhost.none;
   }
 
+  /// A logged set's type; a pending row's toggle, else its planned set's,
+  /// else its placeholder's (prefill off: the plan still decides).
   bool _isWarmup(int index, List<ActiveSet> sets, List<SetGhost> ghosts) =>
       index < sets.length
       ? sets[index].isWarmup
-      : (_rows[index].warmup ?? ghosts[index].warmup);
+      : (_rows[index].warmup ??
+            _plannedAt(index)?.isWarmup ??
+            ghosts[index].warmup);
+
+  double? _rpeAt(int index, List<ActiveSet> sets) =>
+      index < sets.length ? sets[index].rpe : _rows[index].rpe;
 
   List<String> _badges(List<ActiveSet> sets, List<SetGhost> ghosts) {
     var working = 0;
@@ -634,12 +663,14 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
         weight: kilograms,
         reps: reps,
         type: warmup ? SetType.warmup : SetType.working,
+        rpe: row.rpe,
       );
       // Logging into a row past the base rows keeps the row count.
       if (_rowCountFor(sets.length + 1) > rowsBefore && _extraRows > 0) {
         _extraRows--;
       }
       row.warmup = null;
+      row.rpe = null;
       if (identical(_selected, row)) _selected = null;
     }
     // Remember the committed values so the next reconcile keeps the typed
@@ -682,6 +713,30 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
     }
     final ghosts = _ghosts(sets);
     setState(() => row.warmup = !(row.warmup ?? ghosts[index].warmup));
+  }
+
+  Future<void> _pickEffort(_Row row) async {
+    final index = _rows.indexOf(row);
+    if (index < 0) return;
+    final sets = _liveSets;
+    final badge = _badges(sets, _ghosts(sets))[index];
+    final choice = await showEffortSheet(
+      context,
+      title: badge == 'W' ? 'Warm-up effort' : 'Set $badge effort',
+      scale: widget.effort,
+      rpe: _rpeAt(index, sets),
+    );
+    if (choice == null || !mounted) return;
+    // The tap that opened the sheet can blur the row, and that blur may have
+    // logged it since: re-read where the rating goes.
+    final at = _rows.indexOf(row);
+    if (at < 0) return;
+    final live = _liveSets;
+    if (at < live.length) {
+      context.read<WorkoutCubit>().setRpe(live[at].order, choice.rpe);
+    } else {
+      setState(() => row.rpe = choice.rpe);
+    }
   }
 
   void _addRow() {
@@ -1007,7 +1062,16 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
           Expanded(
             child: Text('Reps', textAlign: TextAlign.center, style: style),
           ),
-          const SizedBox(width: 44),
+          const SizedBox(width: 6),
+          SizedBox(
+            width: _effortWidth,
+            child: Text(
+              widget.effort.label,
+              textAlign: TextAlign.center,
+              style: style,
+            ),
+          ),
+          const SizedBox(width: 48),
         ],
       ),
     );
@@ -1102,6 +1166,14 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
           Expanded(child: box(_Kind.weight)),
           _times(context),
           Expanded(child: box(_Kind.reps)),
+          const SizedBox(width: 6),
+          _effortCell(
+            context,
+            row,
+            rpe: _rpeAt(index, sets),
+            badge: badges[index],
+            logged: logged,
+          ),
           const SizedBox(width: 8),
           _check(
             context,
@@ -1111,6 +1183,97 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
             label: badges[index],
           ),
         ],
+      ),
+    );
+  }
+
+  static const _effortWidth = 38.0;
+
+  String _effortSemantics(String badge, double? rpe) {
+    final who = badge == 'W' ? 'Warm-up' : 'Set $badge';
+    final scale = widget.effort;
+    return rpe == null
+        ? '$who ${scale.label}, not rated'
+        : '$who ${effortLabel(scale, rpe)}';
+  }
+
+  /// The set's rating in its own column: a tap opens the 0 to 10 picker.
+  Widget _effortCell(
+    BuildContext context,
+    _Row row, {
+    required double? rpe,
+    required String badge,
+    required bool logged,
+  }) {
+    final theme = context.theme;
+    final style = theme.typography.body.sm.copyWith(
+      fontWeight: FontWeight.w600,
+      color: rpe == null ? theme.colors.mutedForeground : null,
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
+    return Semantics(
+      button: true,
+      label: _effortSemantics(badge, rpe),
+      excludeSemantics: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => _pickEffort(row),
+        child: Container(
+          width: _effortWidth,
+          height: 40,
+          alignment: Alignment.center,
+          decoration: logged
+              ? null
+              : BoxDecoration(
+                  color: theme.colors.background,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: theme.colors.border),
+                ),
+          child: Text(
+            rpe == null ? '-' : formatEffort(widget.effort, rpe),
+            style: style,
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// The opened row's rating: "RPE 8", or "RPE -" until rated.
+  Widget _effortChip(
+    BuildContext context,
+    _Row row, {
+    required double? rpe,
+    required String badge,
+  }) {
+    final theme = context.theme;
+    final scale = widget.effort;
+    return Semantics(
+      button: true,
+      label: _effortSemantics(badge, rpe),
+      excludeSemantics: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => _pickEffort(row),
+        child: Container(
+          height: 36,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: theme.colors.background,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: theme.colors.border),
+          ),
+          child: Text(
+            rpe == null
+                ? '${scale.label} -'
+                : '${scale.label} ${formatEffort(scale, rpe)}',
+            style: theme.typography.body.xs.copyWith(
+              fontWeight: FontWeight.w600,
+              color: rpe == null ? theme.colors.mutedForeground : null,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -1158,6 +1321,14 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
                   ),
                 ),
               ),
+              const SizedBox(width: 6),
+              _effortChip(
+                context,
+                row,
+                rpe: _rpeAt(index, sets),
+                badge: badges[index],
+              ),
+              const SizedBox(width: 6),
               _check(
                 context,
                 row,
@@ -1214,12 +1385,12 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
     if (logged) return 'Logged. Change a number to fix it.';
     if (steppers) return 'Hold a number to type it';
     final previous = widget.previous;
-    final planned = widget.entry.exercise.sets;
+    final planned = _plannedAt(index);
     final parts = <String>[
       if (previous != null && index < previous.sets.length)
         'Last time ${_setText(context, previous.sets[index])}',
-      if (index < planned.length)
-        'Target ${SetTarget.fromPlanned(planned[index]).description}',
+      if (planned != null)
+        'Target ${SetTarget.fromPlanned(planned).description}',
     ];
     return parts.isEmpty ? 'Next set' : parts.join('. ');
   }
@@ -1541,7 +1712,7 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
       color: context.theme.colors.error,
     );
     return Padding(
-      padding: const EdgeInsets.fromLTRB(44, 4, 52, 0),
+      padding: const EdgeInsets.fromLTRB(44, 4, 52 + 6 + _effortWidth, 0),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[

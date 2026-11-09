@@ -13,6 +13,7 @@ import 'package:hydrated_bloc/hydrated_bloc.dart';
 import 'package:isar_community/isar.dart';
 import 'package:tracker/data/repositories/tracker_repository.dart';
 import 'package:tracker/data/services/seed.dart';
+import 'package:tracker/domain/models/effort_scale.dart';
 import 'package:tracker/domain/models/exercise.dart';
 import 'package:tracker/domain/models/graph_config.dart';
 import 'package:tracker/domain/models/gym.dart';
@@ -41,6 +42,7 @@ import 'package:tracker/ui/splits/widgets/set_target_sheet.dart';
 import 'package:tracker/ui/splits/widgets/split_day_editor_page.dart';
 import 'package:tracker/ui/workout/view_models/workout_cubit.dart';
 import 'package:tracker/ui/workout/widgets/day_preview_sheet.dart';
+import 'package:tracker/ui/workout/widgets/effort_sheet.dart';
 import 'package:tracker/ui/workout/widgets/exercise_page.dart';
 import 'package:tracker/ui/workout/widgets/exercise_picker_page.dart';
 import 'package:tracker/ui/workout/widgets/gym_picker.dart';
@@ -415,10 +417,25 @@ Future<void> captureScreensAt(
     'Set target sheet',
     () => showSetTargetSheet(
       pageContext,
-      title: 'Bench Press, set 3',
+      title: 'Bench Press, set 2',
       subtitle: 'Push Day. Saved as 8-12 reps.',
-      target: const SetTarget(8, 12),
-      setCount: 4,
+      sets: const [
+        SetTarget.warmup(12),
+        SetTarget(8, 12),
+        SetTarget(8, 12),
+        SetTarget(8, 12),
+      ],
+      index: 1,
+    ),
+    root: true,
+  );
+  await openAndClose(
+    'Effort sheet',
+    () => showEffortSheet(
+      pageContext,
+      title: 'Set 2 effort',
+      scale: EffortScale.rpe,
+      rpe: 8,
     ),
     root: true,
   );

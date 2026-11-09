@@ -95,6 +95,7 @@ class _SessionEditPageState extends State<SessionEditPage> {
           reps: s.reps,
           type: s.type,
           order: s.order,
+          rpe: s.rpe,
         ),
     ],
   );
@@ -588,6 +589,7 @@ class _EditSetDialogState extends State<_EditSetDialog> {
         reps: reps,
         type: _warmup ? SetType.warmup : SetType.working,
         order: widget.initial.order,
+        rpe: widget.initial.rpe,
       ),
     );
   }

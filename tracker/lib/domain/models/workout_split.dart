@@ -61,13 +61,22 @@ class ExerciseItem {
 
 @embedded
 class PlannedSet {
-  PlannedSet({this.order = 0, this.minReps = 0, this.maxReps});
+  PlannedSet({
+    this.order = 0,
+    this.minReps = 0,
+    this.maxReps,
+    this.isWarmup = false,
+  });
 
   int order;
 
   int minReps;
 
   int? maxReps;
+
+  /// A warm-up, not counted among the exercise's working sets. Sets saved
+  /// before warm-ups could be planned read as working sets.
+  bool isWarmup;
 }
 
 extension PlannedSetX on PlannedSet {

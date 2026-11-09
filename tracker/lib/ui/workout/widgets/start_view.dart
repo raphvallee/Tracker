@@ -10,6 +10,7 @@ import 'package:tracker/routing/tab_navigation.dart';
 import 'package:tracker/ui/core/themes/accents.dart';
 import 'package:tracker/ui/core/ui/accent_button.dart';
 import 'package:tracker/ui/core/ui/custom_app_bar.dart';
+import 'package:tracker/ui/core/ui/dashed_outline.dart';
 import 'package:tracker/ui/core/ui/max_width.dart';
 import 'package:tracker/ui/core/ui/relative_dates.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
@@ -678,7 +679,9 @@ class _DayTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = context.theme;
     return CustomPaint(
-      painter: _DashedBorder(color: theme.colors.mutedForeground),
+      painter: DashedOutline(
+        color: theme.colors.mutedForeground.withValues(alpha: 0.6),
+      ),
       child: SizedBox(
         height: 52,
         child: Center(
@@ -693,33 +696,4 @@ class _DayTile extends StatelessWidget {
       ),
     );
   }
-}
-
-class _DashedBorder extends CustomPainter {
-  const _DashedBorder({required this.color});
-
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color.withValues(alpha: 0.6)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1;
-    final path = Path()
-      ..addRRect(
-        RRect.fromRectAndRadius(
-          Offset.zero & size,
-          const Radius.circular(8),
-        ).deflate(0.5),
-      );
-    for (final metric in path.computeMetrics()) {
-      for (var d = 0.0; d < metric.length; d += 7) {
-        canvas.drawPath(metric.extractPath(d, d + 4), paint);
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(_DashedBorder oldDelegate) => color != oldDelegate.color;
 }

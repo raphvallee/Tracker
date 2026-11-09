@@ -65,10 +65,10 @@ schema changes):
 
 | Type | Fields |
 | --- | --- |
-| `WorkoutSet` | `exerciseId int`, `weight double`, `reps int`, `type SetType @enumerated`, `order int` |
+| `WorkoutSet` | `exerciseId int`, `weight double`, `reps int`, `type SetType @enumerated`, `order int`, `rpe double?` (effort as RPE 0-10, null = not rated; RIR is shown as 10 - RPE) |
 | `WorkoutSplitDay` | `title String`, `description String`, `exercises List<ExerciseItem>`, `order int` |
 | `ExerciseItem` | `exerciseId int`, `order int`, `sets List<PlannedSet>`, plus legacy `targetSets int?`, `targetReps int?`, `restSeconds int?` (no longer written by the editor) |
-| `PlannedSet` | `order int`, `minReps int` (fixed reps), `maxReps int?` (null = fixed, non-null = range `minReps..maxReps`) |
+| `PlannedSet` | `order int`, `minReps int` (fixed reps), `maxReps int?` (null = fixed, non-null = range `minReps..maxReps`), `isWarmup bool` (planned warm-up; older sets read false) |
 | `GymExerciseMultiplier` | `exerciseId int`, `multiplier double` |
 
 ## Enums

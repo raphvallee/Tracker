@@ -84,7 +84,7 @@ void main() {
             name: 'Bench',
             order: 0,
             sets: [
-              PlannedSet(order: 0, minReps: 10),
+              PlannedSet(order: 0, minReps: 10, isWarmup: true),
               PlannedSet(order: 1, minReps: 8, maxReps: 12),
             ],
           ),
@@ -94,8 +94,10 @@ void main() {
       expect(restored.plan.single.sets, hasLength(2));
       expect(restored.plan.single.sets[0].minReps, 10);
       expect(restored.plan.single.sets[0].maxReps, isNull);
+      expect(restored.plan.single.sets[0].isWarmup, isTrue);
       expect(restored.plan.single.sets[1].minReps, 8);
       expect(restored.plan.single.sets[1].maxReps, 12);
+      expect(restored.plan.single.sets[1].isWarmup, isFalse);
       expect(restored, state);
     });
 
@@ -354,6 +356,36 @@ void main() {
 
       expect(cubit.state.isInProgress, isFalse);
       expect(cubit.state.savedSnapshot, isNull);
+    });
+
+    test('a set keeps its rating through updates, removal and hydration', () {
+      cubit.startWorkout();
+      cubit.logSet(exerciseId: 1, exerciseName: 'A', weight: 10, reps: 5);
+      cubit.logSet(
+        exerciseId: 1,
+        exerciseName: 'A',
+        weight: 20,
+        reps: 5,
+        rpe: 8,
+      );
+      expect(cubit.state.sets.map((s) => s.rpe), [null, 8]);
+
+      cubit.updateSet(1, weight: 22.5, type: SetType.warmup);
+      expect(cubit.state.sets.last.rpe, 8, reason: 'kept by other edits');
+      cubit.setRpe(0, 9.5);
+      cubit.removeSet(1);
+      expect(cubit.state.sets.single.rpe, 9.5);
+
+      final restored = WorkoutState.fromJson(cubit.state.toJson());
+      expect(restored.sets.single.rpe, 9.5);
+      expect(restored, cubit.state);
+      cubit.setRpe(0, null);
+      expect(cubit.state.sets.single.rpe, isNull);
+      expect(
+        ActiveSet.fromJson({'exerciseId': 1, 'rpe': 'hard'}).rpe,
+        isNull,
+        reason: 'malformed',
+      );
     });
 
     test('removeSet drops a set and reindexes order', () async {

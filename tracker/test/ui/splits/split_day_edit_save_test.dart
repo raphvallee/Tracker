@@ -99,13 +99,39 @@ void main() {
     expect(find.text('Kept even if the app closes'), findsOneWidget);
     expect(app.drafts.state.entries.containsKey(splitId), isTrue);
 
+    // Set 1 becomes a warm-up: "Use for all" now reaches its type only.
+    await tester.tap(labelled('Set 1, 8-12 reps'));
+    await pumpUntil(tester, find.text('Bench Press, set 1'));
+    await pumpRounds(tester, 4);
+    expect(find.text('Use for all 3 sets'), findsOneWidget);
+    await tester.tap(find.text('Warm-up set'));
+    await pumpRounds(tester, 2);
+    expect(find.text('Use for all 3 sets'), findsNothing);
+    expect(find.text('Use for all 2 working sets'), findsNothing);
+    await tester.tap(find.text('Done'));
+    await pumpUntil(tester, find.text('2 unsaved changes'));
+    await pumpRounds(tester, 3);
+    expect(labelled('Set 1, 8-12 warm-up reps'), findsOneWidget);
+    expect(find.text('warm-up'), findsOneWidget);
+    await tester.tap(labelled('Set 2, 10 reps'));
+    await pumpUntil(tester, find.text('Bench Press, set 2'));
+    await pumpRounds(tester, 4);
+    expect(find.text('Use for all 2 working sets'), findsOneWidget);
+    await tester.tap(find.text('Done'));
+    await pumpWhile(
+      tester,
+      () => find.text('Bench Press, set 2').evaluate().isNotEmpty,
+    );
+
     await tester.tap(find.text('Review and save'));
     await pumpUntil(tester, find.text('Review changes'));
     await pumpRounds(tester, 4);
     expect(find.text('Bench Press, set 2'), findsOneWidget);
-    expect(find.text('8-12 reps'), findsOneWidget);
+    expect(find.text('Bench Press, set 1'), findsOneWidget);
+    expect(find.text('8-12 reps'), findsNWidgets(2));
+    expect(find.text('8-12 warm-up reps'), findsOneWidget);
     expect(find.text('10 reps'), findsOneWidget);
-    await tester.tap(find.text('Save 1 change'));
+    await tester.tap(find.text('Save 2 changes'));
     await pumpWhile(tester, () => app.drafts.state.entries.isNotEmpty);
     await pumpWhile(
       tester,
@@ -114,13 +140,13 @@ void main() {
 
     expect(app.drafts.state.entries, isEmpty);
     await pumpRounds(tester, 3);
-    expect(find.text('1 unsaved change'), findsNothing);
+    expect(find.textContaining('unsaved change'), findsNothing);
     final saved = await tester.runAsync(() => repo.splits.getById(splitId));
     final sets = saved!.splitDays.single.exercises.single.sets;
-    expect(sets.map((s) => (s.minReps, s.maxReps)), [
-      (8, 12),
-      (10, null),
-      (8, 12),
+    expect(sets.map((s) => (s.minReps, s.maxReps, s.isWarmup)), [
+      (8, 12, true),
+      (10, null, false),
+      (8, 12, false),
     ]);
   });
 }

@@ -5,11 +5,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forui/forui.dart';
 import 'package:hydrated_bloc/hydrated_bloc.dart';
+import 'package:tracker/domain/models/effort_scale.dart';
 import 'package:tracker/domain/models/number_entry.dart';
 import 'package:tracker/domain/models/workout_set.dart';
 import 'package:tracker/domain/models/workout_split.dart';
 import 'package:tracker/ui/workout/view_models/workout_cubit.dart';
 import 'package:tracker/ui/workout/widgets/elapsed_clock.dart';
+import 'package:tracker/ui/workout/widgets/workout_overview.dart';
 
 import '../../../testing/fakes/in_memory_storage.dart';
 import '../../../testing/test_helpers.dart';
@@ -294,6 +296,88 @@ void main() {
       await tester.tap(labelled('Warm-up set, tap for a working set'));
       await tester.pumpAndSettle();
       expect(cubit.state.sets.single.type, SetType.working);
+    });
+
+    testWidgets('planned warm-ups open as warm-up rows', (tester) async {
+      useTallWindow(tester);
+      final cubit = await pumpApp(tester);
+      cubit.startPlanWorkout(
+        title: 'Push Day',
+        exercises: [
+          PlanExercise(
+            exerciseId: 1,
+            name: 'Bench Press',
+            sets: [
+              PlannedSet(minReps: 12, isWarmup: true),
+              PlannedSet(order: 1, minReps: 8, maxReps: 12),
+            ],
+          ),
+        ],
+      );
+      expect(
+        workoutEntries(cubit.state).single.planned,
+        1,
+        reason: 'warm-ups are not working sets',
+      );
+      await openExercise(tester, 'Bench Press', prefill: false);
+
+      expect(
+        find.text('Target: 1 warm-up, then 1 set of 8-12 reps'),
+        findsOneWidget,
+      );
+      expect(labelled('Warm-up set, tap for a working set'), findsOneWidget);
+      expect(labelled('Set 1, tap for a warm-up'), findsOneWidget);
+      await typeSet(tester, 0, weight: '40', reps: '12');
+      await leaveRow(tester);
+      expect(cubit.state.sets.single.type, SetType.warmup);
+    });
+
+    testWidgets('effort is picked from 0 to 10 on the scale Settings picks', (
+      tester,
+    ) async {
+      final cubit = await pumpPush(tester);
+      await openExercise(tester, 'Bench Press');
+
+      // Rated before it is logged: the open row keeps it for the set.
+      await tester.tap(labelled('Set 1 RPE, not rated'));
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Rate of perceived exertion, from 0 to 10'),
+        findsOneWidget,
+      );
+      await tester.tap(labelled('RPE 9'));
+      await tester.pumpAndSettle();
+      expect(labelled('Set 1 RPE 9'), findsOneWidget);
+      expect(cubit.state.sets, isEmpty);
+      await typeSet(tester, 0, weight: '80', reps: '8');
+      await leaveRow(tester);
+      expect(cubit.state.sets.single.rpe, 9);
+
+      // A logged set is rated in place.
+      await tester.tap(labelled('Set 1 RPE 9'));
+      await tester.pumpAndSettle();
+      await tester.tap(labelled('RPE 7'));
+      await tester.pumpAndSettle();
+      expect(cubit.state.sets.single.rpe, 7);
+
+      // Reps in reserve show the same rating as 10 minus RPE.
+      settingsOf(tester).setEffortScale(EffortScale.rir);
+      await tester.pumpAndSettle();
+      expect(labelled('Set 1 RIR 3'), findsOneWidget);
+      expect(find.text('RIR'), findsOneWidget, reason: 'the column header');
+      await tester.tap(labelled('Set 1 RIR 3'));
+      await tester.pumpAndSettle();
+      expect(find.text('Reps in reserve, from 0 to 10'), findsOneWidget);
+      await tester.tap(labelled('RIR 1'));
+      await tester.pumpAndSettle();
+      expect(cubit.state.sets.single.rpe, 9, reason: 'stored as RPE');
+
+      await tester.tap(labelled('Set 1 RIR 1'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Clear rating'));
+      await tester.pumpAndSettle();
+      expect(cubit.state.sets.single.rpe, isNull);
+      expect(labelled('Set 1 RIR, not rated'), findsOneWidget);
     });
 
     testWidgets('swiping a logged set away deletes it after confirming', (

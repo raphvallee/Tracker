@@ -1,25 +1,34 @@
 import 'package:tracker/domain/models/workout_split.dart';
 
-/// A planned set's rep target: fixed reps ([maxReps] null) or a range.
+/// A planned set's rep target: fixed reps ([maxReps] null) or a range, for
+/// a working set or a [warmup].
 class SetTarget {
-  const SetTarget(this.minReps, [this.maxReps]);
+  const SetTarget(this.minReps, [this.maxReps]) : warmup = false;
+
+  const SetTarget.warmup(this.minReps, [this.maxReps]) : warmup = true;
 
   /// Ranges whose max does not exceed the min read as fixed reps.
   factory SetTarget.fromPlanned(PlannedSet set) => SetTarget(
     set.minReps,
     set.maxReps != null && set.maxReps! > set.minReps ? set.maxReps : null,
-  );
+  ).withWarmup(set.isWarmup);
 
   static SetTarget? fromJson(Object? json) {
     if (json is! List || json.isEmpty || json.first is! int) return null;
     final min = json.first as int;
     final max = json.length > 1 && json[1] is int ? json[1] as int : null;
     if (min < 1) return null;
-    return SetTarget(min, max != null && max > min ? max : null);
+    return SetTarget(
+      min,
+      max != null && max > min ? max : null,
+    ).withWarmup(json.length > 2 && json[2] == true);
   }
 
   final int minReps;
   final int? maxReps;
+
+  /// Not one of the exercise's working sets.
+  final bool warmup;
 
   bool get isRange => maxReps != null;
 
@@ -27,30 +36,56 @@ class SetTarget {
 
   String get unit => !isRange && minReps == 1 ? 'rep' : 'reps';
 
-  /// "8-12 reps", "1 rep".
-  String get description => '$label $unit';
+  /// "8-12 reps", "1 rep", "10 warm-up reps".
+  String get description => warmup ? '$label warm-up $unit' : '$label $unit';
 
-  PlannedSet toPlanned(int order) =>
-      PlannedSet(order: order, minReps: minReps, maxReps: maxReps);
+  SetTarget withWarmup(bool warmup) =>
+      warmup ? SetTarget.warmup(minReps, maxReps) : SetTarget(minReps, maxReps);
 
-  List<int?> toJson() => [minReps, maxReps];
+  PlannedSet toPlanned(int order) => PlannedSet(
+    order: order,
+    minReps: minReps,
+    maxReps: maxReps,
+    isWarmup: warmup,
+  );
+
+  List<Object?> toJson() => [minReps, maxReps, if (warmup) true];
 
   @override
   bool operator ==(Object other) =>
       other is SetTarget &&
       minReps == other.minReps &&
-      maxReps == other.maxReps;
+      maxReps == other.maxReps &&
+      warmup == other.warmup;
 
   @override
-  int get hashCode => Object.hash(minReps, maxReps);
+  int get hashCode => Object.hash(minReps, maxReps, warmup);
 }
 
-/// "3 sets of 8-12 reps", or every target in order when they differ.
+/// "3 sets of 8-12 reps", or every target in order when they differ; warm-ups
+/// lead: "2 warm-ups, then 3 sets of 8-12 reps".
 String setsSummary(List<SetTarget> sets) {
   if (sets.isEmpty) return 'No sets';
-  final count = sets.length == 1 ? '1 set' : '${sets.length} sets';
+  final warmups = [
+    for (final set in sets)
+      if (set.warmup) set,
+  ];
+  final working = [
+    for (final set in sets)
+      if (!set.warmup) set,
+  ];
+  if (warmups.isEmpty) return _summary(working, 'set');
+  if (working.isEmpty) return _summary(warmups, 'warm-up');
+  final count = warmups.length == 1
+      ? '1 warm-up'
+      : '${warmups.length} warm-ups';
+  return '$count, then ${_summary(working, 'set')}';
+}
+
+String _summary(List<SetTarget> sets, String noun) {
+  final count = sets.length == 1 ? '1 $noun' : '${sets.length} ${noun}s';
   if (sets.every((set) => set == sets.first)) {
-    return '$count of ${sets.first.description}';
+    return '$count of ${sets.first.label} ${sets.first.unit}';
   }
   return '$count: ${sets.map((set) => set.label).join(', ')} reps';
 }
@@ -116,17 +151,24 @@ class ExerciseDraft {
     return copyWith(sets: [...sets]..[index] = target);
   }
 
-  /// Adds a set copying the last one's target ([fallback] when there is none).
-  ExerciseDraft addSet(SetTarget fallback) =>
-      copyWith(sets: [...sets, sets.isEmpty ? fallback : sets.last]);
+  /// Adds a working set copying the last one's reps ([fallback] when there
+  /// is none).
+  ExerciseDraft addSet(SetTarget fallback) => copyWith(
+    sets: [...sets, (sets.isEmpty ? fallback : sets.last).withWarmup(false)],
+  );
 
   ExerciseDraft removeSet(int index) {
     if (index < 0 || index >= sets.length || sets.length <= 1) return this;
     return copyWith(sets: [...sets]..removeAt(index));
   }
 
-  ExerciseDraft withAllSets(SetTarget target) =>
-      copyWith(sets: [for (final _ in sets) target]);
+  /// Every set of [target]'s type (warm-up or working) takes its reps.
+  ExerciseDraft withRepsForType(SetTarget target) => copyWith(
+    sets: [
+      for (final set in sets)
+        if (set.warmup == target.warmup) target else set,
+    ],
+  );
 
   Map<String, dynamic> toJson() => {
     'exerciseId': exerciseId,

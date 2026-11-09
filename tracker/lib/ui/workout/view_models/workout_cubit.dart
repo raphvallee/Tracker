@@ -17,6 +17,7 @@ class ActiveSet {
     this.reps = 0,
     this.type = SetType.working,
     this.order = 0,
+    this.rpe,
   });
 
   factory ActiveSet.fromJson(Map<String, dynamic> json) => ActiveSet(
@@ -28,6 +29,7 @@ class ActiveSet {
     reps: _doubleValue(json['reps']),
     type: SetType.values.asNameMap()[json['type']] ?? SetType.working,
     order: _intValue(json['order']),
+    rpe: json['rpe'] is num ? (json['rpe'] as num).toDouble() : null,
   );
 
   @override
@@ -38,11 +40,12 @@ class ActiveSet {
       weight == other.weight &&
       reps == other.reps &&
       type == other.type &&
-      order == other.order;
+      order == other.order &&
+      rpe == other.rpe;
 
   @override
   int get hashCode =>
-      Object.hash(exerciseId, exerciseName, weight, reps, type, order);
+      Object.hash(exerciseId, exerciseName, weight, reps, type, order, rpe);
   final int exerciseId;
   final String exerciseName;
   final double weight;
@@ -50,7 +53,28 @@ class ActiveSet {
   final SetType type;
   final int order;
 
+  /// How hard the set was, as RPE (0 to 10); null when not rated.
+  final double? rpe;
+
   bool get isWarmup => type == SetType.warmup;
+
+  ActiveSet copyWith({
+    double? weight,
+    double? reps,
+    SetType? type,
+    int? order,
+    Object? rpe = _unset,
+  }) => ActiveSet(
+    exerciseId: exerciseId,
+    exerciseName: exerciseName,
+    weight: weight ?? this.weight,
+    reps: reps ?? this.reps,
+    type: type ?? this.type,
+    order: order ?? this.order,
+    rpe: identical(rpe, _unset) ? this.rpe : rpe as double?,
+  );
+
+  static const _unset = Object();
 
   Map<String, dynamic> toJson() => {
     'exerciseId': exerciseId,
@@ -59,6 +83,7 @@ class ActiveSet {
     'reps': reps,
     'type': type.name,
     'order': order,
+    'rpe': rpe,
   };
 
   static int _intValue(Object? value) =>
@@ -101,6 +126,7 @@ class PlanExercise {
         order: _intValue(json['order']),
         minReps: _intValue(json['minReps']),
         maxReps: _intValueOrNull(json['maxReps']),
+        isWarmup: json['warmup'] == true,
       );
 
   static int _intValue(Object? value) =>
@@ -134,7 +160,12 @@ class PlanExercise {
     'order': order,
     'sets': [
       for (final set in sets)
-        {'order': set.order, 'minReps': set.minReps, 'maxReps': set.maxReps},
+        {
+          'order': set.order,
+          'minReps': set.minReps,
+          'maxReps': set.maxReps,
+          'warmup': set.isWarmup,
+        },
     ],
   };
 }
@@ -142,7 +173,9 @@ class PlanExercise {
 bool _listEquals(List<PlannedSet> a, List<PlannedSet> b) {
   if (a.length != b.length) return false;
   for (var i = 0; i < a.length; i++) {
-    if (a[i].minReps != b[i].minReps || a[i].maxReps != b[i].maxReps) {
+    if (a[i].minReps != b[i].minReps ||
+        a[i].maxReps != b[i].maxReps ||
+        a[i].isWarmup != b[i].isWarmup) {
       return false;
     }
   }
@@ -309,7 +342,8 @@ class WorkoutState {
   factory WorkoutState.fromJson(Map<String, dynamic> json) {
     // Hydrated-state schema versioning (PRODUCTION_READINESS.md Phase 1).
     // v1 = the original shape; v2 adds the restorable last-saved snapshot;
-    // v3 adds the split link, the split title and the last gym.
+    // v3 adds the split link, the split title, the last gym, set ratings
+    // (`rpe`) and planned warm-ups (`warmup`).
     // Payloads written before versioning have no 'v' key and read as v1.
     // Unknown future versions fall back to a clean idle state instead of
     // crashing.
@@ -722,15 +756,7 @@ class WorkoutCubit extends HydratedCubit<WorkoutState> {
             ),
         ],
         sets: [
-          for (var i = 0; i < sets.length; i++)
-            ActiveSet(
-              exerciseId: sets[i].exerciseId,
-              exerciseName: sets[i].exerciseName,
-              weight: sets[i].weight,
-              reps: sets[i].reps,
-              type: sets[i].type,
-              order: i,
-            ),
+          for (var i = 0; i < sets.length; i++) sets[i].copyWith(order: i),
         ],
       ),
     );
@@ -742,6 +768,7 @@ class WorkoutCubit extends HydratedCubit<WorkoutState> {
     required double weight,
     required double reps,
     SetType type = SetType.working,
+    double? rpe,
   }) {
     final sets = [
       ...state.sets,
@@ -752,6 +779,7 @@ class WorkoutCubit extends HydratedCubit<WorkoutState> {
         reps: reps,
         type: type,
         order: state.sets.length,
+        rpe: rpe,
       ),
     ];
     emit(state.copyWith(sets: sets));
@@ -760,14 +788,7 @@ class WorkoutCubit extends HydratedCubit<WorkoutState> {
   void removeSet(int order) {
     var sets = state.sets.where((s) => s.order != order).toList();
     for (var i = 0; i < sets.length; i++) {
-      sets[i] = ActiveSet(
-        exerciseId: sets[i].exerciseId,
-        exerciseName: sets[i].exerciseName,
-        weight: sets[i].weight,
-        reps: sets[i].reps,
-        type: sets[i].type,
-        order: i,
-      );
+      sets[i] = sets[i].copyWith(order: i);
     }
     emit(state.copyWith(sets: sets));
   }
@@ -778,20 +799,23 @@ class WorkoutCubit extends HydratedCubit<WorkoutState> {
         sets: [
           for (final set in state.sets)
             if (set.order == order)
-              ActiveSet(
-                exerciseId: set.exerciseId,
-                exerciseName: set.exerciseName,
-                weight: weight ?? set.weight,
-                reps: reps ?? set.reps,
-                type: type ?? set.type,
-                order: set.order,
-              )
+              set.copyWith(weight: weight, reps: reps, type: type)
             else
               set,
         ],
       ),
     );
   }
+
+  /// Rates the set at [order] (RPE, 0 to 10), or clears its rating (null).
+  void setRpe(int order, double? rpe) => emit(
+    state.copyWith(
+      sets: [
+        for (final set in state.sets)
+          if (set.order == order) set.copyWith(rpe: rpe) else set,
+      ],
+    ),
+  );
 
   Future<void> discardWorkout() async {
     final s = state;
@@ -846,6 +870,7 @@ class WorkoutCubit extends HydratedCubit<WorkoutState> {
                 reps: a.reps,
                 type: a.type,
                 order: a.order,
+                rpe: a.rpe,
               ),
             )
             .toList(),

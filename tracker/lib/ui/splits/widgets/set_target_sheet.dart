@@ -10,8 +10,8 @@ import 'package:tracker/ui/core/ui/sheet_surface.dart';
 import 'package:tracker/ui/settings/view_models/settings_cubit.dart';
 import 'package:tracker/ui/workout/widgets/number_entry.dart';
 
-/// What the set target sheet hands back: a new target (for this set or all
-/// of the exercise's sets), or a request to delete the set.
+/// What the set target sheet hands back: a new target (for this set, or
+/// every set of its type), or a request to delete the set.
 class SetTargetResult {
   const SetTargetResult(this.target, {this.applyToAll = false})
     : delete = false;
@@ -26,14 +26,15 @@ class SetTargetResult {
   final bool delete;
 }
 
-/// Edits one planned set's rep target: fixed reps or a range, nudged with
-/// steppers or typed with the chosen number entry.
+/// Edits the planned set at [index] of an exercise's [sets]: fixed reps or
+/// a range, nudged with steppers or typed with the chosen number entry, and
+/// whether it is a warm-up.
 Future<SetTargetResult?> showSetTargetSheet(
   BuildContext context, {
   required String title,
   required String subtitle,
-  required SetTarget target,
-  required int setCount,
+  required List<SetTarget> sets,
+  required int index,
 }) {
   final settings = SettingsCubit.maybeOf(context)?.state ?? SettingsState();
   return showFSheet<SetTargetResult>(
@@ -44,8 +45,8 @@ Future<SetTargetResult?> showSetTargetSheet(
     builder: (sheetContext) => _SetTargetSheet(
       title: title,
       subtitle: subtitle,
-      target: target,
-      setCount: setCount,
+      sets: sets,
+      index: index,
       entry: settings.numberEntry,
       defaultRangeMax: settings.defaultRepRangeMax,
     ),
@@ -58,18 +59,20 @@ class _SetTargetSheet extends StatefulWidget {
   const _SetTargetSheet({
     required this.title,
     required this.subtitle,
-    required this.target,
-    required this.setCount,
+    required this.sets,
+    required this.index,
     required this.entry,
     required this.defaultRangeMax,
   });
 
   final String title;
   final String subtitle;
-  final SetTarget target;
-  final int setCount;
+  final List<SetTarget> sets;
+  final int index;
   final NumberEntry entry;
   final int defaultRangeMax;
+
+  SetTarget get target => sets[index];
 
   @override
   State<_SetTargetSheet> createState() => _SetTargetSheetState();
@@ -83,6 +86,7 @@ class _SetTargetSheetState extends State<_SetTargetSheet> {
   );
   final _minFocus = FocusNode();
   final _maxFocus = FocusNode();
+  late bool _warmup = widget.target.warmup;
   bool _applyToAll = false;
   _Bound? _typing;
   String? _error;
@@ -129,6 +133,23 @@ class _SetTargetSheetState extends State<_SetTargetSheet> {
       bound == _Bound.min ? _minFocus : _maxFocus;
 
   int? _valueOf(_Bound bound) => int.tryParse(_controllerOf(bound).text.trim());
+
+  bool _warmupAt(int i) => i == widget.index ? _warmup : widget.sets[i].warmup;
+
+  /// The sets "Use for all" reaches: this one's type, once it is saved.
+  int get _sameType => [
+    for (var i = 0; i < widget.sets.length; i++)
+      if (_warmupAt(i) == _warmup) i,
+  ].length;
+
+  String get _applyToAllLabel {
+    final count = _sameType;
+    final mixed = _sameType < widget.sets.length;
+    if (!mixed) return 'Use for all $count sets';
+    return _warmup
+        ? 'Use for all $count warm-ups'
+        : 'Use for all $count working sets';
+  }
 
   int _rangeMaxFor(int min) {
     final remembered = _rememberedMax;
@@ -201,8 +222,12 @@ class _SetTargetSheetState extends State<_SetTargetSheet> {
       setState(() => _error = 'The max must be above the min.');
       return;
     }
-    Navigator.of(context)
-        .pop(SetTargetResult(SetTarget(min, max), applyToAll: _applyToAll));
+    Navigator.of(context).pop(
+      SetTargetResult(
+        SetTarget(min, max).withWarmup(_warmup),
+        applyToAll: _applyToAll && _sameType > 1,
+      ),
+    );
   }
 
   @override
@@ -263,9 +288,40 @@ class _SetTargetSheetState extends State<_SetTargetSheet> {
                 ),
               ),
             ),
-          if (widget.setCount > 1)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: FTappable(
+              onPress: () => setState(() => _warmup = !_warmup),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                child: Row(
+                  children: <Widget>[
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Text('Warm-up set', style: theme.typography.body.sm),
+                          Text(
+                            'Not counted with the working sets',
+                            style: theme.typography.body.xs.copyWith(
+                              color: theme.colors.mutedForeground,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    FSwitch(
+                      value: _warmup,
+                      onChange: (value) => setState(() => _warmup = value),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          if (_sameType > 1)
             Padding(
-              padding: const EdgeInsets.only(top: 8),
+              padding: const EdgeInsets.only(top: 2),
               child: FTappable(
                 onPress: () => setState(() => _applyToAll = !_applyToAll),
                 child: Padding(
@@ -274,7 +330,7 @@ class _SetTargetSheetState extends State<_SetTargetSheet> {
                     children: <Widget>[
                       Expanded(
                         child: Text(
-                          'Use for all ${widget.setCount} sets',
+                          _applyToAllLabel,
                           style: theme.typography.body.sm,
                         ),
                       ),
@@ -301,7 +357,7 @@ class _SetTargetSheetState extends State<_SetTargetSheet> {
             )
           else ...[
             FButton(onPress: _done, child: const Text('Done')),
-            if (widget.setCount > 1) ...[
+            if (widget.sets.length > 1) ...[
               const SizedBox(height: 6),
               FButton(
                 variant: .ghost,

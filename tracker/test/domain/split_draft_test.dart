@@ -111,7 +111,7 @@ void main() {
       expect(one.sets, const [SetTarget(6)]);
       expect(one.removeSet(0), one);
       expect(
-        exercise.withAllSets(const SetTarget(4, 6)).sets,
+        exercise.withRepsForType(const SetTarget(4, 6)).sets,
         List.filled(2, const SetTarget(4, 6)),
       );
     });
@@ -158,6 +158,74 @@ void main() {
       expect(base.removeDay(9), base);
       expect(base.reorderDay(9, 0), base);
       expect(base.updateDay(9, (day) => day.copyWith(title: 'x')), base);
+    });
+  });
+
+  group('warm-ups', () {
+    test('a warm-up keeps its type through plans and JSON', () {
+      const warmup = SetTarget.warmup(12);
+      expect(warmup.description, '12 warm-up reps');
+      expect(const SetTarget.warmup(1).description, '1 warm-up rep');
+      expect(warmup == const SetTarget(12), isFalse);
+      expect(warmup.withWarmup(false), const SetTarget(12));
+      final planned = warmup.toPlanned(0);
+      expect(planned.isWarmup, isTrue);
+      expect(SetTarget.fromPlanned(planned), warmup);
+      expect(SetTarget.fromJson(warmup.toJson()), warmup);
+      expect(
+        SetTarget.fromJson([8, 12]),
+        const SetTarget(8, 12),
+        reason: 'drafts kept before warm-ups existed',
+      );
+    });
+
+    test('a new set is a working set; one type takes reps for all', () {
+      const exercise = ExerciseDraft(
+        exerciseId: 1,
+        sets: [SetTarget.warmup(12), SetTarget(8, 12)],
+      );
+      expect(
+        exercise.addSet(const SetTarget(5)).sets.last,
+        const SetTarget(8, 12),
+      );
+      expect(
+        const ExerciseDraft(
+          exerciseId: 1,
+          sets: [SetTarget.warmup(12)],
+        ).addSet(const SetTarget(5)).sets.last,
+        const SetTarget(12),
+      );
+      expect(exercise.withRepsForType(const SetTarget(6, 8)).sets, const [
+        SetTarget.warmup(12),
+        SetTarget(6, 8),
+      ]);
+      expect(exercise.withRepsForType(const SetTarget.warmup(10)).sets, const [
+        SetTarget.warmup(10),
+        SetTarget(8, 12),
+      ]);
+    });
+
+    test('summaries name the warm-ups first', () {
+      expect(
+        setsSummary(const [
+          SetTarget.warmup(12),
+          SetTarget(8, 12),
+          SetTarget(8, 12),
+        ]),
+        '1 warm-up, then 2 sets of 8-12 reps',
+      );
+      expect(
+        setsSummary(const [
+          SetTarget.warmup(12),
+          SetTarget.warmup(8),
+          SetTarget(5),
+        ]),
+        '2 warm-ups, then 1 set of 5 reps',
+      );
+      expect(
+        setsSummary(const [SetTarget.warmup(10), SetTarget.warmup(10)]),
+        '2 warm-ups of 10 reps',
+      );
     });
   });
 

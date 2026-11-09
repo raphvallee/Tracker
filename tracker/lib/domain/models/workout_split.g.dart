@@ -1924,9 +1924,10 @@ const PlannedSetSchema = Schema(
   name: r'PlannedSet',
   id: 274001502372112171,
   properties: {
-    r'maxReps': PropertySchema(id: 0, name: r'maxReps', type: IsarType.long),
-    r'minReps': PropertySchema(id: 1, name: r'minReps', type: IsarType.long),
-    r'order': PropertySchema(id: 2, name: r'order', type: IsarType.long),
+    r'isWarmup': PropertySchema(id: 0, name: r'isWarmup', type: IsarType.bool),
+    r'maxReps': PropertySchema(id: 1, name: r'maxReps', type: IsarType.long),
+    r'minReps': PropertySchema(id: 2, name: r'minReps', type: IsarType.long),
+    r'order': PropertySchema(id: 3, name: r'order', type: IsarType.long),
   },
 
   estimateSize: _plannedSetEstimateSize,
@@ -1950,9 +1951,10 @@ void _plannedSetSerialize(
   List<int> offsets,
   Map<Type, List<int>> allOffsets,
 ) {
-  writer.writeLong(offsets[0], object.maxReps);
-  writer.writeLong(offsets[1], object.minReps);
-  writer.writeLong(offsets[2], object.order);
+  writer.writeBool(offsets[0], object.isWarmup);
+  writer.writeLong(offsets[1], object.maxReps);
+  writer.writeLong(offsets[2], object.minReps);
+  writer.writeLong(offsets[3], object.order);
 }
 
 PlannedSet _plannedSetDeserialize(
@@ -1962,9 +1964,10 @@ PlannedSet _plannedSetDeserialize(
   Map<Type, List<int>> allOffsets,
 ) {
   final object = PlannedSet(
-    maxReps: reader.readLongOrNull(offsets[0]),
-    minReps: reader.readLongOrNull(offsets[1]) ?? 0,
-    order: reader.readLongOrNull(offsets[2]) ?? 0,
+    isWarmup: reader.readBoolOrNull(offsets[0]) ?? false,
+    maxReps: reader.readLongOrNull(offsets[1]),
+    minReps: reader.readLongOrNull(offsets[2]) ?? 0,
+    order: reader.readLongOrNull(offsets[3]) ?? 0,
   );
   return object;
 }
@@ -1977,10 +1980,12 @@ P _plannedSetDeserializeProp<P>(
 ) {
   switch (propertyId) {
     case 0:
-      return (reader.readLongOrNull(offset)) as P;
+      return (reader.readBoolOrNull(offset) ?? false) as P;
     case 1:
-      return (reader.readLongOrNull(offset) ?? 0) as P;
+      return (reader.readLongOrNull(offset)) as P;
     case 2:
+      return (reader.readLongOrNull(offset) ?? 0) as P;
+    case 3:
       return (reader.readLongOrNull(offset) ?? 0) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -1989,6 +1994,16 @@ P _plannedSetDeserializeProp<P>(
 
 extension PlannedSetQueryFilter
     on QueryBuilder<PlannedSet, PlannedSet, QFilterCondition> {
+  QueryBuilder<PlannedSet, PlannedSet, QAfterFilterCondition> isWarmupEqualTo(
+    bool value,
+  ) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.equalTo(property: r'isWarmup', value: value),
+      );
+    });
+  }
+
   QueryBuilder<PlannedSet, PlannedSet, QAfterFilterCondition> maxRepsIsNull() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(

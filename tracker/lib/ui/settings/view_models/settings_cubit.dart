@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:hydrated_bloc/hydrated_bloc.dart';
+import 'package:tracker/domain/models/effort_scale.dart';
 import 'package:tracker/domain/models/graph_config.dart';
 import 'package:tracker/domain/models/number_entry.dart';
 import 'package:tracker/domain/models/rep_mode.dart';
@@ -10,7 +11,7 @@ class SettingsState {
   factory SettingsState.fromJson(Map<String, dynamic> json) {
     // Hydrated-state schema versioning (PRODUCTION_READINESS.md Phase 1).
     // v1 = the original shape; v2 adds set prefill, number entry, the
-    // current split and when splits were last picked. Payloads written before versioning have no 'v' key and
+    // effort scale, the current split and when splits were last picked. Payloads written before versioning have no 'v' key and
     // read as v1. Unknown future versions fall back to defaults instead of
     // crashing.
     switch (json['v'] as int? ?? 1) {
@@ -29,6 +30,7 @@ class SettingsState {
     this.analyticsEnabled = true,
     this.prefillSets = true,
     this.numberEntry = NumberEntry.keypad,
+    this.effortScale = EffortScale.rpe,
     this.currentSplitId,
     Map<int, DateTime> splitsUsedAt = const {},
     this.defaultRepMode = initialDefaultRepMode,
@@ -100,14 +102,17 @@ class SettingsState {
     );
   }
 
-  static SettingsState _fromV2(Map<String, dynamic> json) =>
-      _fromV1(json).copyWith(
+  static SettingsState _fromV2(Map<String, dynamic> json) => _fromV1(json)
+      .copyWith(
         prefillSets: json['prefillSets'] is bool
             ? json['prefillSets'] as bool
             : true,
         numberEntry:
             NumberEntry.values.asNameMap()[json['numberEntry']] ??
             NumberEntry.keypad,
+        effortScale:
+            EffortScale.values.asNameMap()[json['effortScale']] ??
+            EffortScale.rpe,
         currentSplitId: json['currentSplitId'] is int
             ? json['currentSplitId'] as int
             : null,
@@ -131,6 +136,9 @@ class SettingsState {
   /// as grey placeholders that one tap logs.
   final bool prefillSets;
   final NumberEntry numberEntry;
+
+  /// How sets' effort is entered and shown: RPE, or reps in reserve.
+  final EffortScale effortScale;
 
   /// The split whose next day the Workout tab offers; null follows the most
   /// recently trained split.
@@ -157,6 +165,7 @@ class SettingsState {
     bool? analyticsEnabled,
     bool? prefillSets,
     NumberEntry? numberEntry,
+    EffortScale? effortScale,
     Object? currentSplitId = _unset,
     Map<int, DateTime>? splitsUsedAt,
     RepMode? defaultRepMode,
@@ -173,6 +182,7 @@ class SettingsState {
       analyticsEnabled: analyticsEnabled ?? this.analyticsEnabled,
       prefillSets: prefillSets ?? this.prefillSets,
       numberEntry: numberEntry ?? this.numberEntry,
+      effortScale: effortScale ?? this.effortScale,
       currentSplitId: identical(currentSplitId, _unset)
           ? this.currentSplitId
           : currentSplitId as int?,
@@ -196,6 +206,7 @@ class SettingsState {
       analyticsEnabled == other.analyticsEnabled &&
       prefillSets == other.prefillSets &&
       numberEntry == other.numberEntry &&
+      effortScale == other.effortScale &&
       currentSplitId == other.currentSplitId &&
       _mapEquals(splitsUsedAt, other.splitsUsedAt) &&
       defaultRepMode == other.defaultRepMode &&
@@ -213,6 +224,7 @@ class SettingsState {
     analyticsEnabled,
     prefillSets,
     numberEntry,
+    effortScale,
     currentSplitId,
     Object.hashAllUnordered(
       splitsUsedAt.entries.map((e) => Object.hash(e.key, e.value)),
@@ -251,6 +263,7 @@ class SettingsState {
     'analyticsEnabled': analyticsEnabled,
     'prefillSets': prefillSets,
     'numberEntry': numberEntry.name,
+    'effortScale': effortScale.name,
     'currentSplitId': currentSplitId,
     'splitsUsedAt': {
       for (final MapEntry(:key, :value) in splitsUsedAt.entries)
@@ -285,6 +298,9 @@ class SettingsCubit extends HydratedCubit<SettingsState> {
 
   void setNumberEntry(NumberEntry entry) =>
       emit(state.copyWith(numberEntry: entry));
+
+  void setEffortScale(EffortScale scale) =>
+      emit(state.copyWith(effortScale: scale));
 
   /// Makes [splitId] the current split. [previous], the split that was
   /// current until now, counts as just used, so it lists right below it.

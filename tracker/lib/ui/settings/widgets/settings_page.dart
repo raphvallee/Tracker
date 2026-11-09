@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:forui/forui.dart';
+import 'package:tracker/domain/models/effort_scale.dart';
 import 'package:tracker/domain/models/number_entry.dart';
 import 'package:tracker/domain/models/rep_mode.dart';
 import 'package:tracker/domain/models/weight_unit.dart';
@@ -111,6 +112,34 @@ class SettingsPage extends StatelessWidget {
                           onChanged: context
                               .read<SettingsCubit>()
                               .setNumberEntry,
+                        ),
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: _kSettingsRowPadding,
+                    child: FCard(
+                      child: FItem(
+                        prefix: Icon(
+                          FLucideIcons.gauge,
+                          color: context.theme.colors.primary,
+                        ),
+                        title: const Text('Effort'),
+                        subtitle: Text(
+                          'RPE (exertion) or RIR (reps in reserve), 0 to 10',
+                          style: context.theme.typography.body.xs.copyWith(
+                            color: context.theme.colors.mutedForeground,
+                          ),
+                        ),
+                        suffix: _MenuSelect<EffortScale>(
+                          options: const {
+                            'RPE': EffortScale.rpe,
+                            'RIR': EffortScale.rir,
+                          },
+                          value: state.effortScale,
+                          onChanged: context
+                              .read<SettingsCubit>()
+                              .setEffortScale,
                         ),
                       ),
                     ),

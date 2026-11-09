@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -12,6 +13,7 @@ import 'package:tracker/ui/core/ui/animated_reveal.dart';
 import 'package:tracker/ui/core/ui/app_dialog.dart';
 import 'package:tracker/ui/core/ui/custom_app_bar.dart';
 import 'package:tracker/ui/core/ui/custom_route.dart';
+import 'package:tracker/ui/core/ui/dashed_outline.dart';
 import 'package:tracker/ui/core/ui/icon_button.dart';
 import 'package:tracker/ui/core/ui/keyboard_inset.dart';
 import 'package:tracker/ui/core/ui/max_width.dart';
@@ -160,17 +162,16 @@ class _SplitDayEditorPageState extends State<SplitDayEditorPage> {
       subtitle: saved == null
           ? '${day.title}. A new set.'
           : '${day.title}. Saved as ${saved.description}.',
-      target: item.sets[set],
-      setCount: item.sets.length,
+      sets: item.sets,
+      index: set,
     );
     if (result == null || !mounted) return;
     _editDay(
       (day) => day.updateExercise(exercise, (item) {
         if (result.delete) return item.removeSet(set);
         final target = result.target!;
-        return result.applyToAll
-            ? item.withAllSets(target)
-            : item.withSet(set, target);
+        final edited = item.withSet(set, target);
+        return result.applyToAll ? edited.withRepsForType(target) : edited;
       }),
     );
   }
@@ -558,10 +559,9 @@ class _ExerciseBlock extends StatelessWidget {
             ],
           ),
           Padding(
-            padding: const EdgeInsets.only(left: 36, top: 2),
-            child: Wrap(
-              spacing: 6,
-              runSpacing: 6,
+            // Right: the chips end where the menu's icon does.
+            padding: const EdgeInsets.fromLTRB(36, 2, _SetGrid.endInset, 0),
+            child: _SetGrid(
               children: <Widget>[
                 for (final (j, set) in exercise.sets.indexed)
                   _SetChip(
@@ -578,6 +578,51 @@ class _ExerciseBlock extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Set chips in even columns that fill the width, so every full row ends at
+/// the same edge.
+class _SetGrid extends StatelessWidget {
+  const _SetGrid({required this.children});
+
+  /// From the block's padding to the menu icon's right edge.
+  static const endInset = 16.0;
+
+  static const _gap = 6.0;
+  static const _minChip = 48.0;
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final columns = math.max(
+        1,
+        ((constraints.maxWidth + _gap) / (_minChip + _gap)).floor(),
+      );
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          for (var start = 0; start < children.length; start += columns)
+            Padding(
+              padding: EdgeInsets.only(top: start == 0 ? 0 : _gap),
+              child: Row(
+                children: <Widget>[
+                  for (var column = 0; column < columns; column++) ...[
+                    if (column > 0) const SizedBox(width: _gap),
+                    Expanded(
+                      child: start + column < children.length
+                          ? children[start + column]
+                          : const SizedBox.shrink(),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+        ],
+      );
+    },
+  );
 }
 
 class _SetChip extends StatelessWidget {
@@ -597,23 +642,35 @@ class _SetChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = context.theme;
     final accents = TrackerAccents.of(context);
-    return FTappable(
-      semanticsLabel: 'Set $setNumber, ${target.description}',
-      onPress: onPress,
-      child: Container(
-        constraints: const BoxConstraints(minWidth: 48),
-        height: 42,
-        padding: const EdgeInsets.symmetric(horizontal: 7),
-        decoration: BoxDecoration(
-          color: changed ? accents.draftSoft : theme.colors.muted,
-          borderRadius: BorderRadius.circular(8),
-          border: changed ? Border.all(color: accents.draft, width: 1.5) : null,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            Text(
+    final warmup = target.warmup;
+    // A warm-up is a lighter chip with a dashed edge, in either theme; an
+    // edited set's edge is amber, dashed or solid by type.
+    final Widget chip = Container(
+      height: 42,
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      decoration: BoxDecoration(
+        color: changed
+            ? accents.draftSoft
+            : warmup
+            ? theme.colors.muted.withValues(alpha: 0.4)
+            : theme.colors.muted,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      // Over the chip and inside its edge: an outline never changes the
+      // chip's size.
+      foregroundDecoration: changed && !warmup
+          ? BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: accents.draft, width: 1.5),
+            )
+          : null,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: <Widget>[
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
               target.label,
               style: theme.typography.body.xs.copyWith(
                 fontWeight: FontWeight.w600,
@@ -621,8 +678,11 @@ class _SetChip extends StatelessWidget {
                 color: changed ? accents.draftInk : theme.colors.foreground,
               ),
             ),
-            Text(
-              target.unit,
+          ),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              warmup ? 'warm-up' : target.unit,
               style: theme.typography.body.xs3.copyWith(
                 height: 1.1,
                 color: changed
@@ -630,9 +690,22 @@ class _SetChip extends StatelessWidget {
                     : theme.colors.mutedForeground,
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
+    );
+    return FTappable(
+      semanticsLabel: 'Set $setNumber, ${target.description}',
+      onPress: onPress,
+      child: warmup
+          ? CustomPaint(
+              foregroundPainter: DashedOutline(
+                color: changed ? accents.draft : theme.colors.mutedForeground,
+                width: changed ? 1.5 : 1.2,
+              ),
+              child: chip,
+            )
+          : chip,
     );
   }
 }
@@ -649,9 +722,8 @@ class _AddSetChip extends StatelessWidget {
       semanticsLabel: 'Add set',
       onPress: onPress,
       child: Container(
-        width: 42,
         height: 42,
-        decoration: BoxDecoration(
+        foregroundDecoration: BoxDecoration(
           borderRadius: BorderRadius.circular(8),
           border: Border.all(color: theme.colors.border),
         ),
