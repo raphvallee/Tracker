@@ -8,6 +8,7 @@ import 'package:tracker/domain/models/split_draft.dart';
 import 'package:tracker/domain/models/workout_split.dart';
 import 'package:tracker/domain/services/split_diff.dart';
 import 'package:tracker/ui/core/themes/accents.dart';
+import 'package:tracker/ui/core/ui/animated_reveal.dart';
 import 'package:tracker/ui/core/ui/app_dialog.dart';
 import 'package:tracker/ui/core/ui/custom_app_bar.dart';
 import 'package:tracker/ui/core/ui/custom_route.dart';
@@ -242,28 +243,47 @@ class _SplitDayEditorPageState extends State<SplitDayEditorPage> {
                         16,
                         4,
                         16,
-                        keyboardClearanceOf(context) + (diff.isEmpty ? 0 : 76),
+                        keyboardClearanceOf(context),
                       ),
-                      child: _content(context, day, base, diff),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: <Widget>[
+                          _content(context, day, base, diff),
+                          // Room to scroll clear of the save bar, opening
+                          // and closing with it.
+                          AnimatedReveal(
+                            fade: false,
+                            child: diff.isEmpty
+                                ? null
+                                : const SizedBox(height: 76),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
               ],
             ),
-            if (!diff.isEmpty)
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
-                child: _SaveBar(
-                  count: diff.count,
-                  onReview: () => showReviewChangesSheet(
-                    context,
-                    split: saved,
-                    names: _names,
-                  ),
-                ),
+            // Slides up from the bottom edge while there are unsaved
+            // changes, and back down once they are saved or discarded.
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: AnimatedReveal(
+                fade: false,
+                child: diff.isEmpty
+                    ? null
+                    : _SaveBar(
+                        count: diff.count,
+                        onReview: () => showReviewChangesSheet(
+                          context,
+                          split: saved,
+                          names: _names,
+                        ),
+                      ),
               ),
+            ),
           ],
         );
       },

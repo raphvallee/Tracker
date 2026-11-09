@@ -92,6 +92,7 @@ void main() {
     await pumpRounds(tester, 2);
     await tester.tap(find.text('Done'));
     await pumpUntil(tester, find.text('1 unsaved change'));
+    await pumpRounds(tester, 3);
 
     expect(labelled('Set 2, 10 reps'), findsOneWidget);
     expect(find.text('Edited'), findsOneWidget);
@@ -112,6 +113,7 @@ void main() {
     );
 
     expect(app.drafts.state.entries, isEmpty);
+    await pumpRounds(tester, 3);
     expect(find.text('1 unsaved change'), findsNothing);
     final saved = await tester.runAsync(() => repo.splits.getById(splitId));
     final sets = saved!.splitDays.single.exercises.single.sets;

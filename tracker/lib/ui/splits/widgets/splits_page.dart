@@ -8,6 +8,7 @@ import 'package:tracker/domain/models/split_draft.dart';
 import 'package:tracker/domain/models/workout_split.dart';
 import 'package:tracker/domain/services/split_diff.dart';
 import 'package:tracker/domain/services/split_rotation.dart';
+import 'package:tracker/ui/core/ui/animated_reveal.dart';
 import 'package:tracker/ui/core/ui/app_dialog.dart';
 import 'package:tracker/ui/core/ui/custom_app_bar.dart';
 import 'package:tracker/ui/core/ui/custom_route.dart';
@@ -270,14 +271,21 @@ class _SplitSection extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 8),
-            if (!diff.isEmpty) ...[
-              DraftStrip(
-                count: diff.count,
-                onReview: () =>
-                    showReviewChangesSheet(context, split: split, names: names),
-              ),
-              const SizedBox(height: 8),
-            ],
+            AnimatedReveal(
+              child: diff.isEmpty
+                  ? null
+                  : Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: DraftStrip(
+                        count: diff.count,
+                        onReview: () => showReviewChangesSheet(
+                          context,
+                          split: split,
+                          names: names,
+                        ),
+                      ),
+                    ),
+            ),
             _DayList(
               split: split,
               draft: draft,
