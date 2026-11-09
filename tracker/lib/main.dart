@@ -18,6 +18,7 @@ import 'package:tracker/ui/core/themes/material_theme_bridge.dart';
 import 'package:tracker/ui/core/ui/keyboard_inset.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
 import 'package:tracker/ui/settings/view_models/settings_cubit.dart';
+import 'package:tracker/ui/splits/view_models/split_drafts_cubit.dart';
 import 'package:tracker/ui/workout/view_models/workout_cubit.dart';
 import 'package:window_size/window_size.dart';
 
@@ -74,6 +75,10 @@ Future<void> _bootstrap() async {
             ),
             BlocProvider<SettingsCubit>(
               create: (_) => SettingsCubit(),
+              lazy: false,
+            ),
+            BlocProvider<SplitDraftsCubit>(
+              create: (_) => SplitDraftsCubit(repository: repository),
               lazy: false,
             ),
           ],

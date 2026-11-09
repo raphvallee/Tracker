@@ -1,5 +1,3 @@
-enum FreeStartPlacement { before, after, disabled }
-
 enum WeightUnit { kilograms, pounds }
 
 const double minimumWeight = -1000;

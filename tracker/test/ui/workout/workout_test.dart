@@ -1,541 +1,485 @@
-// No Isar here: the cubit's persistence and the repository-backed free-form
-// flow live one per file in workout_*_test.dart (docs/TESTING_ISAR_CI.md).
+// No Isar here: the cubit's persistence and the repository-backed flows live
+// one per file in workout_*_test.dart (docs/TESTING_ISAR_CI.md).
 
-import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forui/forui.dart';
 import 'package:hydrated_bloc/hydrated_bloc.dart';
+import 'package:tracker/domain/models/number_entry.dart';
+import 'package:tracker/domain/models/workout_set.dart';
 import 'package:tracker/domain/models/workout_split.dart';
-import 'package:tracker/ui/core/ui/set_type_chip.dart';
 import 'package:tracker/ui/workout/view_models/workout_cubit.dart';
+import 'package:tracker/ui/workout/widgets/elapsed_clock.dart';
 
 import '../../../testing/fakes/in_memory_storage.dart';
 import '../../../testing/test_helpers.dart';
+import '../../../testing/workout_helpers.dart';
+
+List<PlannedSet> _sets(int count, int min, [int? max]) => [
+  for (var i = 0; i < count; i++)
+    PlannedSet(order: i, minReps: min, maxReps: max),
+];
+
+Future<WorkoutCubit> pumpPush(WidgetTester tester) async {
+  useTallWindow(tester);
+  final cubit = await pumpApp(tester);
+  cubit.startPlanWorkout(
+    title: 'Push Day',
+    splitTitle: 'PPL',
+    exercises: [
+      PlanExercise(
+        exerciseId: 1,
+        name: 'Bench Press',
+        order: 0,
+        sets: _sets(2, 8, 12),
+      ),
+      PlanExercise(
+        exerciseId: 2,
+        name: 'Overhead Press',
+        order: 1,
+        sets: _sets(3, 6, 8),
+      ),
+    ],
+  );
+  return cubit;
+}
+
+Finder logButton() => find.textContaining(RegExp(r'^Log '));
 
 void main() {
-  setUp(() {
-    // In-memory storage: the real HydratedStorage does file I/O behind a
-    // static lock that deadlocks the widget-test fake-async zone once the
-    // app shell (HydratedCubits) is pumped - same setup as app_test.
-    HydratedBloc.storage = InMemoryStorage();
-  });
+  setUp(() => HydratedBloc.storage = InMemoryStorage());
 
-  group('CurrentWorkout logging UI', () {
-    testWidgets('planned exercises log on blur and keep the typed values', (
+  group('Overview', () {
+    testWidgets('lists the plan with the next exercise first in line', (
       tester,
     ) async {
-      final cubit = await pumpApp(tester);
-      cubit.startPlanWorkout(
-        title: 'PPL · Push',
-        exercises: const [
-          PlanExercise(exerciseId: 1, name: 'Bench Press', order: 0),
-        ],
+      final cubit = await pumpPush(tester);
+      cubit.logSet(
+        exerciseId: 1,
+        exerciseName: 'Bench Press',
+        weight: 60,
+        reps: 8,
       );
+      await openWorkoutTab(tester);
 
-      // Switch to the CurrentWorkout tab (index 2) via the nav bar onChange -
-      // hit-testing is brittle under the Offstage nested navigators.
-      tester
-          .widget<FBottomNavigationBar>(find.byType(FBottomNavigationBar))
-          .onChange!(2);
-      await tester.pumpAndSettle();
-
-      expect(find.text('PPL · Push'), findsOneWidget);
-      expect(find.text('Bench Press'), findsOneWidget);
-      expect(find.text('Add set'), findsOneWidget);
-      expect(find.byType(FCheckbox), findsNothing);
-      expect(find.byType(FTextField), findsNWidgets(2));
-      final weightField = find
-          .descendant(
-            of: find.byType(FTextField).at(0),
-            matching: find.byType(EditableText),
-          )
-          .first;
-      final repsField = find
-          .descendant(
-            of: find.byType(FTextField).at(1),
-            matching: find.byType(EditableText),
-          )
-          .first;
-
-      await tester.enterText(weightField, '100');
-      await tester.enterText(repsField, '5');
-      await tester.testTextInput.receiveAction(TextInputAction.done);
-      await tester.pumpAndSettle();
-
-      final state = cubit.state;
-      expect(state.sets, hasLength(1));
-      expect(state.sets.single.weight, 100);
-      expect(state.sets.single.reps, 5);
-      expect(find.text('100 kg × 5'), findsNothing);
-      expect(tester.widget<EditableText>(weightField).controller.text, '100');
-      expect(tester.widget<EditableText>(repsField).controller.text, '5');
-
-      await tester.enterText(weightField, '120');
-      await tester.enterText(repsField, '6');
-      await tester.testTextInput.receiveAction(TextInputAction.done);
-      await tester.pumpAndSettle();
-
-      final updated = cubit.state;
-      expect(updated.sets, hasLength(1));
-      expect(updated.sets.single.weight, 120);
-      expect(updated.sets.single.reps, 6);
-      expect(tester.widget<EditableText>(weightField).controller.text, '120');
-      expect(tester.widget<EditableText>(repsField).controller.text, '6');
-
-      await tester.timedDrag(
-        weightField,
-        const Offset(-250, 0),
-        const Duration(milliseconds: 200),
-      );
-      await tester.pumpAndSettle();
-      expect(find.text('Delete this set?'), findsNothing);
-      expect(cubit.state.sets, hasLength(1));
-    });
-
-    testWidgets('plan exercises show one row per remaining set with hints', (
-      tester,
-    ) async {
-      final cubit = await pumpApp(tester);
-      cubit.startPlanWorkout(
-        title: 'PPL · Push',
-        exercises: [
-          PlanExercise(
-            exerciseId: 1,
-            name: 'Bench Press',
-            order: 0,
-            sets: [
-              PlannedSet(order: 0, minReps: 10),
-              PlannedSet(order: 1, minReps: 8, maxReps: 12),
-              PlannedSet(order: 2, minReps: 8, maxReps: 12),
-            ],
-          ),
-        ],
-      );
-
-      tester
-          .widget<FBottomNavigationBar>(find.byType(FBottomNavigationBar))
-          .onChange!(2);
-      await tester.pumpAndSettle();
-
-      expect(find.text('Planned: 3 × 10, 8-12'), findsNothing);
-      final fields = find.byType(FTextField);
-      expect(fields, findsNWidgets(6));
-      String hintOf(int index) =>
-          tester.widget<FTextField>(fields.at(index)).hint!;
-      expect(hintOf(1), '10');
-      expect(hintOf(3), '8-12');
-      expect(hintOf(5), '8-12');
-      expect(find.text('Set'), findsNWidgets(3));
-      expect(find.text('1'), findsNothing);
-      expect(find.text('2'), findsNothing);
-      expect(find.text('3'), findsNothing);
+      expect(find.text('Push Day'), findsOneWidget);
+      expect(find.text('Finish'), findsOneWidget);
+      expect(find.text('1 of 5 sets'), findsOneWidget);
+      expect(find.text('Continue'), findsOneWidget);
+      expect(find.text('1 of 2 sets'), findsOneWidget);
+      expect(find.text('3 sets of 6-8 reps'), findsOneWidget);
       expect(
-        tester
-            .widget<EditableText>(
-              find
-                  .descendant(
-                    of: fields.at(1),
-                    matching: find.byType(EditableText),
-                  )
-                  .first,
-            )
-            .controller
-            .text,
-        '',
+        find.byType(ElapsedClock),
+        findsNWidgets(2),
+        reason: 'header and tab',
       );
 
-      Finder fieldText(int index) => find
-          .descendant(of: fields.at(index), matching: find.byType(EditableText))
-          .first;
-
-      await tester.enterText(fieldText(0), '100');
-      await tester.enterText(fieldText(1), '10');
-      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.tap(find.text('Continue'));
       await tester.pumpAndSettle();
-
-      expect(cubit.state.sets, hasLength(1));
-      expect(cubit.state.sets.single.weight, 100);
-      expect(cubit.state.sets.single.reps, 10);
-      expect(find.text('100 kg × 10'), findsNothing);
-      expect(tester.widget<EditableText>(fieldText(0)).controller.text, '100');
-      expect(tester.widget<EditableText>(fieldText(1)).controller.text, '10');
-
-      await tester.enterText(fieldText(2), '80');
-      await tester.enterText(fieldText(3), '8');
-      await tester.enterText(fieldText(4), '90');
-      await tester.pumpAndSettle();
-
-      expect(cubit.state.sets, hasLength(2));
-      expect(cubit.state.sets.last.weight, 80);
-      expect(cubit.state.sets.last.reps, 8);
-      expect(tester.widget<EditableText>(fieldText(0)).controller.text, '100');
-      expect(tester.widget<EditableText>(fieldText(2)).controller.text, '80');
-      expect(tester.widget<EditableText>(fieldText(4)).controller.text, '90');
-      expect(fields, findsNWidgets(6));
+      expect(logButton(), findsOneWidget);
+      expect(find.text('Target: 2 sets of 8-12 reps'), findsOneWidget);
     });
 
-    testWidgets('a partially filled row commits nothing for itself', (
+    testWidgets('a finished exercise shrinks to its best set', (tester) async {
+      final cubit = await pumpPush(tester);
+      for (final weight in [80.0, 82.5]) {
+        cubit.logSet(
+          exerciseId: 1,
+          exerciseName: 'Bench Press',
+          weight: weight,
+          reps: 8,
+        );
+      }
+      await openWorkoutTab(tester);
+
+      expect(find.text('Best set 82.5 kg × 8'), findsOneWidget);
+      expect(find.text('2 of 2'), findsOneWidget);
+      expect(find.text('Overhead Press'), findsOneWidget);
+      expect(find.text('0 of 3 sets'), findsOneWidget, reason: 'now current');
+    });
+
+    testWidgets('swiping an exercise away asks first when it has sets', (
       tester,
     ) async {
-      final cubit = await pumpApp(tester);
-      cubit.startPlanWorkout(
-        title: 'PPL · Push',
-        exercises: [
-          PlanExercise(
-            exerciseId: 1,
-            name: 'Bench Press',
-            order: 0,
-            sets: [
-              PlannedSet(order: 0, minReps: 10),
-              PlannedSet(order: 1, minReps: 10),
-              PlannedSet(order: 2, minReps: 10),
-            ],
-          ),
-        ],
+      final cubit = await pumpPush(tester);
+      cubit.logSet(
+        exerciseId: 1,
+        exerciseName: 'Bench Press',
+        weight: 60,
+        reps: 8,
       );
+      await openWorkoutTab(tester);
 
-      tester
-          .widget<FBottomNavigationBar>(find.byType(FBottomNavigationBar))
-          .onChange!(2);
-      await tester.pumpAndSettle();
-
-      final fields = find.byType(FTextField);
-      Finder fieldText(int index) => find
-          .descendant(of: fields.at(index), matching: find.byType(EditableText))
-          .first;
-      await tester.enterText(fieldText(0), '100');
-      await tester.enterText(fieldText(1), '10');
-      await tester.testTextInput.receiveAction(TextInputAction.done);
-      await tester.pumpAndSettle();
-      expect(cubit.state.sets, hasLength(1));
-
-      await tester.enterText(fieldText(2), '80');
-      await tester.testTextInput.receiveAction(TextInputAction.done);
-      await tester.pumpAndSettle();
-
-      expect(cubit.state.sets, hasLength(1));
-      expect(find.text('Must be greater than 0'), findsOneWidget);
-      await tester.enterText(fieldText(3), '8');
-      await tester.testTextInput.receiveAction(TextInputAction.done);
-      await tester.pumpAndSettle();
-      expect(cubit.state.sets, hasLength(2));
-      expect(cubit.state.sets.last.weight, 80);
-      expect(cubit.state.sets.last.reps, 8);
-      expect(find.text('Must be greater than 0'), findsNothing);
-    });
-
-    testWidgets('fractional reps log exactly and below one is an error', (
-      tester,
-    ) async {
-      final cubit = await pumpApp(tester);
-      cubit.startPlanWorkout(
-        title: 'PPL · Push',
-        exercises: [
-          PlanExercise(
-            exerciseId: 1,
-            name: 'Bench Press',
-            order: 0,
-            sets: [
-              PlannedSet(order: 0, minReps: 10),
-              PlannedSet(order: 1, minReps: 10),
-            ],
-          ),
-        ],
-      );
-
-      tester
-          .widget<FBottomNavigationBar>(find.byType(FBottomNavigationBar))
-          .onChange!(2);
-      await tester.pumpAndSettle();
-
-      final weightField = find
-          .descendant(
-            of: find.byType(FTextField).at(0),
-            matching: find.byType(EditableText),
-          )
-          .first;
-      final repsField = find
-          .descendant(
-            of: find.byType(FTextField).at(1),
-            matching: find.byType(EditableText),
-          )
-          .first;
-
-      await tester.enterText(weightField, '100');
-      await tester.enterText(repsField, '3.25');
-      await tester.testTextInput.receiveAction(TextInputAction.done);
-      await tester.pumpAndSettle();
-      expect(cubit.state.sets, hasLength(1));
-      expect(cubit.state.sets.single.reps, 3.25);
-
-      await tester.enterText(repsField, '0.4');
-      await tester.testTextInput.receiveAction(TextInputAction.done);
-      await tester.pumpAndSettle();
-      expect(cubit.state.sets, hasLength(1));
-      expect(find.text('Must be at least 1'), findsOneWidget);
-    });
-  });
-
-  group('Free workout cards', () {
-    Future<WorkoutCubit> pumpFree(
-      WidgetTester tester, {
-      void Function(WorkoutCubit cubit)? seed,
-    }) async {
-      tester.view.physicalSize = const Size(800, 1400);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.resetPhysicalSize);
-      final cubit = await pumpApp(tester);
-      cubit.startWorkout();
-      seed?.call(cubit);
-      tester
-          .widget<FBottomNavigationBar>(find.byType(FBottomNavigationBar))
-          .onChange!(2);
-      await tester.pumpAndSettle();
-      return cubit;
-    }
-
-    void logBench(WorkoutCubit cubit, double weight) => cubit.logSet(
-      exerciseId: 1,
-      exerciseName: 'Bench Press',
-      weight: weight,
-      reps: 5,
-    );
-
-    Finder input(int index) => find
-        .descendant(
-          of: find.byType(FTextField).at(index),
-          matching: find.byType(EditableText),
-        )
-        .first;
-
-    String textOf(WidgetTester tester, int index) =>
-        tester.widget<EditableText>(input(index)).controller.text;
-
-    Future<void> commit(WidgetTester tester) async {
-      await tester.testTextInput.receiveAction(TextInputAction.done);
-      await tester.pumpAndSettle();
-    }
-
-    testWidgets('each exercise gets its own card, in logged order', (
-      tester,
-    ) async {
-      await pumpFree(
-        tester,
-        seed: (cubit) {
-          cubit.addExercise(exerciseId: 1, name: 'Bench Press');
-          logBench(cubit, 80);
-          // Sets logged without a card (older saved sessions) get one too.
-          cubit.logSet(
-            exerciseId: 2,
-            exerciseName: 'Squat',
-            weight: 100,
-            reps: 5,
-          );
-        },
-      );
-
-      expect(find.text('Free workout'), findsOneWidget);
-      expect(find.text('1. '), findsOneWidget);
-      expect(find.text('Bench Press'), findsOneWidget);
-      expect(find.text('2. '), findsOneWidget);
-      expect(find.text('Squat'), findsOneWidget);
-      // One logged row per card, and no blank row after it.
-      expect(find.byType(FTextField), findsNWidgets(4));
-      expect(find.text('Add set'), findsNWidgets(2));
-      expect(find.text('Add exercise'), findsOneWidget);
-      expect(find.byType(FCheckbox), findsNothing);
-      // FSelect redirects to a private subclass: match it by predicate.
-      expect(find.byWidgetPredicate((w) => w is FSelect<int>), findsNothing);
-      expect(textOf(tester, 0), '80');
-      expect(textOf(tester, 2), '100');
-    });
-
-    testWidgets('a set typed in a lower blank row fills the first one', (
-      tester,
-    ) async {
-      final cubit = await pumpFree(
-        tester,
-        seed: (cubit) => cubit.addExercise(exerciseId: 1, name: 'Bench Press'),
-      );
-      await tester.tap(find.text('Add set'));
-      await tester.pumpAndSettle();
-      expect(find.byType(FTextField), findsNWidgets(4));
-
-      await tester.enterText(input(2), '60');
-      await tester.enterText(input(3), '5');
-      await commit(tester);
-
-      expect(cubit.state.sets, hasLength(1));
-      expect(find.byType(FTextField), findsNWidgets(4));
-      expect(
-        [for (var i = 0; i < 4; i++) textOf(tester, i)],
-        ['60', '5', '', ''],
-      );
-
-      // Leaving the logged row again must not log it twice.
-      await tester.enterText(input(1), '5');
-      await commit(tester);
-      expect(cubit.state.sets, hasLength(1));
-    });
-
-    testWidgets('clearing a logged row shifts the later sets up', (
-      tester,
-    ) async {
-      final cubit = await pumpFree(
-        tester,
-        seed: (cubit) {
-          cubit.addExercise(exerciseId: 1, name: 'Bench Press');
-          for (final weight in [60.0, 70.0, 80.0]) {
-            logBench(cubit, weight);
-          }
-        },
-      );
-      expect(find.byType(FTextField), findsNWidgets(6));
-
-      await tester.enterText(input(2), '');
-      await tester.enterText(input(3), '');
-      await commit(tester);
-
-      expect(cubit.state.sets.map((s) => s.weight).toList(), [60, 80]);
-      expect(find.byType(FTextField), findsNWidgets(4));
-      expect(
-        [for (var i = 0; i < 4; i++) textOf(tester, i)],
-        ['60', '5', '80', '5'],
-      );
-    });
-
-    testWidgets('the set chip toggles warm-up before or after logging', (
-      tester,
-    ) async {
-      final cubit = await pumpFree(
-        tester,
-        seed: (cubit) => cubit.addExercise(exerciseId: 1, name: 'Bench Press'),
-      );
-      Finder chip(int row) => find.byType(SetTypeChip).at(row);
-
-      // Before typing: the blank row logs as a warm-up.
-      await tester.tap(chip(0));
-      await tester.pump();
-      expect(find.text('W'), findsOneWidget);
-      await tester.enterText(input(0), '40');
-      await tester.enterText(input(1), '10');
-      await commit(tester);
-      expect(cubit.state.sets.single.isWarmup, isTrue);
-
-      // On a logged row: flips the logged set.
-      await tester.tap(chip(0));
-      await tester.pumpAndSettle();
-      expect(cubit.state.sets.single.isWarmup, isFalse);
-
-      await tester.tap(find.text('Add set'));
-      await tester.pumpAndSettle();
-
-      // A mouse click blurs the typed row first, logging it, and the toggle
-      // then lands on the logged set.
-      await tester.enterText(input(2), '60');
-      await tester.enterText(input(3), '8');
-      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
-      await mouse.addPointer(location: tester.getCenter(chip(1)));
-      await mouse.down(tester.getCenter(chip(1)));
-      await mouse.up();
-      await tester.pumpAndSettle();
-      expect(cubit.state.sets, hasLength(2));
-      expect(cubit.state.sets.last.weight, 60);
-      expect(cubit.state.sets.last.isWarmup, isTrue);
-      expect(find.text('W'), findsOneWidget);
-      // Move the mouse off and let the chip's hover tooltip timers run out.
-      await mouse.removePointer();
-      await tester.pump(const Duration(seconds: 5));
-      await tester.pumpAndSettle();
-    });
-
-    testWidgets('removing an exercise with sets asks first', (tester) async {
-      final cubit = await pumpFree(
-        tester,
-        seed: (cubit) {
-          cubit.addExercise(exerciseId: 1, name: 'Bench Press');
-          logBench(cubit, 80);
-        },
-      );
-
-      await tester.tap(find.byIcon(FLucideIcons.x));
+      await tester.drag(find.text('Bench Press'), const Offset(-600, 0));
       await tester.pumpAndSettle();
       expect(find.text('Remove Bench Press?'), findsOneWidget);
-      expect(
-        find.text('This will delete its 1 set from this workout.'),
-        findsOneWidget,
-      );
-      await tester.tap(find.text('Cancel'));
+      await tester.tap(find.text('Remove'));
       await tester.pumpAndSettle();
-      expect(cubit.state.sets, hasLength(1));
-
-      await tester.tap(find.byIcon(FLucideIcons.x));
-      await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(FButton, 'Remove'));
-      await tester.pumpAndSettle();
+      expect(cubit.state.plan.map((e) => e.name), ['Overhead Press']);
       expect(cubit.state.sets, isEmpty);
+
+      await tester.drag(find.text('Overhead Press'), const Offset(-600, 0));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Remove Overhead'), findsNothing);
       expect(cubit.state.plan, isEmpty);
-      expect(find.text('Bench Press'), findsNothing);
       expect(
         find.text('Add an exercise to start logging sets.'),
         findsOneWidget,
       );
     });
+
+    testWidgets('Finish saves; with nothing logged it offers to discard', (
+      tester,
+    ) async {
+      final cubit = await pumpPush(tester);
+      await openWorkoutTab(tester);
+
+      await tester.tap(find.text('Finish'));
+      await tester.pumpAndSettle();
+      expect(find.text('Discard workout?'), findsOneWidget);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+
+      cubit.logSet(
+        exerciseId: 1,
+        exerciseName: 'Bench Press',
+        weight: 60,
+        reps: 8,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Finish'));
+      await tester.pumpAndSettle();
+      expect(find.text('End workout?'), findsOneWidget);
+      await tester.tap(find.text('End & save'));
+      await tester.pumpAndSettle();
+      expect(cubit.state.isInProgress, isFalse);
+      expect(cubit.state.savedSnapshot!.planTitle, 'Push Day');
+    });
+
+    testWidgets('Cancel workout in the menu discards after asking', (
+      tester,
+    ) async {
+      final cubit = await pumpPush(tester);
+      cubit.logSet(
+        exerciseId: 1,
+        exerciseName: 'Bench Press',
+        weight: 60,
+        reps: 8,
+      );
+      await openWorkoutTab(tester);
+
+      await tester.tap(fButtonByTooltip('Workout options'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cancel workout'));
+      await tester.pumpAndSettle();
+      expect(
+        find.text('This deletes the 1 set logged in this workout.'),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Cancel workout').last);
+      await tester.pumpAndSettle();
+      expect(cubit.state.isInProgress, isFalse);
+      expect(cubit.state.discardedSnapshot, isNotNull);
+    });
   });
 
-  group('CurrentWorkout restore buttons', () {
-    Future<void> openWorkoutTab(WidgetTester tester) async {
-      tester
-          .widget<FBottomNavigationBar>(find.byType(FBottomNavigationBar))
-          .onChange!(2);
-      await tester.pumpAndSettle();
-    }
+  group('Exercise page', () {
+    testWidgets('Log saves the placeholder values, one tap per set', (
+      tester,
+    ) async {
+      final cubit = await pumpPush(tester);
+      await openExercise(tester, 'Bench Press');
 
+      // No history: the plan gives 8 reps, the weight is still missing.
+      expect(find.text('Log set 1'), findsOneWidget);
+      await tester.tap(find.text('Log set 1'));
+      await tester.pumpAndSettle();
+      expect(find.text('Must be between -1000 and 10000'), findsOneWidget);
+      expect(cubit.state.sets, isEmpty);
+
+      await typeSet(tester, 0, weight: '80');
+      await tester.pump();
+      // The focused field's keyboard bar repeats the dock's Log button.
+      expect(find.text('Log 80 kg × 8'), findsNWidgets(2));
+      await tester.tap(find.text('Log 80 kg × 8').first);
+      await tester.pumpAndSettle();
+      expect(cubit.state.sets.single.weight, 80);
+      expect(cubit.state.sets.single.reps, 8);
+
+      // The next row copies the weight above it.
+      await tester.tap(find.text('Log 80 kg × 8'));
+      await tester.pumpAndSettle();
+      expect(cubit.state.sets.map((s) => (s.weight, s.reps)), [
+        (80, 8),
+        (80, 8),
+      ]);
+
+      expect(find.text('Next: Overhead Press'), findsOneWidget);
+      await tester.tap(find.text('Next: Overhead Press'));
+      await tester.pumpAndSettle();
+      expect(find.text('Target: 3 sets of 6-8 reps'), findsOneWidget);
+    });
+
+    testWidgets(
+      'the circle logs its own row, filling it from the placeholder',
+      (tester) async {
+        final cubit = await pumpPush(tester);
+        await openExercise(tester, 'Bench Press');
+        await typeSet(tester, 0, weight: '70', reps: '10');
+        await leaveRow(tester);
+        expect(cubit.state.sets.single.reps, 10);
+
+        await tester.tap(labelled('Log set 2'));
+        await tester.pumpAndSettle();
+        expect(cubit.state.sets.last.weight, 70);
+        expect(cubit.state.sets.last.reps, 8, reason: 'the plan, not row 1');
+        expect(textIn(tester, repsField(1)), '8');
+      },
+    );
+
+    testWidgets('typing one value and leaving logs it with the placeholder', (
+      tester,
+    ) async {
+      final cubit = await pumpPush(tester);
+      await openExercise(tester, 'Bench Press');
+      await typeSet(tester, 0, weight: '90');
+      await leaveRow(tester);
+      expect(cubit.state.sets.single.reps, 8);
+    });
+
+    testWidgets('with prefill off a half-typed row shows its error', (
+      tester,
+    ) async {
+      final cubit = await pumpPush(tester);
+      await openExercise(tester, 'Bench Press', prefill: false);
+
+      final hint = tester.widget<TextField>(repsField(0)).decoration!.hintText;
+      expect(hint, 'Reps');
+      await typeSet(tester, 0, weight: '90');
+      await leaveRow(tester);
+      expect(find.text('Must be greater than 0'), findsOneWidget);
+      expect(cubit.state.sets, isEmpty);
+    });
+
+    testWidgets('fractional reps log exactly and below one is an error', (
+      tester,
+    ) async {
+      final cubit = await pumpPush(tester);
+      await openExercise(tester, 'Bench Press');
+      await typeSet(tester, 0, weight: '60', reps: '0.5');
+      await leaveRow(tester);
+      expect(find.text('Must be at least 1'), findsOneWidget);
+      expect(cubit.state.sets, isEmpty);
+
+      await typeSet(tester, 0, reps: '7.5');
+      await leaveRow(tester);
+      expect(cubit.state.sets.single.reps, 7.5);
+    });
+
+    testWidgets('the set badge toggles warm-up before and after logging', (
+      tester,
+    ) async {
+      final cubit = await pumpPush(tester);
+      await openExercise(tester, 'Bench Press');
+
+      await tester.tap(labelled('Set 1, tap for a warm-up'));
+      await tester.pumpAndSettle();
+      await typeSet(tester, 0, weight: '40', reps: '12');
+      await leaveRow(tester);
+      expect(cubit.state.sets.single.type, SetType.warmup);
+      // Warm-ups do not count: the next row is working set 1.
+      expect(find.text('Log 40 kg × 8'), findsOneWidget);
+      expect(labelled('Set 1, tap for a warm-up'), findsOneWidget);
+
+      await tester.tap(labelled('Warm-up set, tap for a working set'));
+      await tester.pumpAndSettle();
+      expect(cubit.state.sets.single.type, SetType.working);
+    });
+
+    testWidgets('swiping a logged set away deletes it after confirming', (
+      tester,
+    ) async {
+      final cubit = await pumpPush(tester);
+      cubit.logSet(
+        exerciseId: 1,
+        exerciseName: 'Bench Press',
+        weight: 60,
+        reps: 8,
+      );
+      cubit.logSet(
+        exerciseId: 1,
+        exerciseName: 'Bench Press',
+        weight: 65,
+        reps: 8,
+      );
+      await openExercise(tester, 'Bench Press');
+
+      await tester.timedDrag(
+        weightField(0),
+        const Offset(-700, 0),
+        const Duration(milliseconds: 300),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Delete this set?'), findsOneWidget);
+      await tester.tap(
+        find.descendant(
+          of: find.byType(FDialog),
+          matching: find.text('Delete'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(cubit.state.sets.single.weight, 65);
+      expect(textIn(tester, weightField(0)), '65');
+    });
+
+    testWidgets('Remove from workout leaves the page', (tester) async {
+      final cubit = await pumpPush(tester);
+      await openExercise(tester, 'Bench Press');
+      await tester.tap(fButtonByTooltip('Exercise options'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Remove from workout'));
+      await tester.pumpAndSettle();
+      expect(cubit.state.plan.map((e) => e.name), ['Overhead Press']);
+      expect(find.text('Continue'), findsOneWidget);
+    });
+  });
+
+  group('Number entry', () {
+    testWidgets('the keypad types, Next moves to reps and Log saves', (
+      tester,
+    ) async {
+      final cubit = await pumpPush(tester);
+      await openExercise(tester, 'Bench Press', entry: NumberEntry.keypad);
+
+      await tester.tap(weightField(0));
+      await tester.pumpAndSettle();
+      expect(find.text('Set 1 weight, in kg'), findsOneWidget);
+      for (final key in ['1', '0', '2', '.', '5']) {
+        await tester.tap(labelled(key));
+        await tester.pump();
+      }
+      await tester.tap(labelled('Delete'));
+      await tester.tap(labelled('Delete'));
+      await tester.pump();
+      expect(textIn(tester, weightField(0)), '102');
+
+      await tester.tap(labelled('Next'));
+      await tester.pumpAndSettle();
+      expect(find.text('Set 1 reps'), findsOneWidget);
+      await tester.tap(labelled('6'));
+      await tester.pump();
+      expect(
+        find.text('Log 102 kg × 6'),
+        findsNWidgets(2),
+        reason: 'dock and keypad',
+      );
+      await tester.tap(find.text('Log 102 kg × 6').last);
+      await tester.pumpAndSettle();
+      expect(cubit.state.sets.single.weight, 102);
+      expect(cubit.state.sets.single.reps, 6);
+      expect(find.text('Set 1 reps'), findsNothing, reason: 'keypad closed');
+    });
+
+    testWidgets('the keypad sign key logs an assisted weight', (tester) async {
+      final cubit = await pumpPush(tester);
+      await openExercise(tester, 'Bench Press', entry: NumberEntry.keypad);
+      await tester.tap(weightField(0));
+      await tester.pumpAndSettle();
+      await tester.tap(labelled('2'));
+      await tester.tap(labelled('0'));
+      await tester.tap(labelled('Negative weight'));
+      await tester.pump();
+      expect(textIn(tester, weightField(0)), '-20');
+      await tester.tap(labelled('Close keypad'));
+      await tester.pumpAndSettle();
+      expect(find.text('Assisted machine?'), findsOneWidget);
+      await tester.tap(find.text('Yes, log it'));
+      await tester.pumpAndSettle();
+      expect(cubit.state.sets.single.weight, -20);
+    });
+
+    testWidgets('steppers nudge the values without a keyboard', (tester) async {
+      final cubit = await pumpPush(tester);
+      await openExercise(tester, 'Bench Press', entry: NumberEntry.steppers);
+      expect(find.byType(TextField), findsNothing);
+      expect(find.text('Hold a number to type it'), findsOneWidget);
+
+      for (var i = 0; i < 3; i++) {
+        await tester.tap(labelled('Increase weight'));
+      }
+      await tester.tap(labelled('Increase reps'));
+      await tester.pump();
+      expect(find.text('Log 7.5 kg × 9'), findsOneWidget);
+      await tester.tap(find.text('Log 7.5 kg × 9'));
+      await tester.pumpAndSettle();
+      expect(cubit.state.sets.single.weight, 7.5);
+      expect(cubit.state.sets.single.reps, 9);
+
+      // A logged set saves each nudge right away.
+      await tester.tap(find.text('7.5').first);
+      await tester.pumpAndSettle();
+      await tester.tap(labelled('Decrease reps'));
+      await tester.pumpAndSettle();
+      expect(cubit.state.sets.single.reps, 8);
+    });
+  });
+
+  group('Restore buttons', () {
     testWidgets('the last saved workout offers a restore button', (
       tester,
     ) async {
+      useTallWindow(tester);
       final cubit = await pumpApp(tester);
       await openWorkoutTab(tester);
-
       expect(find.text('Restore last workout'), findsNothing);
 
       cubit.startWorkout();
       cubit.logSet(exerciseId: 1, exerciseName: 'Squat', weight: 100, reps: 5);
       await cubit.endWorkout();
-      await tester.pumpAndSettle();
-
+      await tester.pump();
       expect(find.text('Restore last workout'), findsOneWidget);
 
       await tester.tap(find.text('Restore last workout'));
       await tester.pumpAndSettle();
       expect(cubit.state.isInProgress, isTrue);
       expect(cubit.state.sets.single.weight, 100);
-      expect(find.text('End Workout'), findsOneWidget);
+      expect(find.text('Finish'), findsOneWidget);
       expect(find.text('Restore last workout'), findsNothing);
     });
 
     testWidgets('the last discarded workout offers a restore button', (
       tester,
     ) async {
+      useTallWindow(tester);
       final cubit = await pumpApp(tester);
       await openWorkoutTab(tester);
 
       cubit.startWorkout();
       cubit.logSet(exerciseId: 1, exerciseName: 'Squat', weight: 100, reps: 5);
       await cubit.discardWorkout();
-      // pump (not pumpAndSettle): the discarded-restore window ticker runs
-      // every 30 s and would never let the fake clock settle.
+      // pump (not pumpAndSettle): the restore window ticker runs every 30 s.
       await tester.pump();
-
       expect(find.text('Restore last workout'), findsOneWidget);
-      expect(find.text('Restore discarded workout'), findsNothing);
 
       await tester.tap(find.text('Restore last workout'));
       await tester.pumpAndSettle();
       expect(cubit.state.isInProgress, isTrue);
       expect(cubit.state.sets.single.weight, 100);
-      expect(find.text('End Workout'), findsOneWidget);
+    });
+
+    testWidgets('with no split the start view offers an empty workout', (
+      tester,
+    ) async {
+      useTallWindow(tester);
+      final cubit = await pumpApp(tester);
+      await openWorkoutTab(tester);
+      expect(find.text('Plan your split'), findsOneWidget);
+      await tester.tap(find.text('Start empty workout'));
+      await tester.pumpAndSettle();
+      expect(cubit.state.isInProgress, isTrue);
+      expect(cubit.state.planTitle, isNull);
+      expect(find.text('Free workout'), findsOneWidget);
+      expect(find.byType(FButton), findsWidgets);
     });
   });
 }

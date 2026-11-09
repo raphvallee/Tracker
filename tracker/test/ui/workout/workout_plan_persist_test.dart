@@ -35,16 +35,19 @@ void main() {
     await isar.close();
   });
 
-  test('startPlanWorkout sets the plan and planTitle on persist', () async {
+  test('a split day workout saves its plan title and split link', () async {
     cubit.startPlanWorkout(
-      title: 'PPL · Push',
+      title: 'Push',
+      splitTitle: 'PPL',
+      splitId: 12,
+      splitDayIndex: 0,
       exercises: const [
         PlanExercise(exerciseId: 1, name: 'Bench Press', order: 0),
         PlanExercise(exerciseId: 2, name: 'OHP', order: 1),
       ],
     );
     expect(cubit.state.plan, hasLength(2));
-    expect(cubit.state.planTitle, 'PPL · Push');
+    expect(cubit.state.planTitle, 'Push');
     expect(cubit.state.plan.first.name, 'Bench Press');
 
     cubit.logSet(
@@ -57,6 +60,10 @@ void main() {
 
     final session = (await repo.sessions.getAll()).single;
     expect(session.title, 'PPL · Push');
+    expect(session.splitId, 12);
+    expect(session.splitDayIndex, 0);
     expect(session.sets.single.exerciseId, 1);
+    final visits = await repo.sessions.getSplitVisits();
+    expect(visits.single.splitId, 12);
   });
 }

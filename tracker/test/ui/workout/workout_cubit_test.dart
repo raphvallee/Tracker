@@ -3,6 +3,7 @@
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hydrated_bloc/hydrated_bloc.dart';
+import 'package:tracker/domain/models/gym.dart';
 import 'package:tracker/domain/models/workout_set.dart';
 import 'package:tracker/domain/models/workout_split.dart';
 import 'package:tracker/ui/workout/view_models/workout_cubit.dart';
@@ -139,11 +140,56 @@ void main() {
         ],
       );
       final json = state.toJson();
-      expect(json['v'], 2);
+      expect(json['v'], 3);
       final restored = WorkoutState.fromJson(json);
       expect(restored, state);
       expect(restored.startTime, state.startTime);
       expect(restored.sets.single.exerciseName, 'Bench');
+    });
+
+    test('v3 carries the split link, split title and last gym', () {
+      final state = WorkoutState(
+        isInProgress: true,
+        startTime: DateTime(2026, 9, 3, 10),
+        planTitle: 'Push Day',
+        splitTitle: 'PPL',
+        splitId: 4,
+        splitDayIndex: 2,
+        lastGymId: 9,
+      );
+      final restored = WorkoutState.fromJson(state.toJson());
+      expect(restored, state);
+      expect(restored.splitTitle, 'PPL');
+      expect(restored.splitId, 4);
+      expect(restored.splitDayIndex, 2);
+      expect(restored.lastGymId, 9);
+    });
+
+    test('v2 payloads restore with no split link or last gym', () {
+      final state = WorkoutState.fromJson({
+        'v': 2,
+        'isInProgress': true,
+        'planTitle': 'PPL · Push',
+        'splitId': 4,
+        'lastGymId': 9,
+      });
+      expect(state.planTitle, 'PPL · Push');
+      expect(state.splitId, isNull);
+      expect(state.lastGymId, isNull);
+    });
+
+    test('malformed v3 fields fall back to null', () {
+      final state = WorkoutState.fromJson({
+        'v': 3,
+        'splitTitle': 3,
+        'splitId': 'x',
+        'splitDayIndex': Object(),
+        'lastGymId': 'y',
+      });
+      expect(state.splitTitle, isNull);
+      expect(state.splitId, isNull);
+      expect(state.splitDayIndex, isNull);
+      expect(state.lastGymId, isNull);
     });
 
     test('unknown schema version falls back to a clean idle state', () {
@@ -409,6 +455,76 @@ void main() {
       final restored = WorkoutState.fromJson(cubit.state.toJson());
       expect(restored.planTitle, isNull);
       expect(restored.plan.single.name, 'Bench Press');
+    });
+
+    test('a plan workout keeps its split link through a restore', () async {
+      cubit.startPlanWorkout(
+        title: 'Push Day',
+        splitTitle: 'PPL',
+        splitId: 4,
+        splitDayIndex: 0,
+        exercises: const [PlanExercise(exerciseId: 1, name: 'Bench Press')],
+      );
+      cubit.logSet(exerciseId: 1, exerciseName: 'Bench', weight: 60, reps: 8);
+      await cubit.discardWorkout();
+      expect(cubit.state.splitId, isNull);
+      expect(cubit.state.discardedSnapshot!.splitId, 4);
+
+      cubit.restoreDiscardedWorkout();
+      expect(cubit.state.planTitle, 'Push Day');
+      expect(cubit.state.splitTitle, 'PPL');
+      expect(cubit.state.splitId, 4);
+      expect(cubit.state.splitDayIndex, 0);
+    });
+
+    test('a free workout clears the split link', () {
+      cubit.startPlanWorkout(
+        title: 'Push Day',
+        splitId: 4,
+        splitDayIndex: 1,
+        exercises: const [],
+      );
+      cubit.startWorkout();
+      expect(cubit.state.splitId, isNull);
+      expect(cubit.state.splitDayIndex, isNull);
+      expect(cubit.state.splitTitle, isNull);
+    });
+
+    test('the gym a workout starts at is remembered for the next', () async {
+      final iron = Gym(name: 'Iron', order: 0)..id = 3;
+      final home = Gym(name: 'Home', order: 1)..id = 5;
+      cubit.startWorkout(gym: iron);
+      expect(cubit.state.lastGymId, 3);
+      cubit.setGym(home);
+      expect(cubit.state.gymName, 'Home');
+      expect(cubit.state.lastGymId, 5);
+      await cubit.discardWorkout();
+      expect(cubit.state.gymId, isNull);
+      expect(cubit.state.lastGymId, 5);
+
+      cubit.rememberGym(iron);
+      expect(cubit.state.isInProgress, isFalse);
+      expect(cubit.state.lastGymId, 3);
+      cubit.startWorkout();
+      expect(cubit.state.lastGymId, 3, reason: 'no gym keeps the last one');
+    });
+
+    test('reorderExercise moves a card and renumbers the plan', () {
+      cubit.startWorkout();
+      cubit.addExercise(exerciseId: 1, name: 'A');
+      cubit.addExercise(exerciseId: 2, name: 'B');
+      cubit.addExercise(exerciseId: 3, name: 'C');
+      cubit.logSet(exerciseId: 2, exerciseName: 'B', weight: 10, reps: 5);
+
+      cubit.reorderExercise(0, 2);
+      expect(cubit.state.plan.map((e) => e.name), ['B', 'C', 'A']);
+      expect(cubit.state.plan.map((e) => e.order), [0, 1, 2]);
+      expect(cubit.state.sets.single.exerciseName, 'B');
+
+      cubit.reorderExercise(2, 0);
+      expect(cubit.state.plan.map((e) => e.name), ['A', 'B', 'C']);
+      cubit.reorderExercise(7, 0);
+      expect(cubit.state.plan.map((e) => e.name), ['A', 'B', 'C']);
     });
 
     test('restore slots survive starting a later workout', () async {

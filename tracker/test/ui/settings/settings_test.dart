@@ -2,7 +2,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forui/forui.dart';
 import 'package:hydrated_bloc/hydrated_bloc.dart';
-import 'package:tracker/domain/models/weight_unit.dart';
+import 'package:tracker/domain/models/number_entry.dart';
 import 'package:tracker/ui/settings/view_models/settings_cubit.dart';
 import 'package:tracker/ui/settings/widgets/settings_page.dart';
 
@@ -67,26 +67,33 @@ void main() {
     expect(cubit.state.defaultRepRangeMax, 9);
   });
 
-  testWidgets('start workout placement is configurable', (tester) async {
+  testWidgets('logging settings switch prefill and number entry', (
+    tester,
+  ) async {
     final cubit = SettingsCubit();
     await pumpAppPage(
       tester,
       BlocProvider.value(value: cubit, child: const SettingsPage()),
     );
 
-    expect(find.text('Start workout button'), findsOneWidget);
-    expect(cubit.state.freeStartPlacement, FreeStartPlacement.before);
+    expect(find.text('Start workout button'), findsNothing);
+    expect(cubit.state.prefillSets, isTrue);
+    expect(cubit.state.numberEntry, NumberEntry.keypad);
 
-    await tester.tap(find.text('Before splits'));
+    await tester.tap(find.text('Prefill sets'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('After splits'));
-    await tester.pumpAndSettle();
-    expect(cubit.state.freeStartPlacement, FreeStartPlacement.after);
+    expect(cubit.state.prefillSets, isFalse);
 
-    await tester.tap(find.text('After splits'));
+    await tester.tap(find.text('Keypad'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Hidden'));
+    await tester.tap(find.text('Steppers'));
     await tester.pumpAndSettle();
-    expect(cubit.state.freeStartPlacement, FreeStartPlacement.disabled);
+    expect(cubit.state.numberEntry, NumberEntry.steppers);
+
+    await tester.tap(find.text('Steppers'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Phone keyboard'));
+    await tester.pumpAndSettle();
+    expect(cubit.state.numberEntry, NumberEntry.phoneKeyboard);
   });
 }

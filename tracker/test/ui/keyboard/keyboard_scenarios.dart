@@ -170,7 +170,17 @@ Future<void> settingsRepRangeScenario(
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 350));
   await tester.pumpAndSettle();
-  await tester.ensureVisible(find.text('Default rep range'));
+  // The settings list builds lazily: scroll the row into existence first.
+  await tester.scrollUntilVisible(
+    find.text('Default rep range'),
+    200,
+    scrollable: find
+        .descendant(
+          of: find.byType(SettingsPage),
+          matching: find.byType(Scrollable),
+        )
+        .last,
+  );
   await tester.pumpAndSettle();
   await tester.tap(find.text('Default rep range'));
   await tester.pumpAndSettle();

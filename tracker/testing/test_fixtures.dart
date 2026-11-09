@@ -4,6 +4,8 @@ import 'package:tracker/domain/models/gym.dart';
 import 'package:tracker/domain/models/workout_session.dart';
 import 'package:tracker/domain/models/workout_set.dart';
 import 'package:tracker/domain/models/workout_split.dart';
+import 'package:tracker/ui/workout/view_models/workout_cubit.dart';
+import 'package:tracker/ui/workout/widgets/start_workout.dart';
 
 class SweepFixtures {
   SweepFixtures({
@@ -89,6 +91,9 @@ Future<SweepFixtures> seedSweepFixtures(TrackerRepository repo) async {
       startTime: now.subtract(const Duration(days: 1, hours: 2)),
       endTime: now.subtract(const Duration(days: 1)),
       gymId: primaryGym.id,
+      // Started from the split's first day: Up next is its second.
+      splitId: split.id,
+      splitDayIndex: 0,
       sets: [
         WorkoutSet(
           exerciseId: bench.id,
@@ -138,5 +143,35 @@ Future<SweepFixtures> seedSweepFixtures(TrackerRepository repo) async {
       primaryGym.id: primaryGym.name,
       secondaryGym.id: secondaryGym.name,
     },
+  );
+}
+
+/// Starts the fixture split's first day with a warm-up and a working set
+/// logged on Bench Press, as the sweeps capture it.
+void startSweepWorkout(WorkoutCubit cubit, SweepFixtures fixtures) {
+  final split = fixtures.split;
+  cubit.startPlanWorkout(
+    title: split.splitDays.first.title,
+    splitTitle: split.title,
+    splitId: split.id,
+    splitDayIndex: 0,
+    exercises: planOf(split, 0, {
+      fixtures.benchId: 'Bench Press',
+      fixtures.inclineId: 'Incline Bench Press',
+    }),
+    gym: fixtures.secondaryGym,
+  );
+  cubit.logSet(
+    exerciseId: fixtures.benchId,
+    exerciseName: 'Bench Press',
+    weight: 60,
+    reps: 10,
+    type: SetType.warmup,
+  );
+  cubit.logSet(
+    exerciseId: fixtures.benchId,
+    exerciseName: 'Bench Press',
+    weight: 80,
+    reps: 8,
   );
 }

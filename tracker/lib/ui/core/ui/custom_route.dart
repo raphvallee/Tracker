@@ -7,6 +7,17 @@ Future<T?> pushTo<T>(BuildContext context, Widget destination) {
       .push<T>(_createRoute(backgroundColor, destination));
 }
 
+/// Replaces the current page with [destination], sliding in like [pushTo].
+Future<T?> replaceWith<T>(BuildContext context, Widget destination) {
+  final Color backgroundColor = context.theme.colors.background;
+  return Navigator.of(context)
+      .pushReplacement<T, Object?>(_createRoute(backgroundColor, destination));
+}
+
+/// The sliding route [pushTo] uses, for pushing on another navigator.
+Route<T> slideRoute<T>(BuildContext context, Widget destination) =>
+    _createRoute(context.theme.colors.background, destination);
+
 Route<T> _createRoute<T>(Color backgroundColor, Widget destination) {
   return PageRouteBuilder<T>(
     transitionDuration: const Duration(milliseconds: 250),

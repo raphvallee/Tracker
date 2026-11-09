@@ -41,13 +41,13 @@ import 'package:tracker/ui/settings/view_models/settings_cubit.dart';
 import 'package:tracker/ui/settings/widgets/gyms_page.dart';
 import 'package:tracker/ui/settings/widgets/rep_defaults_dialogs.dart';
 import 'package:tracker/ui/settings/widgets/settings_page.dart';
+import 'package:tracker/ui/splits/view_models/split_drafts_cubit.dart';
+import 'package:tracker/ui/splits/widgets/split_day_editor_page.dart';
+import 'package:tracker/ui/splits/widgets/splits_page.dart';
 import 'package:tracker/ui/workout/view_models/workout_cubit.dart';
-import 'package:tracker/ui/workout/widgets/editor_page.dart';
+import 'package:tracker/ui/workout/widgets/exercise_page.dart';
 import 'package:tracker/ui/workout/widgets/exercise_picker_page.dart';
 import 'package:tracker/ui/workout/widgets/gym_picker.dart';
-import 'package:tracker/ui/workout/widgets/new_split_page.dart';
-import 'package:tracker/ui/workout/widgets/split_day_editor_page.dart';
-import 'package:tracker/ui/workout/widgets/split_day_page.dart';
 import 'package:tracker/ui/workout/widgets/workout_page.dart';
 
 import '../../../testing/fakes/in_memory_storage.dart';
@@ -102,36 +102,15 @@ Future<void> sweepSize(WidgetTester tester, String label, Size size) async {
   HydratedBloc.storage = InMemoryStorage();
   final cubit = WorkoutCubit(repository: repo);
   addTearDown(cubit.close);
-  cubit.startPlanWorkout(
-    title: 'Push Pull Legs · Day 1',
-    exercises: [
-      PlanExercise(exerciseId: sweepFixtures.benchId, name: 'Bench Press'),
-      PlanExercise(
-        exerciseId: sweepFixtures.inclineId,
-        name: 'Incline Bench Press',
-        order: 1,
-      ),
-    ],
-    gym: sweepFixtures.secondaryGym,
-  );
-  cubit.logSet(
-    exerciseId: sweepFixtures.benchId,
-    exerciseName: 'Bench Press',
-    weight: 80,
-    reps: 8,
-  );
-  cubit.logSet(
-    exerciseId: sweepFixtures.benchId,
-    exerciseName: 'Bench Press',
-    weight: 60,
-    reps: 10,
-    type: SetType.warmup,
-  );
+  startSweepWorkout(cubit, sweepFixtures);
+  final drafts = SplitDraftsCubit(repository: repo);
+  addTearDown(drafts.close);
 
   await tester.pumpWidget(
     MultiBlocProvider(
       providers: [
         BlocProvider<WorkoutCubit>.value(value: cubit),
+        BlocProvider<SplitDraftsCubit>.value(value: drafts),
         BlocProvider<SettingsCubit>(
           create: (_) => SettingsCubit()
             ..addGraph(
@@ -173,7 +152,8 @@ Future<void> sweepSize(WidgetTester tester, String label, Size size) async {
   await visit('FeedPage', const FeedPage());
   await visit('HistoryPage', const HistoryPage());
   await visit('WorkoutPage (in progress)', const WorkoutPage());
-  await visit('EditorPage', const EditorPage());
+  await visit('SplitsPage', const SplitsPage());
+  await visit('ExercisePage', ExercisePage(exerciseId: sweepFixtures.benchId));
   await visit('ExercisesPage', const ExercisesPage());
 
   await visit('SettingsPage', const SettingsPage());
@@ -209,21 +189,9 @@ Future<void> sweepSize(WidgetTester tester, String label, Size size) async {
       ),
     ),
   );
-  await visit('SplitEditorPage (new)', const SplitEditorPage());
-  await visit(
-    'SplitEditorPage (edit)',
-    SplitEditorPage(split: sweepFixtures.split),
-  );
   await visit(
     'SplitDayEditorPage',
-    SplitDayEditorPage(day: sweepFixtures.split.splitDays.first),
-  );
-  await visit(
-    'SplitDayPage',
-    SplitDayPage(
-      splitTitle: sweepFixtures.split.title,
-      day: sweepFixtures.split.splitDays.first,
-    ),
+    SplitDayEditorPage(splitId: sweepFixtures.split.id, dayIndex: 0),
   );
   await visit('ExercisePickerPage', const ExercisePickerPage());
 
@@ -279,9 +247,7 @@ Future<void> sweepSize(WidgetTester tester, String label, Size size) async {
     ),
   );
   await settle();
-  await tester.ensureVisible(find.text('End Workout'));
-  await settle();
-  await tester.tap(find.text('End Workout'));
+  await tester.tap(find.text('Finish'));
   await settle();
   await tester.tap(find.text('Keep going'));
   await settle();
@@ -318,6 +284,10 @@ Future<void> sweepSize(WidgetTester tester, String label, Size size) async {
     reps: 8,
   );
   await visit('WorkoutPage (free workout)', const WorkoutPage());
+  await visit(
+    'ExercisePage (free workout)',
+    ExercisePage(exerciseId: sweepFixtures.benchId),
+  );
 
   // Fire any pending hydration-debounce timers before the binding checks for
   // leaked timers, and restore the platform override before the foundation
