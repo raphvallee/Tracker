@@ -48,6 +48,8 @@ schema changes):
 | `endTime` | `DateTime?` | |
 | `gymId` | `int?` | foreign key by id, intentionally no `IsarLink` |
 | `sets` | `List<WorkoutSet>` | embedded |
+| `splitId` | `int?` | split the session was started from (null for empty workouts and older sessions) |
+| `splitDayIndex` | `int?` | that day's position in the split; with `splitId` it drives the Up next rotation |
 
 ### `WorkoutSplit` (`tracker/lib/domain/models/workout_split.dart`)
 
@@ -63,10 +65,10 @@ schema changes):
 
 | Type | Fields |
 | --- | --- |
-| `WorkoutSet` | `exerciseId int`, `weight double`, `reps int`, `type SetType @enumerated`, `order int` |
+| `WorkoutSet` | `exerciseId int`, `weight double`, `reps int`, `type SetType @enumerated`, `order int`, `rpe double?` (effort as RPE 0-10, null = not rated; RIR is shown as 10 - RPE) |
 | `WorkoutSplitDay` | `title String`, `description String`, `exercises List<ExerciseItem>`, `order int` |
 | `ExerciseItem` | `exerciseId int`, `order int`, `sets List<PlannedSet>`, plus legacy `targetSets int?`, `targetReps int?`, `restSeconds int?` (no longer written by the editor) |
-| `PlannedSet` | `order int`, `minReps int` (fixed reps), `maxReps int?` (null = fixed, non-null = range `minReps..maxReps`) |
+| `PlannedSet` | `order int`, `minReps int` (fixed reps), `maxReps int?` (null = fixed, non-null = range `minReps..maxReps`), `isWarmup bool` (planned warm-up; older sets read false) |
 | `GymExerciseMultiplier` | `exerciseId int`, `multiplier double` |
 
 ## Enums
@@ -88,7 +90,7 @@ dates, `exerciseId`, gym id) once query paths are audited.
 
 ## Not in Isar (hydration JSON)
 
-`WorkoutState` and `SettingsState` (HydratedBloc) serialize to JSON, not Isar.
+`WorkoutState`, `SettingsState` and `SplitDraftsState` (unsaved split edits) (HydratedBloc) serialize to JSON, not Isar.
 Those payloads carry a `'v'` schema version; unknown versions fall back to
 safe defaults instead of crashing (see the cubits in `lib/ui/*/view_models/`).
 `WorkoutSplitTemplate` and `workoutSplitTemplates` are pure Dart seed

@@ -2,6 +2,8 @@ import 'package:isar_community/isar.dart';
 
 import 'package:tracker/domain/models/workout_session.dart';
 import 'package:tracker/domain/models/workout_set.dart';
+import 'package:tracker/domain/services/set_prefill.dart';
+import 'package:tracker/domain/services/split_rotation.dart';
 
 class WorkoutSessionRepository {
   WorkoutSessionRepository(this._isar);
@@ -72,6 +74,47 @@ class WorkoutSessionRepository {
         .setsElement((set) => set.exerciseIdEqualTo(exerciseId))
         .findAll();
     return sessions.length;
+  }
+
+  /// The split day of every session started from one, newest first. Reads
+  /// three properties only: no session sets are loaded.
+  Future<List<SplitDayVisit>> getSplitVisits() async {
+    QueryBuilder<WorkoutSession, WorkoutSession, QAfterSortBy> query() => _isar
+        .workoutSessions
+        .filter()
+        .splitIdIsNotNull()
+        .splitDayIndexIsNotNull()
+        .sortByStartTimeDesc();
+    final (splitIds, dayIndexes, startTimes) = await (
+      query().splitIdProperty().findAll(),
+      query().splitDayIndexProperty().findAll(),
+      query().startTimeProperty().findAll(),
+    ).wait;
+    return [
+      for (var i = 0; i < splitIds.length; i++)
+        if (i < dayIndexes.length && i < startTimes.length)
+          SplitDayVisit(
+            splitId: splitIds[i]!,
+            dayIndex: dayIndexes[i]!,
+            startTime: startTimes[i],
+          ),
+    ];
+  }
+
+  /// [exerciseId]'s sets in the most recent session that logged it, or null
+  /// when no session did.
+  Future<PreviousPerformance?> getPreviousPerformance(int exerciseId) async {
+    final session = await _isar.workoutSessions
+        .filter()
+        .setsElement((set) => set.exerciseIdEqualTo(exerciseId))
+        .sortByStartTimeDesc()
+        .findFirst();
+    if (session == null) return null;
+    final sets = [
+      for (final set in session.sets)
+        if (set.exerciseId == exerciseId) set,
+    ]..sort((a, b) => a.order.compareTo(b.order));
+    return PreviousPerformance(date: session.startTime, sets: sets);
   }
 
   Stream<List<WorkoutSession>> watchAll() => _isar.workoutSessions

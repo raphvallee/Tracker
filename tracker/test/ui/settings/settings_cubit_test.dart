@@ -1,7 +1,12 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hydrated_bloc/hydrated_bloc.dart';
+import 'package:tracker/domain/models/effort_scale.dart';
 import 'package:tracker/domain/models/graph_config.dart';
+import 'package:tracker/domain/models/number_entry.dart';
 import 'package:tracker/domain/models/weight_unit.dart';
 import 'package:tracker/ui/settings/view_models/settings_cubit.dart';
+
+import '../../../testing/fakes/in_memory_storage.dart';
 
 void main() {
   group('Setting conversions & state', () {
@@ -137,9 +142,85 @@ void main() {
         notificationsEnabled: false,
       );
       final json = state.toJson();
-      expect(json['v'], 1);
+      expect(json['v'], 2);
       final restored = SettingsState.fromJson(json);
       expect(restored, state);
+    });
+
+    test('v2 carries prefill, number entry and the current split', () {
+      final state = SettingsState(
+        prefillSets: false,
+        numberEntry: NumberEntry.steppers,
+        currentSplitId: 4,
+      );
+      final restored = SettingsState.fromJson(state.toJson());
+      expect(restored.prefillSets, isFalse);
+      expect(restored.numberEntry, NumberEntry.steppers);
+      expect(restored.currentSplitId, 4);
+      expect(restored, state);
+      expect(restored.copyWith(currentSplitId: null).currentSplitId, isNull);
+    });
+
+    test('v2 carries the effort scale, RPE by default', () {
+      expect(SettingsState().effortScale, EffortScale.rpe);
+      final state = SettingsState(effortScale: EffortScale.rir);
+      final restored = SettingsState.fromJson(state.toJson());
+      expect(restored.effortScale, EffortScale.rir);
+      expect(restored, state);
+      expect(
+        SettingsState.fromJson({'v': 2, 'effortScale': 'borg'}).effortScale,
+        EffortScale.rpe,
+      );
+      expect(SettingsState.fromJson({'v': 1}).effortScale, EffortScale.rpe);
+    });
+
+    test('v2 carries when splits were last used and skips junk', () {
+      final state = SettingsState(splitsUsedAt: {3: DateTime(2026, 11, 8, 9)});
+      final restored = SettingsState.fromJson(state.toJson());
+      expect(restored.splitsUsedAt, {3: DateTime(2026, 11, 8, 9)});
+      expect(restored, state);
+      expect(restored.hashCode, state.hashCode);
+      expect(
+        SettingsState.fromJson({
+          'v': 2,
+          'splitsUsedAt': {
+            'x': '2026-01-01',
+            '4': 'soon',
+            '5': 7,
+            '6': '2026-02-03T00:00:00.000',
+          },
+        }).splitsUsedAt,
+        {6: DateTime(2026, 2, 3)},
+      );
+      expect(
+        SettingsState.fromJson({'v': 2, 'splitsUsedAt': 'bad'}).splitsUsedAt,
+        isEmpty,
+      );
+    });
+
+    test('v1 payloads read the new logging settings as defaults', () {
+      final state = SettingsState.fromJson({
+        'v': 1,
+        'unit': 'pounds',
+        'freeStartPlacement': 'after',
+        'numberEntry': 'steppers',
+      });
+      expect(state.unit, WeightUnit.pounds);
+      expect(state.prefillSets, isTrue);
+      expect(state.numberEntry, NumberEntry.keypad);
+      expect(state.currentSplitId, isNull);
+    });
+
+    test('malformed v2 logging settings use safe defaults', () {
+      final state = SettingsState.fromJson({
+        'v': 2,
+        'prefillSets': 'yes',
+        'numberEntry': 'abacus',
+        'currentSplitId': 'one',
+      });
+      expect(state.prefillSets, isTrue);
+      expect(state.numberEntry, NumberEntry.keypad);
+      expect(state.currentSplitId, isNull);
     });
 
     test('unknown schema version falls back to defaults', () {
@@ -208,6 +289,36 @@ void main() {
       expect(confirmed.heavyWeightConfirmed, isTrue);
       expect(confirmed == fresh, isFalse);
       expect(confirmed.copyWith(), confirmed);
+    });
+  });
+
+  group('current split', () {
+    setUp(() => HydratedBloc.storage = InMemoryStorage());
+
+    test('a switch stamps the split it replaces as just used', () {
+      var now = DateTime(2026, 11, 8, 10);
+      final cubit = SettingsCubit(now: () => now);
+      addTearDown(cubit.close);
+      final first = DateTime(2026, 11, 8, 10);
+
+      cubit.setCurrentSplit(2, previous: 1);
+      expect(cubit.state.currentSplitId, 2);
+      expect(cubit.state.splitsUsedAt, {1: first});
+
+      now = now.add(const Duration(minutes: 5));
+      cubit.setCurrentSplit(2, previous: 2);
+      expect(cubit.state.splitsUsedAt, {1: first}, reason: 'no switch');
+      cubit.setCurrentSplit(1, previous: 2);
+      expect(cubit.state.splitsUsedAt, {1: first, 2: now});
+
+      cubit.forgetSplit(1);
+      expect(cubit.state.currentSplitId, isNull, reason: 'it was current');
+      expect(cubit.state.splitsUsedAt, {2: now});
+      cubit
+        ..setCurrentSplit(3)
+        ..forgetSplit(2);
+      expect(cubit.state.currentSplitId, 3);
+      expect(cubit.state.splitsUsedAt, isEmpty);
     });
   });
 }

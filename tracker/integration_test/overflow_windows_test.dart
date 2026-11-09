@@ -13,7 +13,6 @@ import 'package:tracker/domain/models/exercise.dart';
 import 'package:tracker/domain/models/graph_config.dart';
 import 'package:tracker/domain/models/gym.dart';
 import 'package:tracker/domain/models/workout_session.dart';
-import 'package:tracker/domain/models/workout_set.dart';
 import 'package:tracker/domain/models/workout_split.dart';
 import 'package:tracker/main.dart';
 import 'package:tracker/routing/tab_navigation.dart';
@@ -31,12 +30,12 @@ import 'package:tracker/ui/settings/view_models/settings_cubit.dart';
 import 'package:tracker/ui/settings/widgets/gyms_page.dart';
 import 'package:tracker/ui/settings/widgets/rep_defaults_dialogs.dart';
 import 'package:tracker/ui/settings/widgets/settings_page.dart';
+import 'package:tracker/ui/splits/view_models/split_drafts_cubit.dart';
+import 'package:tracker/ui/splits/widgets/split_day_editor_page.dart';
 import 'package:tracker/ui/workout/view_models/workout_cubit.dart';
+import 'package:tracker/ui/workout/widgets/exercise_page.dart';
 import 'package:tracker/ui/workout/widgets/exercise_picker_page.dart';
 import 'package:tracker/ui/workout/widgets/gym_picker.dart';
-import 'package:tracker/ui/workout/widgets/new_split_page.dart';
-import 'package:tracker/ui/workout/widgets/split_day_editor_page.dart';
-import 'package:tracker/ui/workout/widgets/split_day_page.dart';
 import 'package:tracker/ui/workout/widgets/workout_page.dart';
 import 'package:window_size/window_size.dart';
 
@@ -125,6 +124,10 @@ void main() {
                 create: (_) => SettingsCubit(),
                 lazy: false,
               ),
+              BlocProvider<SplitDraftsCubit>(
+                create: (_) => SplitDraftsCubit(repository: repo),
+                lazy: false,
+              ),
             ],
             child: const MyApp(),
           ),
@@ -164,31 +167,7 @@ void main() {
       );
 
       final cubit = await pumpRealApp(tester);
-      cubit.startPlanWorkout(
-        title: 'Push Pull Legs · Day 1',
-        exercises: [
-          PlanExercise(exerciseId: fixtures.benchId, name: 'Bench Press'),
-          PlanExercise(
-            exerciseId: fixtures.inclineId,
-            name: 'Incline Bench Press',
-            order: 1,
-          ),
-        ],
-        gym: fixtures.secondaryGym,
-      );
-      cubit.logSet(
-        exerciseId: fixtures.benchId,
-        exerciseName: 'Bench Press',
-        weight: 80,
-        reps: 8,
-      );
-      cubit.logSet(
-        exerciseId: fixtures.benchId,
-        exerciseName: 'Bench Press',
-        weight: 60,
-        reps: 10,
-        type: SetType.warmup,
-      );
+      startSweepWorkout(cubit, fixtures);
       await settle(tester);
 
       for (final tab in TabName.values) {
@@ -244,21 +223,10 @@ void main() {
           ),
         ),
       );
-      await visit('SplitEditorPage (new)', const SplitEditorPage());
-      await visit(
-        'SplitEditorPage (edit)',
-        SplitEditorPage(split: fixtures.split),
-      );
+      await visit('ExercisePage', ExercisePage(exerciseId: fixtures.benchId));
       await visit(
         'SplitDayEditorPage',
-        SplitDayEditorPage(day: fixtures.split.splitDays.first),
-      );
-      await visit(
-        'SplitDayPage',
-        SplitDayPage(
-          splitTitle: fixtures.split.title,
-          day: fixtures.split.splitDays.first,
-        ),
+        SplitDayEditorPage(splitId: fixtures.split.id, dayIndex: 0),
       );
       await visit('ExercisePickerPage', const ExercisePickerPage());
 
@@ -319,9 +287,7 @@ void main() {
         ),
       );
       await settle(tester);
-      await tester.ensureVisible(find.text('End Workout'));
-      await settle(tester);
-      await tester.tap(find.text('End Workout'));
+      await tester.tap(find.text('Finish'));
       await settle(tester);
       await tester.tap(find.text('Keep going'));
       await settle(tester);

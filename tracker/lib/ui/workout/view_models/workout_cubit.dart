@@ -17,6 +17,7 @@ class ActiveSet {
     this.reps = 0,
     this.type = SetType.working,
     this.order = 0,
+    this.rpe,
   });
 
   factory ActiveSet.fromJson(Map<String, dynamic> json) => ActiveSet(
@@ -28,6 +29,7 @@ class ActiveSet {
     reps: _doubleValue(json['reps']),
     type: SetType.values.asNameMap()[json['type']] ?? SetType.working,
     order: _intValue(json['order']),
+    rpe: json['rpe'] is num ? (json['rpe'] as num).toDouble() : null,
   );
 
   @override
@@ -38,11 +40,12 @@ class ActiveSet {
       weight == other.weight &&
       reps == other.reps &&
       type == other.type &&
-      order == other.order;
+      order == other.order &&
+      rpe == other.rpe;
 
   @override
   int get hashCode =>
-      Object.hash(exerciseId, exerciseName, weight, reps, type, order);
+      Object.hash(exerciseId, exerciseName, weight, reps, type, order, rpe);
   final int exerciseId;
   final String exerciseName;
   final double weight;
@@ -50,7 +53,28 @@ class ActiveSet {
   final SetType type;
   final int order;
 
+  /// How hard the set was, as RPE (0 to 10); null when not rated.
+  final double? rpe;
+
   bool get isWarmup => type == SetType.warmup;
+
+  ActiveSet copyWith({
+    double? weight,
+    double? reps,
+    SetType? type,
+    int? order,
+    Object? rpe = _unset,
+  }) => ActiveSet(
+    exerciseId: exerciseId,
+    exerciseName: exerciseName,
+    weight: weight ?? this.weight,
+    reps: reps ?? this.reps,
+    type: type ?? this.type,
+    order: order ?? this.order,
+    rpe: identical(rpe, _unset) ? this.rpe : rpe as double?,
+  );
+
+  static const _unset = Object();
 
   Map<String, dynamic> toJson() => {
     'exerciseId': exerciseId,
@@ -59,6 +83,7 @@ class ActiveSet {
     'reps': reps,
     'type': type.name,
     'order': order,
+    'rpe': rpe,
   };
 
   static int _intValue(Object? value) =>
@@ -101,6 +126,7 @@ class PlanExercise {
         order: _intValue(json['order']),
         minReps: _intValue(json['minReps']),
         maxReps: _intValueOrNull(json['maxReps']),
+        isWarmup: json['warmup'] == true,
       );
 
   static int _intValue(Object? value) =>
@@ -134,7 +160,12 @@ class PlanExercise {
     'order': order,
     'sets': [
       for (final set in sets)
-        {'order': set.order, 'minReps': set.minReps, 'maxReps': set.maxReps},
+        {
+          'order': set.order,
+          'minReps': set.minReps,
+          'maxReps': set.maxReps,
+          'warmup': set.isWarmup,
+        },
     ],
   };
 }
@@ -142,7 +173,9 @@ class PlanExercise {
 bool _listEquals(List<PlannedSet> a, List<PlannedSet> b) {
   if (a.length != b.length) return false;
   for (var i = 0; i < a.length; i++) {
-    if (a[i].minReps != b[i].minReps || a[i].maxReps != b[i].maxReps) {
+    if (a[i].minReps != b[i].minReps ||
+        a[i].maxReps != b[i].maxReps ||
+        a[i].isWarmup != b[i].isWarmup) {
       return false;
     }
   }
@@ -194,6 +227,9 @@ class WorkoutSnapshot {
     this.gymId,
     this.gymName,
     this.planTitle,
+    this.splitTitle,
+    this.splitId,
+    this.splitDayIndex,
     this.plan = const [],
     this.sets = const [],
   });
@@ -203,6 +239,9 @@ class WorkoutSnapshot {
     gymId: state.gymId,
     gymName: state.gymName,
     planTitle: state.planTitle,
+    splitTitle: state.splitTitle,
+    splitId: state.splitId,
+    splitDayIndex: state.splitDayIndex,
     plan: state.plan,
     sets: state.sets,
   );
@@ -217,6 +256,11 @@ class WorkoutSnapshot {
       planTitle: json['planTitle'] is String
           ? json['planTitle'] as String
           : null,
+      splitTitle: json['splitTitle'] is String
+          ? json['splitTitle'] as String
+          : null,
+      splitId: WorkoutState._nullableInt(json['splitId']),
+      splitDayIndex: WorkoutState._nullableInt(json['splitDayIndex']),
       plan: _parsePlan(json['plan']),
       sets: _parseSets(json['sets']),
     );
@@ -228,6 +272,9 @@ class WorkoutSnapshot {
   final String? gymName;
 
   final String? planTitle;
+  final String? splitTitle;
+  final int? splitId;
+  final int? splitDayIndex;
   final List<PlanExercise> plan;
   final List<ActiveSet> sets;
 
@@ -236,6 +283,9 @@ class WorkoutSnapshot {
     'gymId': gymId,
     'gymName': gymName,
     'planTitle': planTitle,
+    'splitTitle': splitTitle,
+    'splitId': splitId,
+    'splitDayIndex': splitDayIndex,
     'plan': plan.map((e) => e.toJson()).toList(),
     'sets': sets.map((s) => s.toJson()).toList(),
   };
@@ -247,6 +297,9 @@ class WorkoutSnapshot {
       gymId == other.gymId &&
       gymName == other.gymName &&
       planTitle == other.planTitle &&
+      splitTitle == other.splitTitle &&
+      splitId == other.splitId &&
+      splitDayIndex == other.splitDayIndex &&
       WorkoutState._listEquals(plan, other.plan) &&
       WorkoutState._listEquals(sets, other.sets);
 
@@ -256,6 +309,9 @@ class WorkoutSnapshot {
     gymId,
     gymName,
     planTitle,
+    splitTitle,
+    splitId,
+    splitDayIndex,
     Object.hashAll(plan),
     Object.hashAll(sets),
   );
@@ -268,6 +324,10 @@ class WorkoutState {
     this.gymId,
     this.gymName,
     this.planTitle,
+    this.splitTitle,
+    this.splitId,
+    this.splitDayIndex,
+    this.lastGymId,
     this.saveError,
     this.savedSnapshot,
     this.savedSessionId,
@@ -281,7 +341,9 @@ class WorkoutState {
 
   factory WorkoutState.fromJson(Map<String, dynamic> json) {
     // Hydrated-state schema versioning (PRODUCTION_READINESS.md Phase 1).
-    // v1 = the original shape; v2 adds the restorable last-saved snapshot.
+    // v1 = the original shape; v2 adds the restorable last-saved snapshot;
+    // v3 adds the split link, the split title, the last gym, set ratings
+    // (`rpe`) and planned warm-ups (`warmup`).
     // Payloads written before versioning have no 'v' key and read as v1.
     // Unknown future versions fall back to a clean idle state instead of
     // crashing.
@@ -289,21 +351,36 @@ class WorkoutState {
       case 1:
         return _fromV1(json);
       case 2:
-        final base = _fromV1(json);
-        final rawSaved = json['saved'];
-        return base.copyWith(
-          savedSnapshot: rawSaved is Map
-              ? WorkoutSnapshot.fromJson(Map<String, dynamic>.from(rawSaved))
-              : null,
-          savedSessionId: _nullableInt(json['savedSessionId']),
-          savedAt: json['savedAt'] is String
-              ? DateTime.tryParse(json['savedAt'] as String)
-              : null,
-        );
+        return _fromV2(json);
+      case 3:
+        return _fromV3(json);
       default:
         return WorkoutState.initial();
     }
   }
+
+  static WorkoutState _fromV2(Map<String, dynamic> json) {
+    final rawSaved = json['saved'];
+    return _fromV1(json).copyWith(
+      savedSnapshot: rawSaved is Map
+          ? WorkoutSnapshot.fromJson(Map<String, dynamic>.from(rawSaved))
+          : null,
+      savedSessionId: _nullableInt(json['savedSessionId']),
+      savedAt: json['savedAt'] is String
+          ? DateTime.tryParse(json['savedAt'] as String)
+          : null,
+    );
+  }
+
+  static WorkoutState _fromV3(Map<String, dynamic> json) =>
+      _fromV2(json).copyWith(
+        splitTitle: json['splitTitle'] is String
+            ? json['splitTitle'] as String
+            : null,
+        splitId: _nullableInt(json['splitId']),
+        splitDayIndex: _nullableInt(json['splitDayIndex']),
+        lastGymId: _nullableInt(json['lastGymId']),
+      );
 
   static WorkoutState _fromV1(Map<String, dynamic> json) {
     return WorkoutState(
@@ -343,6 +420,16 @@ class WorkoutState {
   final String? gymName;
 
   final String? planTitle;
+
+  /// Title of the split a plan workout came from; [planTitle] holds the day.
+  final String? splitTitle;
+
+  /// The split and day (by position) a plan workout was started from.
+  final int? splitId;
+  final int? splitDayIndex;
+
+  /// The gym the next workout starts at; survives the workout ending.
+  final int? lastGymId;
 
   /// Set when the final Isar write in [WorkoutCubit.endWorkout] failed. Purely
   /// transient UI feedback - deliberately excluded from hydration JSON, so a
@@ -397,6 +484,10 @@ class WorkoutState {
       gymId == other.gymId &&
       gymName == other.gymName &&
       planTitle == other.planTitle &&
+      splitTitle == other.splitTitle &&
+      splitId == other.splitId &&
+      splitDayIndex == other.splitDayIndex &&
+      lastGymId == other.lastGymId &&
       saveError == other.saveError &&
       savedSnapshot == other.savedSnapshot &&
       savedSessionId == other.savedSessionId &&
@@ -413,6 +504,10 @@ class WorkoutState {
     gymId,
     gymName,
     planTitle,
+    splitTitle,
+    splitId,
+    splitDayIndex,
+    lastGymId,
     saveError,
     savedSnapshot,
     savedSessionId,
@@ -438,12 +533,16 @@ class WorkoutState {
   static WorkoutState initial() => WorkoutState(isInProgress: false);
 
   Map<String, dynamic> toJson() => {
-    'v': 2,
+    'v': 3,
     'isInProgress': isInProgress,
     'startTime': startTime?.toIso8601String(),
     'gymId': gymId,
     'gymName': gymName,
     'planTitle': planTitle,
+    'splitTitle': splitTitle,
+    'splitId': splitId,
+    'splitDayIndex': splitDayIndex,
+    'lastGymId': lastGymId,
     'plan': plan.map((e) => e.toJson()).toList(),
     'sets': sets.map((s) => s.toJson()).toList(),
     // Restorable last-saved workout (v2). The discarded snapshot is
@@ -459,6 +558,10 @@ class WorkoutState {
     Object? gymId = _unset,
     Object? gymName = _unset,
     Object? planTitle = _unset,
+    Object? splitTitle = _unset,
+    Object? splitId = _unset,
+    Object? splitDayIndex = _unset,
+    Object? lastGymId = _unset,
     Object? saveError = _unset,
     Object? savedSnapshot = _unset,
     Object? savedSessionId = _unset,
@@ -478,6 +581,16 @@ class WorkoutState {
       planTitle: identical(planTitle, _unset)
           ? this.planTitle
           : planTitle as String?,
+      splitTitle: identical(splitTitle, _unset)
+          ? this.splitTitle
+          : splitTitle as String?,
+      splitId: identical(splitId, _unset) ? this.splitId : splitId as int?,
+      splitDayIndex: identical(splitDayIndex, _unset)
+          ? this.splitDayIndex
+          : splitDayIndex as int?,
+      lastGymId: identical(lastGymId, _unset)
+          ? this.lastGymId
+          : lastGymId as int?,
       saveError: identical(saveError, _unset)
           ? this.saveError
           : saveError as String?,
@@ -523,6 +636,10 @@ class WorkoutCubit extends HydratedCubit<WorkoutState> {
         gymId: gym?.id,
         gymName: gym?.name,
         planTitle: null,
+        splitTitle: null,
+        splitId: null,
+        splitDayIndex: null,
+        lastGymId: gym?.id ?? state.lastGymId,
         saveError: null,
         plan: const [],
         sets: const [],
@@ -530,10 +647,16 @@ class WorkoutCubit extends HydratedCubit<WorkoutState> {
     );
   }
 
+  /// Begin a workout from a split day. [title] is the day's title and
+  /// [splitTitle] its split's; [splitId] and [splitDayIndex] (the day's
+  /// position) are written to the saved session for the Up next rotation.
   void startPlanWorkout({
     required String title,
     required List<PlanExercise> exercises,
     Gym? gym,
+    String? splitTitle,
+    int? splitId,
+    int? splitDayIndex,
   }) {
     emit(
       state.copyWith(
@@ -542,6 +665,10 @@ class WorkoutCubit extends HydratedCubit<WorkoutState> {
         gymId: gym?.id,
         gymName: gym?.name,
         planTitle: title,
+        splitTitle: splitTitle,
+        splitId: splitId,
+        splitDayIndex: splitDayIndex,
+        lastGymId: gym?.id ?? state.lastGymId,
         saveError: null,
         plan: exercises,
         sets: const [],
@@ -549,8 +676,38 @@ class WorkoutCubit extends HydratedCubit<WorkoutState> {
     );
   }
 
+  /// Move the running workout to [gym], which also becomes the gym the next
+  /// workout starts at.
   void setGym(Gym gym) {
-    emit(state.copyWith(gymId: gym.id, gymName: gym.name));
+    emit(state.copyWith(gymId: gym.id, gymName: gym.name, lastGymId: gym.id));
+  }
+
+  /// Pick the gym the next workout starts at, without touching a running one.
+  void rememberGym(Gym gym) {
+    if (gym.id == state.lastGymId) return;
+    emit(state.copyWith(lastGymId: gym.id));
+  }
+
+  /// Move an exercise card from [oldIndex] to [newIndex] (the index after
+  /// removing it, as `ReorderableListView.onReorderItem` reports it).
+  void reorderExercise(int oldIndex, int newIndex) {
+    final plan = [...state.plan];
+    if (oldIndex < 0 || oldIndex >= plan.length) return;
+    final moved = plan.removeAt(oldIndex);
+    plan.insert(newIndex.clamp(0, plan.length), moved);
+    emit(
+      state.copyWith(
+        plan: [
+          for (var i = 0; i < plan.length; i++)
+            PlanExercise(
+              exerciseId: plan[i].exerciseId,
+              name: plan[i].name,
+              order: i,
+              sets: plan[i].sets,
+            ),
+        ],
+      ),
+    );
   }
 
   /// Add an exercise card to the session. Free workouts build their plan
@@ -599,15 +756,7 @@ class WorkoutCubit extends HydratedCubit<WorkoutState> {
             ),
         ],
         sets: [
-          for (var i = 0; i < sets.length; i++)
-            ActiveSet(
-              exerciseId: sets[i].exerciseId,
-              exerciseName: sets[i].exerciseName,
-              weight: sets[i].weight,
-              reps: sets[i].reps,
-              type: sets[i].type,
-              order: i,
-            ),
+          for (var i = 0; i < sets.length; i++) sets[i].copyWith(order: i),
         ],
       ),
     );
@@ -619,6 +768,7 @@ class WorkoutCubit extends HydratedCubit<WorkoutState> {
     required double weight,
     required double reps,
     SetType type = SetType.working,
+    double? rpe,
   }) {
     final sets = [
       ...state.sets,
@@ -629,6 +779,7 @@ class WorkoutCubit extends HydratedCubit<WorkoutState> {
         reps: reps,
         type: type,
         order: state.sets.length,
+        rpe: rpe,
       ),
     ];
     emit(state.copyWith(sets: sets));
@@ -637,14 +788,7 @@ class WorkoutCubit extends HydratedCubit<WorkoutState> {
   void removeSet(int order) {
     var sets = state.sets.where((s) => s.order != order).toList();
     for (var i = 0; i < sets.length; i++) {
-      sets[i] = ActiveSet(
-        exerciseId: sets[i].exerciseId,
-        exerciseName: sets[i].exerciseName,
-        weight: sets[i].weight,
-        reps: sets[i].reps,
-        type: sets[i].type,
-        order: i,
-      );
+      sets[i] = sets[i].copyWith(order: i);
     }
     emit(state.copyWith(sets: sets));
   }
@@ -655,20 +799,23 @@ class WorkoutCubit extends HydratedCubit<WorkoutState> {
         sets: [
           for (final set in state.sets)
             if (set.order == order)
-              ActiveSet(
-                exerciseId: set.exerciseId,
-                exerciseName: set.exerciseName,
-                weight: weight ?? set.weight,
-                reps: reps ?? set.reps,
-                type: type ?? set.type,
-                order: set.order,
-              )
+              set.copyWith(weight: weight, reps: reps, type: type)
             else
               set,
         ],
       ),
     );
   }
+
+  /// Rates the set at [order] (RPE, 0 to 10), or clears its rating (null).
+  void setRpe(int order, double? rpe) => emit(
+    state.copyWith(
+      sets: [
+        for (final set in state.sets)
+          if (set.order == order) set.copyWith(rpe: rpe) else set,
+      ],
+    ),
+  );
 
   Future<void> discardWorkout() async {
     final s = state;
@@ -681,6 +828,9 @@ class WorkoutCubit extends HydratedCubit<WorkoutState> {
         gymId: null,
         gymName: null,
         planTitle: null,
+        splitTitle: null,
+        splitId: null,
+        splitDayIndex: null,
         saveError: null,
         plan: const [],
         sets: const [],
@@ -702,12 +852,16 @@ class WorkoutCubit extends HydratedCubit<WorkoutState> {
       if (s.saveError != null) emit(s.copyWith(saveError: null));
 
       final completed = WorkoutSession(
-        title:
-            s.planTitle ??
-            (s.gymName != null ? '${s.gymName} workout' : 'Workout'),
+        title: s.planTitle == null
+            ? (s.gymName != null ? '${s.gymName} workout' : 'Workout')
+            : s.splitTitle == null
+            ? s.planTitle!
+            : '${s.splitTitle} · ${s.planTitle}',
         startTime: s.startTime ?? DateTime.now(),
         endTime: DateTime.now(),
         gymId: s.gymId,
+        splitId: s.splitId,
+        splitDayIndex: s.splitDayIndex,
         sets: s.sets
             .map(
               (a) => WorkoutSet(
@@ -716,6 +870,7 @@ class WorkoutCubit extends HydratedCubit<WorkoutState> {
                 reps: a.reps,
                 type: a.type,
                 order: a.order,
+                rpe: a.rpe,
               ),
             )
             .toList(),
@@ -783,6 +938,9 @@ class WorkoutCubit extends HydratedCubit<WorkoutState> {
         gymId: null,
         gymName: null,
         planTitle: null,
+        splitTitle: null,
+        splitId: null,
+        splitDayIndex: null,
         saveError: null,
         plan: const [],
         sets: const [],
@@ -823,6 +981,9 @@ class WorkoutCubit extends HydratedCubit<WorkoutState> {
         gymId: snapshot.gymId,
         gymName: snapshot.gymName,
         planTitle: snapshot.planTitle,
+        splitTitle: snapshot.splitTitle,
+        splitId: snapshot.splitId,
+        splitDayIndex: snapshot.splitDayIndex,
         saveError: null,
         plan: snapshot.plan,
         sets: snapshot.sets,
@@ -850,6 +1011,9 @@ class WorkoutCubit extends HydratedCubit<WorkoutState> {
         gymId: snapshot.gymId,
         gymName: snapshot.gymName,
         planTitle: snapshot.planTitle,
+        splitTitle: snapshot.splitTitle,
+        splitId: snapshot.splitId,
+        splitDayIndex: snapshot.splitDayIndex,
         saveError: null,
         plan: snapshot.plan,
         sets: snapshot.sets,

@@ -11,6 +11,7 @@ import 'package:isar_community/isar.dart';
 import 'package:tracker/domain/models/weight_unit.dart';
 import 'package:tracker/main.dart';
 import 'package:tracker/ui/settings/view_models/settings_cubit.dart';
+import 'package:tracker/ui/splits/view_models/split_drafts_cubit.dart';
 import 'package:tracker/ui/workout/view_models/workout_cubit.dart';
 
 import 'fakes/in_memory_storage.dart';
@@ -60,6 +61,10 @@ Future<WorkoutCubit> pumpApp(
         BlocProvider<WorkoutCubit>(create: (_) => cubit, lazy: false),
         BlocProvider<SettingsCubit>(
           create: (_) => SettingsCubit()..setUnit(unit),
+          lazy: false,
+        ),
+        BlocProvider<SplitDraftsCubit>(
+          create: (_) => SplitDraftsCubit(),
           lazy: false,
         ),
       ],

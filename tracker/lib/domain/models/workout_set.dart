@@ -12,6 +12,7 @@ class WorkoutSet {
     this.reps = 0,
     this.type = SetType.working,
     this.order = 0,
+    this.rpe,
   });
 
   int exerciseId;
@@ -20,6 +21,10 @@ class WorkoutSet {
   @enumerated
   SetType type;
   int order;
+
+  /// How hard the set was, as RPE (0 to 10); null when not rated. Settings
+  /// can show it as reps in reserve instead (10 minus RPE).
+  double? rpe;
 
   bool get isWarmup => type == SetType.warmup;
 }

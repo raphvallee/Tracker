@@ -13,6 +13,7 @@ import 'package:tracker/ui/core/ui/max_width.dart';
 import 'package:tracker/data/repositories/tracker_repository.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
 import 'package:tracker/ui/core/ui/set_type_chip.dart';
+import 'package:tracker/ui/core/ui/effort_format.dart';
 import 'package:tracker/ui/core/ui/weight_format.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:tracker/ui/history/widgets/session_edit_page.dart';
@@ -367,7 +368,8 @@ class _SetRow extends StatelessWidget {
         prefix: SetTypeChip(isWarmup: set.isWarmup),
         title: Text(name),
         subtitle: Text(
-          '${formatWeight(context, set.weight)} × ${formatReps(set.reps)}',
+          '${formatWeight(context, set.weight)} × ${formatReps(set.reps)}'
+          '${set.rpe == null ? '' : ', ${effortLabel(effortScaleOf(context), set.rpe!)}'}',
         ),
       ),
     );

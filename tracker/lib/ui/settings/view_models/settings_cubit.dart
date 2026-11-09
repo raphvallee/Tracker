@@ -1,19 +1,24 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:hydrated_bloc/hydrated_bloc.dart';
+import 'package:tracker/domain/models/effort_scale.dart';
 import 'package:tracker/domain/models/graph_config.dart';
+import 'package:tracker/domain/models/number_entry.dart';
 import 'package:tracker/domain/models/rep_mode.dart';
 import 'package:tracker/domain/models/weight_unit.dart';
 
 class SettingsState {
   factory SettingsState.fromJson(Map<String, dynamic> json) {
     // Hydrated-state schema versioning (PRODUCTION_READINESS.md Phase 1).
-    // v1 = the original shape; payloads written before versioning have no
-    // 'v' key and read as v1. Unknown future versions fall back to defaults
-    // instead of crashing.
+    // v1 = the original shape; v2 adds set prefill, number entry, the
+    // effort scale, the current split and when splits were last picked. Payloads written before versioning have no 'v' key and
+    // read as v1. Unknown future versions fall back to defaults instead of
+    // crashing.
     switch (json['v'] as int? ?? 1) {
       case 1:
         return _fromV1(json);
+      case 2:
+        return _fromV2(json);
       default:
         return SettingsState();
     }
@@ -23,7 +28,11 @@ class SettingsState {
     this.unit = WeightUnit.kilograms,
     this.notificationsEnabled = true,
     this.analyticsEnabled = true,
-    this.freeStartPlacement = FreeStartPlacement.before,
+    this.prefillSets = true,
+    this.numberEntry = NumberEntry.keypad,
+    this.effortScale = EffortScale.rpe,
+    this.currentSplitId,
+    Map<int, DateTime> splitsUsedAt = const {},
     this.defaultRepMode = initialDefaultRepMode,
     this.defaultReps = initialDefaultReps,
     this.defaultRepRangeMin = initialDefaultRepRangeMin,
@@ -31,7 +40,8 @@ class SettingsState {
     this.showHeavyWeightWarning = true,
     this.heavyWeightConfirmed = false,
     List<GraphConfig> graphs = const [],
-  }) : graphs = List.unmodifiable(graphs);
+  }) : splitsUsedAt = Map.unmodifiable(splitsUsedAt),
+       graphs = List.unmodifiable(graphs);
 
   static const RepMode initialDefaultRepMode = RepMode.range;
 
@@ -63,9 +73,6 @@ class SettingsState {
       analyticsEnabled: json['analyticsEnabled'] is bool
           ? json['analyticsEnabled'] as bool
           : true,
-      freeStartPlacement:
-          FreeStartPlacement.values.asNameMap()[json['freeStartPlacement']] ??
-          FreeStartPlacement.before,
       defaultRepMode:
           RepMode.values.asNameMap()[json['defaultRepMode']] ?? RepMode.range,
       defaultReps: _positiveInt(json['defaultReps']) ?? initialDefaultReps,
@@ -95,10 +102,51 @@ class SettingsState {
     );
   }
 
+  static SettingsState _fromV2(Map<String, dynamic> json) => _fromV1(json)
+      .copyWith(
+        prefillSets: json['prefillSets'] is bool
+            ? json['prefillSets'] as bool
+            : true,
+        numberEntry:
+            NumberEntry.values.asNameMap()[json['numberEntry']] ??
+            NumberEntry.keypad,
+        effortScale:
+            EffortScale.values.asNameMap()[json['effortScale']] ??
+            EffortScale.rpe,
+        currentSplitId: json['currentSplitId'] is int
+            ? json['currentSplitId'] as int
+            : null,
+        splitsUsedAt: _splitsUsedAt(json['splitsUsedAt']),
+      );
+
+  static Map<int, DateTime> _splitsUsedAt(Object? json) {
+    if (json is! Map) return const {};
+    return {
+      for (final MapEntry(:key, :value) in json.entries)
+        if (int.tryParse('$key') case final id?)
+          if (value is String) id: ?DateTime.tryParse(value),
+    };
+  }
+
   final WeightUnit unit;
   final bool notificationsEnabled;
   final bool analyticsEnabled;
-  final FreeStartPlacement freeStartPlacement;
+
+  /// Pending set rows show last session's values (or the plan's target reps)
+  /// as grey placeholders that one tap logs.
+  final bool prefillSets;
+  final NumberEntry numberEntry;
+
+  /// How sets' effort is entered and shown: RPE, or reps in reserve.
+  final EffortScale effortScale;
+
+  /// The split whose next day the Workout tab offers; null follows the most
+  /// recently trained split.
+  final int? currentSplitId;
+
+  /// When splits (by id) stopped being current. With the sessions' training
+  /// times this orders the Splits tab by last use (see `splitsByLastUsed`).
+  final Map<int, DateTime> splitsUsedAt;
 
   final RepMode defaultRepMode;
   final int defaultReps;
@@ -115,7 +163,11 @@ class SettingsState {
     WeightUnit? unit,
     bool? notificationsEnabled,
     bool? analyticsEnabled,
-    FreeStartPlacement? freeStartPlacement,
+    bool? prefillSets,
+    NumberEntry? numberEntry,
+    EffortScale? effortScale,
+    Object? currentSplitId = _unset,
+    Map<int, DateTime>? splitsUsedAt,
     RepMode? defaultRepMode,
     int? defaultReps,
     int? defaultRepRangeMin,
@@ -128,7 +180,13 @@ class SettingsState {
       unit: unit ?? this.unit,
       notificationsEnabled: notificationsEnabled ?? this.notificationsEnabled,
       analyticsEnabled: analyticsEnabled ?? this.analyticsEnabled,
-      freeStartPlacement: freeStartPlacement ?? this.freeStartPlacement,
+      prefillSets: prefillSets ?? this.prefillSets,
+      numberEntry: numberEntry ?? this.numberEntry,
+      effortScale: effortScale ?? this.effortScale,
+      currentSplitId: identical(currentSplitId, _unset)
+          ? this.currentSplitId
+          : currentSplitId as int?,
+      splitsUsedAt: splitsUsedAt ?? this.splitsUsedAt,
       defaultRepMode: defaultRepMode ?? this.defaultRepMode,
       defaultReps: defaultReps ?? this.defaultReps,
       defaultRepRangeMin: defaultRepRangeMin ?? this.defaultRepRangeMin,
@@ -146,7 +204,11 @@ class SettingsState {
       unit == other.unit &&
       notificationsEnabled == other.notificationsEnabled &&
       analyticsEnabled == other.analyticsEnabled &&
-      freeStartPlacement == other.freeStartPlacement &&
+      prefillSets == other.prefillSets &&
+      numberEntry == other.numberEntry &&
+      effortScale == other.effortScale &&
+      currentSplitId == other.currentSplitId &&
+      _mapEquals(splitsUsedAt, other.splitsUsedAt) &&
       defaultRepMode == other.defaultRepMode &&
       defaultReps == other.defaultReps &&
       defaultRepRangeMin == other.defaultRepRangeMin &&
@@ -160,7 +222,13 @@ class SettingsState {
     unit,
     notificationsEnabled,
     analyticsEnabled,
-    freeStartPlacement,
+    prefillSets,
+    numberEntry,
+    effortScale,
+    currentSplitId,
+    Object.hashAllUnordered(
+      splitsUsedAt.entries.map((e) => Object.hash(e.key, e.value)),
+    ),
     defaultRepMode,
     defaultReps,
     defaultRepRangeMin,
@@ -170,6 +238,8 @@ class SettingsState {
     Object.hashAll(graphs),
   );
 
+  static const _unset = Object();
+
   static bool _listEquals<T>(List<T> a, List<T> b) {
     if (a.length != b.length) return false;
     for (var i = 0; i < a.length; i++) {
@@ -178,12 +248,27 @@ class SettingsState {
     return true;
   }
 
+  static bool _mapEquals<K, V>(Map<K, V> a, Map<K, V> b) {
+    if (a.length != b.length) return false;
+    for (final MapEntry(:key, :value) in a.entries) {
+      if (!b.containsKey(key) || b[key] != value) return false;
+    }
+    return true;
+  }
+
   Map<String, dynamic> toJson() => {
-    'v': 1,
+    'v': 2,
     'unit': unit.name,
     'notificationsEnabled': notificationsEnabled,
     'analyticsEnabled': analyticsEnabled,
-    'freeStartPlacement': freeStartPlacement.name,
+    'prefillSets': prefillSets,
+    'numberEntry': numberEntry.name,
+    'effortScale': effortScale.name,
+    'currentSplitId': currentSplitId,
+    'splitsUsedAt': {
+      for (final MapEntry(:key, :value) in splitsUsedAt.entries)
+        '$key': value.toIso8601String(),
+    },
     'defaultRepMode': defaultRepMode.name,
     'defaultReps': defaultReps,
     'defaultRepRangeMin': defaultRepRangeMin,
@@ -195,7 +280,11 @@ class SettingsState {
 }
 
 class SettingsCubit extends HydratedCubit<SettingsState> {
-  SettingsCubit() : super(SettingsState());
+  SettingsCubit({DateTime Function()? now})
+    : _now = now ?? DateTime.now,
+      super(SettingsState());
+
+  final DateTime Function() _now;
 
   void setUnit(WeightUnit unit) => emit(state.copyWith(unit: unit));
 
@@ -205,8 +294,35 @@ class SettingsCubit extends HydratedCubit<SettingsState> {
   void setAnalyticsEnabled(bool value) =>
       emit(state.copyWith(analyticsEnabled: value));
 
-  void setFreeStartPlacement(FreeStartPlacement placement) =>
-      emit(state.copyWith(freeStartPlacement: placement));
+  void setPrefillSets(bool value) => emit(state.copyWith(prefillSets: value));
+
+  void setNumberEntry(NumberEntry entry) =>
+      emit(state.copyWith(numberEntry: entry));
+
+  void setEffortScale(EffortScale scale) =>
+      emit(state.copyWith(effortScale: scale));
+
+  /// Makes [splitId] the current split. [previous], the split that was
+  /// current until now, counts as just used, so it lists right below it.
+  void setCurrentSplit(int? splitId, {int? previous}) => emit(
+    state.copyWith(
+      currentSplitId: splitId,
+      splitsUsedAt: previous == null || previous == splitId
+          ? null
+          : {...state.splitsUsedAt, previous: _now()},
+    ),
+  );
+
+  /// Drops a deleted split, and makes the current split follow the most
+  /// recently trained one again when it was the deleted one.
+  void forgetSplit(int splitId) => emit(
+    state.copyWith(
+      currentSplitId: state.currentSplitId == splitId
+          ? null
+          : state.currentSplitId,
+      splitsUsedAt: {...state.splitsUsedAt}..remove(splitId),
+    ),
+  );
 
   void setDefaultRepMode(RepMode mode) =>
       emit(state.copyWith(defaultRepMode: mode));

@@ -7,10 +7,14 @@ class CustomAppBar extends StatelessWidget {
     super.key,
     required this.title,
     this.actionButton,
+    this.trailing,
   });
 
   final String title;
   final ({String title, VoidCallback onPressed})? actionButton;
+
+  /// Shown after [actionButton], e.g. an icon button or a menu.
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -39,6 +43,7 @@ class CustomAppBar extends StatelessWidget {
                 onPress: actionButton!.onPressed,
                 child: Text(actionButton!.title),
               ),
+            ?trailing,
           ],
         ),
       ),

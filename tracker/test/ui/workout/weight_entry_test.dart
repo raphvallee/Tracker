@@ -1,15 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forui/forui.dart';
 import 'package:hydrated_bloc/hydrated_bloc.dart';
 import 'package:tracker/domain/models/weight_unit.dart';
-import 'package:tracker/main.dart';
-import 'package:tracker/ui/settings/view_models/settings_cubit.dart';
 import 'package:tracker/ui/workout/view_models/workout_cubit.dart';
 
 import '../../../testing/fakes/in_memory_storage.dart';
 import '../../../testing/test_helpers.dart';
+import '../../../testing/workout_helpers.dart';
 
 void main() {
   setUp(() {
@@ -20,23 +18,21 @@ void main() {
     WidgetTester tester, {
     WeightUnit unit = WeightUnit.kilograms,
   }) async {
+    useTallWindow(tester);
     final cubit = await pumpApp(tester, unit: unit);
     cubit.startPlanWorkout(
-      title: 'PPL · Push',
+      title: 'Push',
       exercises: const [
         PlanExercise(exerciseId: 1, name: 'Bench Press', order: 0),
       ],
     );
-    tester
-        .widget<FBottomNavigationBar>(find.byType(FBottomNavigationBar))
-        .onChange!(2);
-    await tester.pumpAndSettle();
+    await openExercise(tester, 'Bench Press');
     return cubit;
   }
 
   Finder inputOf(int index) => find
       .descendant(
-        of: find.byType(FTextField).at(index),
+        of: find.byType(TextField).at(index),
         matching: find.byType(EditableText),
       )
       .first;
@@ -74,9 +70,6 @@ void main() {
     );
     await tester.pump();
   }
-
-  SettingsCubit settingsOf(WidgetTester tester) =>
-      tester.element(find.byType(MyApp)).read<SettingsCubit>();
 
   group('negative weight (assisted machine)', () {
     testWidgets('asks first and logs only when confirmed', (tester) async {

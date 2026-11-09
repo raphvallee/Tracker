@@ -11,7 +11,8 @@ import 'package:tracker/routing/tab_navigation.dart';
 import 'package:tracker/ui/exercises/widgets/exercises_page.dart';
 import 'package:tracker/ui/feed/widgets/feed_page.dart';
 import 'package:tracker/ui/history/widgets/history_page.dart';
-import 'package:tracker/ui/workout/widgets/editor_page.dart';
+import 'package:tracker/ui/splits/widgets/splits_page.dart';
+import 'package:tracker/ui/workout/widgets/elapsed_clock.dart';
 import 'package:tracker/ui/workout/widgets/workout_page.dart';
 
 class HomePage extends StatefulWidget {
@@ -96,6 +97,7 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
     HomePageSingleton().indexSetState = indexSetState;
+    HomePageSingleton().navigatorOf = _navigatorOf;
     // Build the History tab offstage shortly after launch, so its first open
     // is a visibility flip instead of a cold build. A one-shot timer, not an
     // idle-priority scheduler task: while any animation runs the scheduler
@@ -124,8 +126,16 @@ class _HomePageState extends State<HomePage> {
     if (HomePageSingleton().indexSetState == indexSetState) {
       HomePageSingleton().indexSetState = null;
     }
+    if (HomePageSingleton().navigatorOf == _navigatorOf) {
+      HomePageSingleton().navigatorOf = null;
+    }
     super.dispose();
   }
+
+  NavigatorState? _navigatorOf(int index) =>
+      index < 0 || index >= _navigatorKeys.length
+      ? null
+      : _navigatorKeys[index].currentState;
 
   void indexSetState(int index) {
     if (!mounted || index < 0 || index >= _navigatorKeys.length) return;
@@ -136,7 +146,7 @@ class _HomePageState extends State<HomePage> {
     0 => const FeedPage(),
     1 => const HistoryPage(),
     2 => const WorkoutPage(),
-    3 => const EditorPage(),
+    3 => const SplitsPage(),
     4 => const ExercisesPage(),
     _ => const SizedBox.shrink(),
   };
@@ -182,23 +192,33 @@ class _HomePageState extends State<HomePage> {
               semanticsLabel: 'History',
             ),
             BlocBuilder<WorkoutCubit, WorkoutState>(
-              builder: (context, state) => FBottomNavigationBarItem(
-                key: const ValueKey('workout-tab'),
-                icon: Transform.translate(
-                  offset: const Offset(0, -6),
-                  child: const Icon(FLucideIcons.dumbbell),
-                ),
-                label: const Text('Workout'),
-                semanticsLabel: state.isInProgress
-                    ? 'Workout in progress'
-                    : 'Workout',
-              ),
+              buildWhen: (previous, current) =>
+                  previous.isInProgress != current.isInProgress ||
+                  previous.startTime != current.startTime,
+              builder: (context, state) {
+                // While a workout runs the tab shows its live time, from
+                // every tab; like any tab it is colored only when selected.
+                final start = state.isInProgress ? state.startTime : null;
+                return FBottomNavigationBarItem(
+                  key: const ValueKey('workout-tab'),
+                  icon: Transform.translate(
+                    offset: const Offset(0, -6),
+                    child: const Icon(FLucideIcons.dumbbell),
+                  ),
+                  label: start == null
+                      ? const Text('Workout')
+                      : ElapsedClock(start: start),
+                  semanticsLabel: start == null
+                      ? 'Workout'
+                      : 'Workout in progress',
+                );
+              },
             ),
             const FBottomNavigationBarItem(
-              key: ValueKey('editor-tab'),
+              key: ValueKey('splits-tab'),
               icon: Icon(FLucideIcons.notebookText),
-              label: Text('Editor'),
-              semanticsLabel: 'Editor',
+              label: Text('Splits'),
+              semanticsLabel: 'Splits',
             ),
             const FBottomNavigationBarItem(
               key: ValueKey('exercises-tab'),

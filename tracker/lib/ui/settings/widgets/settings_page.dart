@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:forui/forui.dart';
+import 'package:tracker/domain/models/effort_scale.dart';
+import 'package:tracker/domain/models/number_entry.dart';
 import 'package:tracker/domain/models/rep_mode.dart';
 import 'package:tracker/domain/models/weight_unit.dart';
 
@@ -53,7 +55,6 @@ class SettingsPage extends StatelessWidget {
                       context.read<SettingsCubit>().setUnit(unit);
                     },
                   ),
-                  _buildFreeStartPlacementRow(context, state),
                   _buildSwitchRow(
                     context,
                     icon: FLucideIcons.bell,
@@ -74,6 +75,74 @@ class SettingsPage extends StatelessWidget {
                     onChanged: context
                         .read<SettingsCubit>()
                         .setAnalyticsEnabled,
+                  ),
+                  _sectionTitle(context, 'Logging sets'),
+                  _buildSwitchRow(
+                    context,
+                    icon: FLucideIcons.clipboardPaste,
+                    title: 'Prefill sets',
+                    subtitle:
+                        "Last session's values or the plan's target reps, "
+                        'logged with one tap',
+                    value: state.prefillSets,
+                    onChanged: context.read<SettingsCubit>().setPrefillSets,
+                  ),
+                  Padding(
+                    padding: _kSettingsRowPadding,
+                    child: FCard(
+                      child: FItem(
+                        prefix: Icon(
+                          FLucideIcons.grid3x3,
+                          color: context.theme.colors.primary,
+                        ),
+                        title: const Text('Number entry'),
+                        subtitle: Text(
+                          'What opens when you tap a weight or reps',
+                          style: context.theme.typography.body.xs.copyWith(
+                            color: context.theme.colors.mutedForeground,
+                          ),
+                        ),
+                        suffix: _MenuSelect<NumberEntry>(
+                          options: const {
+                            'Keypad': NumberEntry.keypad,
+                            'Phone keyboard': NumberEntry.phoneKeyboard,
+                            'Steppers': NumberEntry.steppers,
+                          },
+                          value: state.numberEntry,
+                          onChanged: context
+                              .read<SettingsCubit>()
+                              .setNumberEntry,
+                        ),
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: _kSettingsRowPadding,
+                    child: FCard(
+                      child: FItem(
+                        prefix: Icon(
+                          FLucideIcons.gauge,
+                          color: context.theme.colors.primary,
+                        ),
+                        title: const Text('Set Effort Rating'),
+                        subtitle: Text(
+                          'RPE (exertion) or RIR (reps in reserve), 0 to 10',
+                          style: context.theme.typography.body.xs.copyWith(
+                            color: context.theme.colors.mutedForeground,
+                          ),
+                        ),
+                        suffix: _MenuSelect<EffortScale>(
+                          options: const {
+                            'RPE': EffortScale.rpe,
+                            'RIR': EffortScale.rir,
+                          },
+                          value: state.effortScale,
+                          onChanged: context
+                              .read<SettingsCubit>()
+                              .setEffortScale,
+                        ),
+                      ),
+                    ),
                   ),
                   _WorkoutDefaultsSection(state: state),
                 ],
@@ -115,35 +184,15 @@ class SettingsPage extends StatelessWidget {
     );
   }
 
-  Widget _buildFreeStartPlacementRow(
-    BuildContext context,
-    SettingsState state,
-  ) {
-    return Padding(
-      padding: _kSettingsRowPadding,
-      child: FCard(
-        child: FItem(
-          prefix: Icon(FLucideIcons.play, color: context.theme.colors.primary),
-          title: const Text('Start workout button'),
-          subtitle: Text(
-            'Where it appears on the workout page',
-            style: context.theme.typography.body.xs.copyWith(
-              color: context.theme.colors.mutedForeground,
-            ),
-          ),
-          suffix: _MenuSelect<FreeStartPlacement>(
-            options: const {
-              'Before splits': FreeStartPlacement.before,
-              'After splits': FreeStartPlacement.after,
-              'Hidden': FreeStartPlacement.disabled,
-            },
-            value: state.freeStartPlacement,
-            onChanged: context.read<SettingsCubit>().setFreeStartPlacement,
-          ),
-        ),
+  Widget _sectionTitle(BuildContext context, String title) => Padding(
+    padding: const EdgeInsets.only(left: 16, top: 12, bottom: 4),
+    child: Text(
+      title,
+      style: context.theme.typography.body.md.copyWith(
+        fontWeight: FontWeight.w600,
       ),
-    );
-  }
+    ),
+  );
 
   Widget _buildSettingsMenuItem(
     BuildContext context, {

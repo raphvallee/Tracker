@@ -13,9 +13,11 @@ import 'package:hydrated_bloc/hydrated_bloc.dart';
 import 'package:isar_community/isar.dart';
 import 'package:tracker/data/repositories/tracker_repository.dart';
 import 'package:tracker/data/services/seed.dart';
+import 'package:tracker/domain/models/effort_scale.dart';
 import 'package:tracker/domain/models/exercise.dart';
 import 'package:tracker/domain/models/graph_config.dart';
 import 'package:tracker/domain/models/gym.dart';
+import 'package:tracker/domain/models/split_draft.dart';
 import 'package:tracker/domain/models/workout_session.dart';
 import 'package:tracker/domain/models/workout_set.dart';
 import 'package:tracker/domain/models/workout_split.dart';
@@ -33,12 +35,17 @@ import 'package:tracker/ui/settings/view_models/settings_cubit.dart';
 import 'package:tracker/ui/settings/widgets/gyms_page.dart';
 import 'package:tracker/ui/settings/widgets/rep_defaults_dialogs.dart';
 import 'package:tracker/ui/settings/widgets/settings_page.dart';
+import 'package:tracker/ui/splits/view_models/split_drafts_cubit.dart';
+import 'package:tracker/ui/splits/widgets/new_split_sheet.dart';
+import 'package:tracker/ui/splits/widgets/review_changes_sheet.dart';
+import 'package:tracker/ui/splits/widgets/set_target_sheet.dart';
+import 'package:tracker/ui/splits/widgets/split_day_editor_page.dart';
 import 'package:tracker/ui/workout/view_models/workout_cubit.dart';
+import 'package:tracker/ui/workout/widgets/day_preview_sheet.dart';
+import 'package:tracker/ui/workout/widgets/effort_sheet.dart';
+import 'package:tracker/ui/workout/widgets/exercise_page.dart';
 import 'package:tracker/ui/workout/widgets/exercise_picker_page.dart';
 import 'package:tracker/ui/workout/widgets/gym_picker.dart';
-import 'package:tracker/ui/workout/widgets/new_split_page.dart';
-import 'package:tracker/ui/workout/widgets/split_day_editor_page.dart';
-import 'package:tracker/ui/workout/widgets/split_day_page.dart';
 import 'package:tracker/ui/workout/widgets/workout_page.dart';
 
 import '../../../testing/fakes/in_memory_storage.dart';
@@ -93,36 +100,19 @@ Future<void> captureScreensAt(
   HydratedBloc.storage = InMemoryStorage();
   final cubit = WorkoutCubit(repository: repo);
   addTearDown(cubit.close);
-  cubit.startPlanWorkout(
-    title: 'Push Pull Legs · Day 1',
-    exercises: [
-      PlanExercise(exerciseId: fixtures.benchId, name: 'Bench Press'),
-      PlanExercise(
-        exerciseId: fixtures.inclineId,
-        name: 'Incline Bench Press',
-        order: 1,
-      ),
-    ],
-    gym: fixtures.secondaryGym,
-  );
-  cubit.logSet(
-    exerciseId: fixtures.benchId,
-    exerciseName: 'Bench Press',
-    weight: 80,
-    reps: 8,
-  );
-  cubit.logSet(
-    exerciseId: fixtures.benchId,
-    exerciseName: 'Bench Press',
-    weight: 60,
-    reps: 10,
-    type: SetType.warmup,
-  );
+  startSweepWorkout(cubit, fixtures);
+  final drafts = SplitDraftsCubit(repository: repo);
+  addTearDown(drafts.close);
+  final names = {
+    fixtures.benchId: 'Bench Press',
+    fixtures.inclineId: 'Incline Bench Press',
+  };
 
   await tester.pumpWidget(
     MultiBlocProvider(
       providers: [
         BlocProvider<WorkoutCubit>.value(value: cubit),
+        BlocProvider<SplitDraftsCubit>.value(value: drafts),
         BlocProvider<SettingsCubit>(
           create: (_) => SettingsCubit()
             ..addGraph(
@@ -257,10 +247,11 @@ Future<void> captureScreensAt(
     await settle();
     await recorder.capture('Workout tab (in progress)');
   });
-  await guarded('Editor tab', () async {
+  await guarded('Splits tab', () async {
     switchTab(3);
+    await settle();
     await settleForData(() => tester.any(find.textContaining('Push Day')));
-    await recorder.capture('Editor tab');
+    await recorder.capture('Splits tab');
   });
   await guarded('Exercises tab', () async {
     switchTab(4);
@@ -299,19 +290,47 @@ Future<void> captureScreensAt(
     SessionEditPage(session: fixtures.session),
     dataReady: () => tester.any(find.text('Bench Press')),
   );
-  await visit('Split editor (new)', const SplitEditorPage());
-  await visit('Split editor (edit)', SplitEditorPage(split: fixtures.split));
+  await visit(
+    'Exercise page',
+    ExercisePage(exerciseId: fixtures.benchId),
+    dataReady: () => tester.any(find.textContaining('Last time')),
+  );
+  await guarded('Exercise page (keypad)', () async {
+    unawaited(
+      pushTo<void>(
+        navigator.context,
+        ExercisePage(exerciseId: fixtures.benchId),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+    await settleForData(() => tester.any(find.textContaining('Last time')));
+    await tester.tap(
+      find
+          .byWidgetPredicate(
+            (w) => w is TextField && (w.controller?.text.isEmpty ?? false),
+          )
+          .first,
+    );
+    // One settle opens the keypad and starts lifting the row above it, the
+    // second lets that scroll finish.
+    await settle();
+    await settle();
+    try {
+      await recorder.capture('Exercise page (keypad)');
+    } finally {
+      FocusManager.instance.primaryFocus?.unfocus();
+      await settle();
+      navigator.pop();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 350));
+      await settle();
+    }
+  });
   await visit(
     'Split day editor',
-    SplitDayEditorPage(day: fixtures.split.splitDays.first),
-  );
-  await visit(
-    'Split day page',
-    SplitDayPage(
-      splitTitle: fixtures.split.title,
-      day: fixtures.split.splitDays.first,
-    ),
-    dataReady: dataLoaded,
+    SplitDayEditorPage(splitId: fixtures.split.id, dayIndex: 0),
+    dataReady: () => tester.any(find.text('Bench Press')),
   );
   await visit(
     'Exercise picker page',
@@ -321,25 +340,28 @@ Future<void> captureScreensAt(
 
   final pageContext = tester.element(find.byType(FeedPage));
 
-  Future<void> openAndClose(String what, Future<void> Function() open) =>
-      guarded(what, () async {
-        unawaited(open());
-        // Two pumps: one frame starts the transition, the second advances
-        // the fake clock past it (a bare pump doesn't move the clock).
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 350));
-        await settle();
-        try {
-          await recorder.capture(what);
-        } finally {
-          Navigator.of(pageContext).pop();
-          // Two pumps: one frame starts the transition, the second advances
-          // the fake clock past it (a bare pump doesn't move the clock).
-          await tester.pump();
-          await tester.pump(const Duration(milliseconds: 350));
-          await settle();
-        }
-      });
+  Future<void> openAndClose(
+    String what,
+    Future<void> Function() open, {
+    bool root = false,
+  }) => guarded(what, () async {
+    unawaited(open());
+    // Two pumps: one frame starts the transition, the second advances
+    // the fake clock past it (a bare pump doesn't move the clock).
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+    await settle();
+    try {
+      await recorder.capture(what);
+    } finally {
+      Navigator.of(pageContext, rootNavigator: root).pop();
+      // Two pumps: one frame starts the transition, the second advances
+      // the fake clock past it (a bare pump doesn't move the clock).
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 350));
+      await settle();
+    }
+  });
 
   await openAndClose(
     'Graph editor sheet',
@@ -375,6 +397,85 @@ Future<void> captureScreensAt(
     'Default rep range dialog',
     () => editDefaultRepRangeDialog(pageContext, min: 8, max: 12),
   );
+  await openAndClose(
+    'Day preview sheet',
+    () => showDayPreview(
+      pageContext,
+      split: fixtures.split,
+      dayIndex: 0,
+      names: names,
+      lastDone: fixtures.session.startTime,
+    ),
+    root: true,
+  );
+  await openAndClose(
+    'New split sheet',
+    () => showNewSplitSheet(pageContext),
+    root: true,
+  );
+  await openAndClose(
+    'Set target sheet',
+    () => showSetTargetSheet(
+      pageContext,
+      title: 'Bench Press, set 2',
+      subtitle: 'Push Day. Saved as 8-12 reps.',
+      sets: const [
+        SetTarget.warmup(12),
+        SetTarget(8, 12),
+        SetTarget(8, 12),
+        SetTarget(8, 12),
+      ],
+      index: 1,
+    ),
+    root: true,
+  );
+  await openAndClose(
+    'Effort sheet',
+    () => showEffortSheet(
+      pageContext,
+      title: 'Set 2 effort',
+      scale: EffortScale.rpe,
+      rpe: 8,
+    ),
+    root: true,
+  );
+
+  // Unsaved edits: a changed target, a renamed day and a new day.
+  drafts.edit(
+    fixtures.split,
+    (draft) => draft
+        .updateDay(
+          0,
+          (day) => day.updateExercise(
+            0,
+            (exercise) => exercise.withSet(2, const SetTarget(6, 8)),
+          ),
+        )
+        .updateDay(1, (day) => day.copyWith(title: 'Pull Day'))
+        .addDay('Leg Day'),
+  );
+  await guarded('Splits tab (unsaved changes)', () async {
+    switchTab(3);
+    await settle();
+    await recorder.capture('Splits tab (unsaved changes)');
+    switchTab(0);
+    await settle();
+  });
+  await visit(
+    'Split day editor (unsaved changes)',
+    SplitDayEditorPage(splitId: fixtures.split.id, dayIndex: 0),
+    dataReady: () => tester.any(find.text('Bench Press')),
+  );
+  await openAndClose(
+    'Review changes sheet',
+    () => showReviewChangesSheet(
+      pageContext,
+      split: fixtures.split,
+      names: names,
+    ),
+    root: true,
+  );
+  drafts.discard(fixtures.split.id);
 
   await guarded('End-workout dialog', () async {
     unawaited(pushTo<void>(navigator.context, const WorkoutPage()));
@@ -383,9 +484,7 @@ Future<void> captureScreensAt(
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 350));
     await settle();
-    await tester.ensureVisible(find.text('End Workout'));
-    await settle();
-    await tester.tap(find.text('End Workout'));
+    await tester.tap(find.text('Finish'));
     // Two pumps: one frame starts the transition, the second advances
     // the fake clock past it (a bare pump doesn't move the clock).
     await tester.pump();
@@ -411,6 +510,8 @@ Future<void> captureScreensAt(
   await guarded('Workout tab (idle)', () async {
     switchTab(2);
     await settle();
+    // The next day follows the workout just saved.
+    await settleForData(() => tester.any(find.textContaining('Start Pull')));
     await recorder.capture('Workout tab (idle)');
   });
 

@@ -31,11 +31,14 @@ class HomePageSingleton {
 
   Function? indexSetState;
 
+  /// The nested navigator of a tab (by index), once that tab has been built.
+  NavigatorState? Function(int index)? navigatorOf;
+
   static const Map<TabName, int> _tabIndexes = {
     TabName.feed: 0,
     TabName.history: 1,
     TabName.currentWorkout: 2,
-    TabName.editor: 3,
+    TabName.splits: 3,
     TabName.exercises: 4,
   };
 
@@ -43,6 +46,18 @@ class HomePageSingleton {
     final index = _tabIndexes[tabName];
     if (index != null) indexSetState?.call(index);
   }
+
+  /// Switches to [tabName] and pushes [route] on its navigator. A tab opened
+  /// for the first time builds its navigator in the next frame, so the push
+  /// waits for it.
+  void pushInTab(TabName tabName, Route<void> route) {
+    final index = _tabIndexes[tabName];
+    if (index == null) return;
+    indexSetState?.call(index);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      navigatorOf?.call(index)?.push(route);
+    });
+  }
 }
 
-enum TabName { feed, history, currentWorkout, editor, exercises }
+enum TabName { feed, history, currentWorkout, splits, exercises }

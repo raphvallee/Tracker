@@ -12,6 +12,8 @@ class WorkoutSession {
     this.endTime,
     this.gymId,
     this.sets = const [],
+    this.splitId,
+    this.splitDayIndex,
   });
 
   Id id = Isar.autoIncrement;
@@ -22,4 +24,10 @@ class WorkoutSession {
   int? gymId;
 
   List<WorkoutSet> sets;
+
+  /// The split and day (by position) a session was started from; both null
+  /// for empty workouts and sessions saved before splits were tracked. They
+  /// drive the Workout tab's "Up next" rotation.
+  int? splitId;
+  int? splitDayIndex;
 }

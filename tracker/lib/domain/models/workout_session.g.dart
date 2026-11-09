@@ -30,12 +30,18 @@ const WorkoutSessionSchema = CollectionSchema(
 
       target: r'WorkoutSet',
     ),
-    r'startTime': PropertySchema(
+    r'splitDayIndex': PropertySchema(
       id: 3,
+      name: r'splitDayIndex',
+      type: IsarType.long,
+    ),
+    r'splitId': PropertySchema(id: 4, name: r'splitId', type: IsarType.long),
+    r'startTime': PropertySchema(
+      id: 5,
       name: r'startTime',
       type: IsarType.dateTime,
     ),
-    r'title': PropertySchema(id: 4, name: r'title', type: IsarType.string),
+    r'title': PropertySchema(id: 6, name: r'title', type: IsarType.string),
   },
 
   estimateSize: _workoutSessionEstimateSize,
@@ -85,8 +91,10 @@ void _workoutSessionSerialize(
     WorkoutSetSchema.serialize,
     object.sets,
   );
-  writer.writeDateTime(offsets[3], object.startTime);
-  writer.writeString(offsets[4], object.title);
+  writer.writeLong(offsets[3], object.splitDayIndex);
+  writer.writeLong(offsets[4], object.splitId);
+  writer.writeDateTime(offsets[5], object.startTime);
+  writer.writeString(offsets[6], object.title);
 }
 
 WorkoutSession _workoutSessionDeserialize(
@@ -106,8 +114,10 @@ WorkoutSession _workoutSessionDeserialize(
           WorkoutSet(),
         ) ??
         const [],
-    startTime: reader.readDateTime(offsets[3]),
-    title: reader.readStringOrNull(offsets[4]) ?? 'Workout',
+    splitDayIndex: reader.readLongOrNull(offsets[3]),
+    splitId: reader.readLongOrNull(offsets[4]),
+    startTime: reader.readDateTime(offsets[5]),
+    title: reader.readStringOrNull(offsets[6]) ?? 'Workout',
   );
   object.id = id;
   return object;
@@ -134,8 +144,12 @@ P _workoutSessionDeserializeProp<P>(
               const [])
           as P;
     case 3:
-      return (reader.readDateTime(offset)) as P;
+      return (reader.readLongOrNull(offset)) as P;
     case 4:
+      return (reader.readLongOrNull(offset)) as P;
+    case 5:
+      return (reader.readDateTime(offset)) as P;
+    case 6:
       return (reader.readStringOrNull(offset) ?? 'Workout') as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -499,6 +513,152 @@ extension WorkoutSessionQueryFilter
   }
 
   QueryBuilder<WorkoutSession, WorkoutSession, QAfterFilterCondition>
+  splitDayIndexIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        const FilterCondition.isNull(property: r'splitDayIndex'),
+      );
+    });
+  }
+
+  QueryBuilder<WorkoutSession, WorkoutSession, QAfterFilterCondition>
+  splitDayIndexIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        const FilterCondition.isNotNull(property: r'splitDayIndex'),
+      );
+    });
+  }
+
+  QueryBuilder<WorkoutSession, WorkoutSession, QAfterFilterCondition>
+  splitDayIndexEqualTo(int? value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.equalTo(property: r'splitDayIndex', value: value),
+      );
+    });
+  }
+
+  QueryBuilder<WorkoutSession, WorkoutSession, QAfterFilterCondition>
+  splitDayIndexGreaterThan(int? value, {bool include = false}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(
+          include: include,
+          property: r'splitDayIndex',
+          value: value,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<WorkoutSession, WorkoutSession, QAfterFilterCondition>
+  splitDayIndexLessThan(int? value, {bool include = false}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.lessThan(
+          include: include,
+          property: r'splitDayIndex',
+          value: value,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<WorkoutSession, WorkoutSession, QAfterFilterCondition>
+  splitDayIndexBetween(
+    int? lower,
+    int? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.between(
+          property: r'splitDayIndex',
+          lower: lower,
+          includeLower: includeLower,
+          upper: upper,
+          includeUpper: includeUpper,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<WorkoutSession, WorkoutSession, QAfterFilterCondition>
+  splitIdIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        const FilterCondition.isNull(property: r'splitId'),
+      );
+    });
+  }
+
+  QueryBuilder<WorkoutSession, WorkoutSession, QAfterFilterCondition>
+  splitIdIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        const FilterCondition.isNotNull(property: r'splitId'),
+      );
+    });
+  }
+
+  QueryBuilder<WorkoutSession, WorkoutSession, QAfterFilterCondition>
+  splitIdEqualTo(int? value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.equalTo(property: r'splitId', value: value),
+      );
+    });
+  }
+
+  QueryBuilder<WorkoutSession, WorkoutSession, QAfterFilterCondition>
+  splitIdGreaterThan(int? value, {bool include = false}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(
+          include: include,
+          property: r'splitId',
+          value: value,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<WorkoutSession, WorkoutSession, QAfterFilterCondition>
+  splitIdLessThan(int? value, {bool include = false}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.lessThan(
+          include: include,
+          property: r'splitId',
+          value: value,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<WorkoutSession, WorkoutSession, QAfterFilterCondition>
+  splitIdBetween(
+    int? lower,
+    int? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.between(
+          property: r'splitId',
+          lower: lower,
+          includeLower: includeLower,
+          upper: upper,
+          includeUpper: includeUpper,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<WorkoutSession, WorkoutSession, QAfterFilterCondition>
   startTimeEqualTo(DateTime value) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(
@@ -735,6 +895,33 @@ extension WorkoutSessionQuerySortBy
     });
   }
 
+  QueryBuilder<WorkoutSession, WorkoutSession, QAfterSortBy>
+  sortBySplitDayIndex() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'splitDayIndex', Sort.asc);
+    });
+  }
+
+  QueryBuilder<WorkoutSession, WorkoutSession, QAfterSortBy>
+  sortBySplitDayIndexDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'splitDayIndex', Sort.desc);
+    });
+  }
+
+  QueryBuilder<WorkoutSession, WorkoutSession, QAfterSortBy> sortBySplitId() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'splitId', Sort.asc);
+    });
+  }
+
+  QueryBuilder<WorkoutSession, WorkoutSession, QAfterSortBy>
+  sortBySplitIdDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'splitId', Sort.desc);
+    });
+  }
+
   QueryBuilder<WorkoutSession, WorkoutSession, QAfterSortBy> sortByStartTime() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'startTime', Sort.asc);
@@ -800,6 +987,33 @@ extension WorkoutSessionQuerySortThenBy
     });
   }
 
+  QueryBuilder<WorkoutSession, WorkoutSession, QAfterSortBy>
+  thenBySplitDayIndex() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'splitDayIndex', Sort.asc);
+    });
+  }
+
+  QueryBuilder<WorkoutSession, WorkoutSession, QAfterSortBy>
+  thenBySplitDayIndexDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'splitDayIndex', Sort.desc);
+    });
+  }
+
+  QueryBuilder<WorkoutSession, WorkoutSession, QAfterSortBy> thenBySplitId() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'splitId', Sort.asc);
+    });
+  }
+
+  QueryBuilder<WorkoutSession, WorkoutSession, QAfterSortBy>
+  thenBySplitIdDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'splitId', Sort.desc);
+    });
+  }
+
   QueryBuilder<WorkoutSession, WorkoutSession, QAfterSortBy> thenByStartTime() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'startTime', Sort.asc);
@@ -837,6 +1051,19 @@ extension WorkoutSessionQueryWhereDistinct
   QueryBuilder<WorkoutSession, WorkoutSession, QDistinct> distinctByGymId() {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'gymId');
+    });
+  }
+
+  QueryBuilder<WorkoutSession, WorkoutSession, QDistinct>
+  distinctBySplitDayIndex() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'splitDayIndex');
+    });
+  }
+
+  QueryBuilder<WorkoutSession, WorkoutSession, QDistinct> distinctBySplitId() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'splitId');
     });
   }
 
@@ -880,6 +1107,18 @@ extension WorkoutSessionQueryProperty
   setsProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'sets');
+    });
+  }
+
+  QueryBuilder<WorkoutSession, int?, QQueryOperations> splitDayIndexProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'splitDayIndex');
+    });
+  }
+
+  QueryBuilder<WorkoutSession, int?, QQueryOperations> splitIdProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'splitId');
     });
   }
 

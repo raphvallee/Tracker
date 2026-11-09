@@ -21,13 +21,14 @@ const WorkoutSetSchema = Schema(
     r'isWarmup': PropertySchema(id: 1, name: r'isWarmup', type: IsarType.bool),
     r'order': PropertySchema(id: 2, name: r'order', type: IsarType.long),
     r'reps': PropertySchema(id: 3, name: r'reps', type: IsarType.double),
+    r'rpe': PropertySchema(id: 4, name: r'rpe', type: IsarType.double),
     r'type': PropertySchema(
-      id: 4,
+      id: 5,
       name: r'type',
       type: IsarType.byte,
       enumMap: _WorkoutSettypeEnumValueMap,
     ),
-    r'weight': PropertySchema(id: 5, name: r'weight', type: IsarType.double),
+    r'weight': PropertySchema(id: 6, name: r'weight', type: IsarType.double),
   },
 
   estimateSize: _workoutSetEstimateSize,
@@ -55,8 +56,9 @@ void _workoutSetSerialize(
   writer.writeBool(offsets[1], object.isWarmup);
   writer.writeLong(offsets[2], object.order);
   writer.writeDouble(offsets[3], object.reps);
-  writer.writeByte(offsets[4], object.type.index);
-  writer.writeDouble(offsets[5], object.weight);
+  writer.writeDouble(offsets[4], object.rpe);
+  writer.writeByte(offsets[5], object.type.index);
+  writer.writeDouble(offsets[6], object.weight);
 }
 
 WorkoutSet _workoutSetDeserialize(
@@ -69,10 +71,11 @@ WorkoutSet _workoutSetDeserialize(
     exerciseId: reader.readLongOrNull(offsets[0]) ?? 0,
     order: reader.readLongOrNull(offsets[2]) ?? 0,
     reps: reader.readDoubleOrNull(offsets[3]) ?? 0,
+    rpe: reader.readDoubleOrNull(offsets[4]),
     type:
-        _WorkoutSettypeValueEnumMap[reader.readByteOrNull(offsets[4])] ??
+        _WorkoutSettypeValueEnumMap[reader.readByteOrNull(offsets[5])] ??
         SetType.working,
-    weight: reader.readDoubleOrNull(offsets[5]) ?? 0,
+    weight: reader.readDoubleOrNull(offsets[6]) ?? 0,
   );
   return object;
 }
@@ -93,10 +96,12 @@ P _workoutSetDeserializeProp<P>(
     case 3:
       return (reader.readDoubleOrNull(offset) ?? 0) as P;
     case 4:
+      return (reader.readDoubleOrNull(offset)) as P;
+    case 5:
       return (_WorkoutSettypeValueEnumMap[reader.readByteOrNull(offset)] ??
               SetType.working)
           as P;
-    case 5:
+    case 6:
       return (reader.readDoubleOrNull(offset) ?? 0) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -295,6 +300,96 @@ extension WorkoutSetQueryFilter
       return query.addFilterCondition(
         FilterCondition.between(
           property: r'reps',
+          lower: lower,
+          includeLower: includeLower,
+          upper: upper,
+          includeUpper: includeUpper,
+
+          epsilon: epsilon,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<WorkoutSet, WorkoutSet, QAfterFilterCondition> rpeIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        const FilterCondition.isNull(property: r'rpe'),
+      );
+    });
+  }
+
+  QueryBuilder<WorkoutSet, WorkoutSet, QAfterFilterCondition> rpeIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        const FilterCondition.isNotNull(property: r'rpe'),
+      );
+    });
+  }
+
+  QueryBuilder<WorkoutSet, WorkoutSet, QAfterFilterCondition> rpeEqualTo(
+    double? value, {
+    double epsilon = Query.epsilon,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.equalTo(
+          property: r'rpe',
+          value: value,
+
+          epsilon: epsilon,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<WorkoutSet, WorkoutSet, QAfterFilterCondition> rpeGreaterThan(
+    double? value, {
+    bool include = false,
+    double epsilon = Query.epsilon,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(
+          include: include,
+          property: r'rpe',
+          value: value,
+
+          epsilon: epsilon,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<WorkoutSet, WorkoutSet, QAfterFilterCondition> rpeLessThan(
+    double? value, {
+    bool include = false,
+    double epsilon = Query.epsilon,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.lessThan(
+          include: include,
+          property: r'rpe',
+          value: value,
+
+          epsilon: epsilon,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<WorkoutSet, WorkoutSet, QAfterFilterCondition> rpeBetween(
+    double? lower,
+    double? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    double epsilon = Query.epsilon,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.between(
+          property: r'rpe',
           lower: lower,
           includeLower: includeLower,
           upper: upper,
