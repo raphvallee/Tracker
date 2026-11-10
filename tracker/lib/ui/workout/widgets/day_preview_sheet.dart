@@ -6,6 +6,7 @@ import 'package:tracker/domain/models/workout_split.dart';
 import 'package:tracker/routing/tab_navigation.dart';
 import 'package:tracker/ui/core/ui/accent_button.dart';
 import 'package:tracker/ui/core/ui/custom_route.dart';
+import 'package:tracker/ui/core/ui/item_card.dart';
 import 'package:tracker/ui/core/ui/relative_dates.dart';
 import 'package:tracker/ui/core/ui/sheet_surface.dart';
 import 'package:tracker/ui/splits/view_models/split_drafts_cubit.dart';
@@ -118,17 +119,14 @@ class _DayPreview extends StatelessWidget {
                 ),
               ),
             ),
-          for (final (i, exercise) in plan.indexed)
-            DecoratedBox(
-              decoration: BoxDecoration(
-                border: Border(bottom: BorderSide(color: theme.colors.border)),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 9),
-                child: Row(
-                  children: <Widget>[
-                    SizedBox(
-                      width: 22,
+          if (plan.isNotEmpty)
+            ItemCard(
+              divider: .full,
+              children: <FItem>[
+                for (final (i, exercise) in plan.indexed)
+                  FItem(
+                    prefix: SizedBox(
+                      width: 18,
                       child: Text(
                         '${i + 1}',
                         textAlign: TextAlign.right,
@@ -137,30 +135,13 @@ class _DayPreview extends StatelessWidget {
                         ),
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          Text(
-                            names[exercise.exerciseId] ??
-                                'Exercise ${exercise.exerciseId}',
-                            style: theme.typography.body.sm.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          Text(
-                            setsSummary(exercise.sets),
-                            style: theme.typography.body.xs.copyWith(
-                              color: theme.colors.mutedForeground,
-                            ),
-                          ),
-                        ],
-                      ),
+                    title: Text(
+                      names[exercise.exerciseId] ??
+                          'Exercise ${exercise.exerciseId}',
                     ),
-                  ],
-                ),
-              ),
+                    subtitle: Text(setsSummary(exercise.sets)),
+                  ),
+              ],
             ),
           const SizedBox(height: 16),
           AccentButton(

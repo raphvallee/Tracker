@@ -302,7 +302,8 @@ Future<void> captureScreensAt(
   await visit(
     'Exercise page',
     ExercisePage(exerciseId: fixtures.benchId),
-    dataReady: () => tester.any(find.textContaining('Last time')),
+    // Last session loaded: its values sit small under the logged ones.
+    dataReady: () => tester.any(find.text('82.5')),
   );
   await guarded('Exercise page (keypad)', () async {
     unawaited(
@@ -313,7 +314,7 @@ Future<void> captureScreensAt(
     );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 350));
-    await settleForData(() => tester.any(find.textContaining('Last time')));
+    await settleForData(() => tester.any(find.text('82.5')));
     await tester.tap(
       find
           .byWidgetPredicate(
@@ -330,6 +331,36 @@ Future<void> captureScreensAt(
     } finally {
       FocusManager.instance.primaryFocus?.unfocus();
       await settle();
+      navigator.pop();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 350));
+      await settle();
+    }
+  });
+  await guarded('Exercise page (errors)', () async {
+    unawaited(
+      pushTo<void>(
+        navigator.context,
+        ExercisePage(exerciseId: fixtures.benchId),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+    await settleForData(() => tester.any(find.text('82.5')));
+    // The open row (set 2, after the logged warm-up and set 1): a weight
+    // and a rep count out of range.
+    Finder field(String label) => find
+        .byWidgetPredicate(
+          (w) => w is TextField && w.focusNode?.debugLabel == label,
+        )
+        .at(2);
+    await tester.enterText(field('set weight'), '20000');
+    await tester.enterText(field('set reps'), '0.05');
+    FocusManager.instance.primaryFocus?.unfocus();
+    await settle();
+    try {
+      await recorder.capture('Exercise page (errors)');
+    } finally {
       navigator.pop();
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 350));
@@ -404,7 +435,13 @@ Future<void> captureScreensAt(
   );
   await openAndClose(
     'Gym picker sheet',
-    () => promptGym(pageContext, fixtures.allGyms),
+    () => showGymPicker(
+      pageContext,
+      fixtures.allGyms,
+      currentId: fixtures.allGyms.first.id,
+      oneWorkoutOnly: true,
+    ),
+    root: true,
   );
   await openAndClose(
     'Settings choice sheet',

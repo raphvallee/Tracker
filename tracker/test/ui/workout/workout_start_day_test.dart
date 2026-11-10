@@ -21,7 +21,7 @@ void main() {
   setUpAll(initIsarCore);
   setUp(() => HydratedBloc.storage = InMemoryStorage());
 
-  testWidgets('the day due is up next; a tap starts a day, a hold previews', (
+  testWidgets('the day due is up next at home; a tap previews a day', (
     tester,
   ) async {
     useTallWindow(tester);
@@ -100,20 +100,20 @@ void main() {
     expect(find.text('Up next in PPL'), findsOneWidget);
     expect(find.text('Barbell Row'), findsOneWidget);
     expect(find.text('1 exercise, 1 set. Not done yet.'), findsOneWidget);
-    expect(find.text('Iron Temple'), findsOneWidget, reason: 'primary gym');
+    expect(find.text('1 × 10'), findsOneWidget, reason: 'the plan');
+    expect(find.text('Iron Temple'), findsOneWidget, reason: 'home gym');
     expect(find.textContaining('last done yesterday'), findsOneWidget);
-    expect(
-      find.text('Tap a day to start it. Hold it to preview.'),
-      findsOneWidget,
-    );
 
-    // Holding a day previews it; Start in the sheet starts it.
-    await tester.longPress(find.text('Push'));
+    // Tapping a day previews it; Start in the sheet starts it on the
+    // exercise list.
+    await tester.tap(find.text('Push'));
     await pumpUntil(tester, find.text('Start Push'));
     expect(find.text('3 sets of 8-12 reps'), findsOneWidget);
     expect(find.text('Edit in Splits'), findsOneWidget);
+    // Let the sheet finish sliding up before tapping inside it.
+    await tester.pump(const Duration(milliseconds: 500));
     await tester.tap(find.text('Start Push'));
-    await pumpUntil(tester, find.text('Finish'));
+    await pumpUntil(tester, find.text('Continue Bench Press'));
     final started = app.workout.state;
     expect(started.planTitle, 'Push');
     expect(started.splitTitle, 'PPL');
@@ -125,14 +125,20 @@ void main() {
     await app.workout.discardWorkout();
     await pumpUntil(tester, find.text('Start Pull'));
 
-    // Pick another gym for next time, then tap a day: it starts at once.
-    app.workout.rememberGym(home);
+    // Pick another gym for the next workout, then start a day with its
+    // play button: it starts at once, there.
+    app.workout.pickNextGym(home);
     await pumpUntil(tester, find.text('Home'));
-    await tester.tap(find.text('Legs'));
+    await tester.tap(labelled('Start Legs'));
     await pumpUntil(tester, find.text('Finish'));
     expect(app.workout.state.planTitle, 'Legs');
     expect(app.workout.state.splitDayIndex, 2);
     expect(app.workout.state.gymName, 'Home');
     expect(find.text('Add an exercise to start logging sets.'), findsOneWidget);
+
+    // The pick lasted one workout: the next one is back at home.
+    await app.workout.discardWorkout();
+    await pumpUntil(tester, find.text('Start Pull'));
+    expect(find.text('Iron Temple'), findsOneWidget);
   });
 }

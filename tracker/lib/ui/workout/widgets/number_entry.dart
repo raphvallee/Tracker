@@ -71,12 +71,16 @@ class NumberKeypad extends StatelessWidget {
     required this.onKey,
     required this.logLabel,
     required this.onLog,
+    this.logTrailing,
     this.allowSign = true,
   });
 
   final String caption;
   final void Function(KeypadKey key, String digit) onKey;
   final String logLabel;
+
+  /// The rating the set logs with, beside [logLabel].
+  final String? logTrailing;
   final VoidCallback? onLog;
   final bool allowSign;
 
@@ -275,6 +279,7 @@ class NumberKeypad extends StatelessWidget {
                   large: true,
                   prefix: FLucideIcons.check,
                   label: logLabel,
+                  trailing: logTrailing,
                   onPress: onLog,
                 ),
               ],
@@ -295,11 +300,15 @@ class KeyboardToolbar extends StatelessWidget {
     required this.onNext,
     required this.logLabel,
     required this.onLog,
+    this.logTrailing,
   });
 
   final VoidCallback? onSign;
   final VoidCallback onNext;
   final String logLabel;
+
+  /// The rating the set logs with, beside [logLabel].
+  final String? logTrailing;
   final VoidCallback? onLog;
 
   @override
@@ -335,6 +344,7 @@ class KeyboardToolbar extends StatelessWidget {
             child: AccentButton(
               prefix: FLucideIcons.check,
               label: logLabel,
+              trailing: logTrailing,
               onPress: onLog,
             ),
           ),

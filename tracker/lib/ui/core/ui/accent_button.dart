@@ -11,6 +11,7 @@ class AccentButton extends StatelessWidget {
     required this.onPress,
     this.prefix,
     this.suffix,
+    this.trailing,
     this.large = false,
   });
 
@@ -18,6 +19,10 @@ class AccentButton extends StatelessWidget {
   final VoidCallback? onPress;
   final IconData? prefix;
   final IconData? suffix;
+
+  /// A side note at the button's end, quieter than [label] and split off by
+  /// a hairline: the rating a set is logged with.
+  final String? trailing;
 
   /// 52px tall instead of 44px, for the one main action of a screen.
   final bool large;
@@ -35,6 +40,27 @@ class AccentButton extends StatelessWidget {
       fontWeight: FontWeight.w600,
       height: 1.2,
     );
+    final main = Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: <Widget>[
+        if (prefix != null) ...[
+          Icon(prefix, size: 18, color: foreground),
+          const SizedBox(width: 8),
+        ],
+        Flexible(
+          child: Text(
+            label,
+            style: text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        if (suffix != null) ...[
+          const SizedBox(width: 8),
+          Icon(suffix, size: 18, color: foreground),
+        ],
+      ],
+    );
     return FTappable(
       onPress: onPress,
       builder: (context, states, child) => AnimatedOpacity(
@@ -44,32 +70,38 @@ class AccentButton extends StatelessWidget {
       ),
       child: Container(
         height: large ? 52 : 44,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
+        padding: EdgeInsets.only(left: 16, right: trailing == null ? 16 : 0),
         decoration: BoxDecoration(
           color: enabled ? accents.live : colors.muted,
           borderRadius: BorderRadius.circular(8),
         ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            if (prefix != null) ...[
-              Icon(prefix, size: 18, color: foreground),
-              const SizedBox(width: 8),
-            ],
-            Flexible(
-              child: Text(
-                label,
-                style: text,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+        child: trailing == null
+            ? main
+            : Row(
+                children: <Widget>[
+                  Expanded(child: main),
+                  Container(
+                    alignment: Alignment.center,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(
+                      border: Border(
+                        left: BorderSide(
+                          color: foreground.withValues(alpha: 0.22),
+                        ),
+                      ),
+                    ),
+                    child: Text(
+                      trailing!,
+                      maxLines: 1,
+                      style: context.theme.typography.body.xs.copyWith(
+                        color: foreground.withValues(alpha: 0.78),
+                        fontWeight: FontWeight.w600,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ),
-            if (suffix != null) ...[
-              const SizedBox(width: 8),
-              Icon(suffix, size: 18, color: foreground),
-            ],
-          ],
-        ),
       ),
     );
   }

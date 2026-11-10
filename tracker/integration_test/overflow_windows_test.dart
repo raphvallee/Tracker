@@ -271,7 +271,13 @@ void main() {
       );
       await openAndClose(
         'Gym picker sheet',
-        () => promptGym(pageContext, fixtures.allGyms),
+        () => showGymPicker(
+          pageContext,
+          fixtures.allGyms,
+          currentId: fixtures.allGyms.first.id,
+          oneWorkoutOnly: true,
+        ),
+        root: true,
       );
 
       _mark('End-workout dialog @ $label');

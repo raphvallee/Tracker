@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
+import 'package:tracker/domain/models/rep_limits.dart';
 import 'package:tracker/domain/models/weight_unit.dart';
 import 'package:tracker/ui/core/ui/weight_format.dart';
 import 'package:tracker/ui/settings/view_models/settings_cubit.dart';
@@ -61,6 +62,52 @@ Future<bool> confirmWeightEntry(BuildContext context, double displayed) async {
   settings?.confirmHeavyWeight();
   if (choice.dontShowAgain) settings?.setShowHeavyWeightWarning(false);
   return true;
+}
+
+/// Above [highRepsThreshold] reps, asks to confirm the count: a slip of the
+/// thumb (250 for 25) is far likelier than the set. True to log it.
+Future<bool> confirmRepsEntry(BuildContext context, double reps) async {
+  if (reps <= highRepsThreshold) return true;
+  final confirmed = await showFDialog<bool>(
+    context: context,
+    builder: (_, _, _) => FDialog(
+      builder: (dialogContext, style) => Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text("That's a lot of reps", style: style.titleTextStyle),
+            const SizedBox(height: 8),
+            Text(
+              '${formatDecimal(reps)} reps is above '
+              '${formatDecimal(highRepsThreshold)}. Check the count before '
+              'logging it.',
+              style: style.bodyTextStyle,
+            ),
+            const SizedBox(height: 24),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              alignment: WrapAlignment.end,
+              children: [
+                FButton(
+                  variant: .outline,
+                  onPress: () => Navigator.pop(dialogContext, false),
+                  child: const Text('Go back'),
+                ),
+                FButton(
+                  onPress: () => Navigator.pop(dialogContext, true),
+                  child: const Text('Use these reps'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+  return confirmed ?? false;
 }
 
 class _HeavyWeightDialog extends StatefulWidget {
