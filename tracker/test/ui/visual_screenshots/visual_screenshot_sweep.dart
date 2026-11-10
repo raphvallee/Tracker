@@ -17,6 +17,7 @@ import 'package:tracker/domain/models/effort_scale.dart';
 import 'package:tracker/domain/models/exercise.dart';
 import 'package:tracker/domain/models/graph_config.dart';
 import 'package:tracker/domain/models/gym.dart';
+import 'package:tracker/domain/models/number_entry.dart';
 import 'package:tracker/domain/models/split_draft.dart';
 import 'package:tracker/domain/models/workout_session.dart';
 import 'package:tracker/domain/models/workout_set.dart';
@@ -33,8 +34,10 @@ import 'package:tracker/ui/history/widgets/session_detail_page.dart';
 import 'package:tracker/ui/history/widgets/session_edit_page.dart';
 import 'package:tracker/ui/settings/view_models/settings_cubit.dart';
 import 'package:tracker/ui/settings/widgets/gyms_page.dart';
-import 'package:tracker/ui/settings/widgets/rep_defaults_dialogs.dart';
+import 'package:tracker/ui/settings/widgets/settings_list.dart';
 import 'package:tracker/ui/settings/widgets/settings_page.dart';
+import 'package:tracker/ui/settings/widgets/splits_settings_page.dart';
+import 'package:tracker/ui/settings/widgets/workout_settings_page.dart';
 import 'package:tracker/ui/splits/view_models/split_drafts_cubit.dart';
 import 'package:tracker/ui/splits/widgets/new_split_sheet.dart';
 import 'package:tracker/ui/splits/widgets/review_changes_sheet.dart';
@@ -263,7 +266,13 @@ Future<void> captureScreensAt(
     await settle();
   });
 
-  await visit('Settings page', const SettingsPage());
+  await visit(
+    'Settings page',
+    const SettingsPage(),
+    dataReady: () => tester.any(find.textContaining('Iron Temple')),
+  );
+  await visit('Workout settings page', const WorkoutSettingsPage());
+  await visit('Splits settings page', const SplitsSettingsPage());
   await visit(
     'Gyms page',
     const GymsPage(),
@@ -372,30 +381,54 @@ Future<void> captureScreensAt(
     ),
   );
   await openAndClose(
-    'Edit gym dialog',
-    () => showFDialog<void>(
-      context: pageContext,
-      builder: (_, _, _) => EditGymDialog(
-        title: 'Edit Gym',
-        initial: Gym(
-          name: 'Very Long Gym Name - Westfield Century City',
-          description: 'Busy hours',
-          order: 1,
-        ),
+    'Edit gym sheet',
+    () => editGymSheet(
+      pageContext,
+      title: 'Edit Gym',
+      initial: Gym(
+        name: 'Very Long Gym Name - Westfield Century City',
+        description: 'Busy hours',
+        order: 1,
       ),
     ),
+    root: true,
+  );
+  await openAndClose(
+    'Split details sheet',
+    () => editSplitDetails(
+      pageContext,
+      title: 'New split',
+      confirmLabel: 'Create',
+    ),
+    root: true,
   );
   await openAndClose(
     'Gym picker sheet',
     () => promptGym(pageContext, fixtures.allGyms),
   );
   await openAndClose(
-    'Default reps dialog',
-    () => editDefaultRepsDialog(pageContext, initial: 10),
+    'Settings choice sheet',
+    () => showChoiceSheet<NumberEntry>(
+      pageContext,
+      title: 'Number entry',
+      description: 'What opens when you tap a weight or reps',
+      options: numberEntryOptions,
+      value: NumberEntry.keypad,
+      note: 'Also used for planned sets in Splits.',
+    ),
+    root: true,
   );
   await openAndClose(
-    'Default rep range dialog',
-    () => editDefaultRepRangeDialog(pageContext, min: 8, max: 12),
+    'Rep target sheet',
+    () => showSetTargetSheet(
+      pageContext,
+      title: 'Rep target',
+      subtitle: 'For exercises you add to a split day',
+      sets: const [SetTarget(8, 12)],
+      index: 0,
+      allowWarmup: false,
+    ),
+    root: true,
   );
   await openAndClose(
     'Day preview sheet',

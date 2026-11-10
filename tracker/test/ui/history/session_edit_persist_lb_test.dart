@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:forui/forui.dart';
 import 'package:hydrated_bloc/hydrated_bloc.dart';
 import 'package:tracker/domain/models/weight_unit.dart';
+import 'package:tracker/ui/core/ui/edit_sheet.dart';
 
 import '../../../testing/fakes/in_memory_storage.dart';
 import '../../../testing/session_edit_helpers.dart';
@@ -44,7 +45,10 @@ void main() {
       await tester.tap(find.textContaining(' × 5'));
       await settleSessionFlow(tester);
       await tester.tap(
-        find.descendant(of: find.byType(FDialog), matching: find.text('Save')),
+        find.descendant(
+          of: find.byType(EditSheet),
+          matching: find.text('Save'),
+        ),
       );
       await settleSessionFlow(tester);
       await tester.tap(find.text('Save'));

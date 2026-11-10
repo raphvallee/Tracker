@@ -13,6 +13,7 @@ import 'package:tracker/domain/models/gym.dart';
 import 'package:tracker/domain/models/workout_session.dart';
 import 'package:tracker/domain/models/workout_set.dart';
 import 'package:tracker/main.dart';
+import 'package:tracker/ui/core/ui/edit_sheet.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
 import 'package:tracker/ui/settings/view_models/settings_cubit.dart';
 import 'package:tracker/ui/workout/view_models/workout_cubit.dart';
@@ -104,13 +105,13 @@ Future<void> main() async {
     await pause(2000);
 
     final fields = find.descendant(
-      of: find.byType(FDialog),
+      of: find.byType(EditSheet),
       matching: find.byType(EditableText),
     );
     await tester.enterText(fields.first, '90');
     await pause(500);
     await tester.tap(
-      find.descendant(of: find.byType(FDialog), matching: find.text('Save')),
+      find.descendant(of: find.byType(EditSheet), matching: find.text('Save')),
     );
     await tester.pumpAndSettle();
     await pause(1000);
@@ -120,12 +121,8 @@ Future<void> main() async {
       await tester.tap(dateRow);
       await tester.pumpAndSettle();
       await pause(2500);
-      await tester.tap(
-        find.descendant(
-          of: find.byType(FDialog),
-          matching: find.text('Cancel'),
-        ),
-      );
+      // Tapping outside the sheet closes it without saving.
+      await tester.tapAt(const Offset(10, 10));
       await tester.pumpAndSettle();
     }
 

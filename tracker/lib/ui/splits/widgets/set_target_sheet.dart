@@ -28,29 +28,39 @@ class SetTargetResult {
 
 /// Edits the planned set at [index] of an exercise's [sets]: fixed reps or
 /// a range, nudged with steppers or typed with the chosen number entry, and
-/// whether it is a warm-up.
+/// whether it is a warm-up ([allowWarmup] false hides that choice).
+/// [saveOnClose] keeps the edit when the sheet is swiped away or tapped
+/// outside, as long as it is a valid target; otherwise only Done keeps it.
 Future<SetTargetResult?> showSetTargetSheet(
   BuildContext context, {
   required String title,
   required String subtitle,
   required List<SetTarget> sets,
   required int index,
-}) {
+  bool allowWarmup = true,
+  bool saveOnClose = false,
+}) async {
   final settings = SettingsCubit.maybeOf(context)?.state ?? SettingsState();
-  return showFSheet<SetTargetResult>(
+  SetTargetResult? edited;
+  final result = await showFSheet<SetTargetResult>(
     context: context,
     side: .btt,
     useRootNavigator: true,
     mainAxisMaxRatio: 0.9,
-    builder: (sheetContext) => _SetTargetSheet(
-      title: title,
-      subtitle: subtitle,
-      sets: sets,
-      index: index,
-      entry: settings.numberEntry,
-      defaultRangeMax: settings.defaultRepRangeMax,
+    builder: builtOnce(
+      (_) => _SetTargetSheet(
+        title: title,
+        subtitle: subtitle,
+        sets: sets,
+        index: index,
+        allowWarmup: allowWarmup,
+        entry: settings.numberEntry,
+        defaultRangeMax: settings.defaultRepRangeMax,
+        onEdit: saveOnClose ? (target) => edited = target : null,
+      ),
     ),
   );
+  return result ?? edited;
 }
 
 enum _Bound { min, max }
@@ -61,16 +71,22 @@ class _SetTargetSheet extends StatefulWidget {
     required this.subtitle,
     required this.sets,
     required this.index,
+    required this.allowWarmup,
     required this.entry,
     required this.defaultRangeMax,
+    this.onEdit,
   });
 
   final String title;
   final String subtitle;
   final List<SetTarget> sets;
   final int index;
+  final bool allowWarmup;
   final NumberEntry entry;
   final int defaultRangeMax;
+
+  /// Told the target after every change; null while it is not valid.
+  final ValueChanged<SetTargetResult?>? onEdit;
 
   SetTarget get target => sets[index];
 
@@ -100,6 +116,12 @@ class _SetTargetSheetState extends State<_SetTargetSheet> {
     super.initState();
     _minFocus.addListener(_onFocus);
     _maxFocus.addListener(_onFocus);
+  }
+
+  @override
+  void setState(VoidCallback fn) {
+    super.setState(fn);
+    widget.onEdit?.call(_current);
   }
 
   @override
@@ -211,6 +233,18 @@ class _SetTargetSheetState extends State<_SetTargetSheet> {
     }
   }
 
+  /// The target as it stands, or null while the reps do not make one.
+  SetTargetResult? get _current {
+    final min = _valueOf(_Bound.min);
+    final max = _range ? _valueOf(_Bound.max) : null;
+    if (min == null || min < 1) return null;
+    if (_range && (max == null || max <= min)) return null;
+    return SetTargetResult(
+      SetTarget(min, max).withWarmup(_warmup),
+      applyToAll: _applyToAll && _sameType > 1,
+    );
+  }
+
   void _done() {
     final min = _valueOf(_Bound.min);
     final max = _range ? _valueOf(_Bound.max) : null;
@@ -288,37 +322,41 @@ class _SetTargetSheetState extends State<_SetTargetSheet> {
                 ),
               ),
             ),
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: FTappable(
-              onPress: () => setState(() => _warmup = !_warmup),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                child: Row(
-                  children: <Widget>[
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          Text('Warm-up set', style: theme.typography.body.sm),
-                          Text(
-                            'Not counted with the working sets',
-                            style: theme.typography.body.xs.copyWith(
-                              color: theme.colors.mutedForeground,
+          if (widget.allowWarmup)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: FTappable(
+                onPress: () => setState(() => _warmup = !_warmup),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  child: Row(
+                    children: <Widget>[
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            Text(
+                              'Warm-up set',
+                              style: theme.typography.body.sm,
                             ),
-                          ),
-                        ],
+                            Text(
+                              'Not counted with the working sets',
+                              style: theme.typography.body.xs.copyWith(
+                                color: theme.colors.mutedForeground,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                    FSwitch(
-                      value: _warmup,
-                      onChange: (value) => setState(() => _warmup = value),
-                    ),
-                  ],
+                      FSwitch(
+                        value: _warmup,
+                        onChange: (value) => setState(() => _warmup = value),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
           if (_sameType > 1)
             Padding(
               padding: const EdgeInsets.only(top: 2),

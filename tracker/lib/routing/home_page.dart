@@ -83,11 +83,14 @@ class _HomePageState extends State<HomePage> {
       child: TabVisibilityScope(
         index: index,
         isActive: isActive,
-        child: Navigator(
-          key: _navigatorKeys[index],
-          observers: [_popObservers[index]],
-          onGenerateRoute: (settings) =>
-              MaterialPageRoute(builder: (context) => child),
+        child: _HiddenTabKeyboard(
+          hidden: !isActive,
+          child: Navigator(
+            key: _navigatorKeys[index],
+            observers: [_popObservers[index]],
+            onGenerateRoute: (settings) =>
+                MaterialPageRoute(builder: (context) => child),
+          ),
         ),
       ),
     );
@@ -229,6 +232,31 @@ class _HomePageState extends State<HomePage> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Keeps the keyboard from a tab that is not shown: its pages see the screen
+/// as if the keyboard were down, so they do not rebuild on every frame of
+/// the keyboard sliding in over another tab.
+class _HiddenTabKeyboard extends StatelessWidget {
+  const _HiddenTabKeyboard({required this.hidden, required this.child});
+
+  final bool hidden;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final media = MediaQuery.of(context);
+    return MediaQuery(
+      data: hidden
+          ? media.copyWith(
+              viewInsets: EdgeInsets.zero,
+              // The keyboard also eats into the bottom padding.
+              padding: media.padding.copyWith(bottom: media.viewPadding.bottom),
+            )
+          : media,
+      child: child,
     );
   }
 }

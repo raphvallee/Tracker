@@ -50,3 +50,11 @@ class SheetSurface extends StatelessWidget {
     );
   }
 }
+
+/// [builder], called the first time only. The sheet calls its builder again
+/// on every frame of the keyboard animation; the same widget back keeps its
+/// fields from rebuilding with it.
+WidgetBuilder builtOnce(WidgetBuilder builder) {
+  Widget? built;
+  return (context) => built ??= builder(context);
+}

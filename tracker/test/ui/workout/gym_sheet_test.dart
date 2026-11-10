@@ -11,10 +11,10 @@ import '../../../testing/test_helpers.dart';
 void main() {
   const emptyError = 'Cannot be empty';
 
-  Future<void> openNewGymDialog(WidgetTester tester) async {
+  Future<void> openNewGymSheet(WidgetTester tester) async {
     await pumpApp(tester);
     unawaited(
-      editGymDialog(
+      editGymSheet(
         tester.element(find.byType(Navigator).first),
         title: 'New Gym',
         initial: Gym(name: ''),
@@ -26,7 +26,7 @@ void main() {
   testWidgets('the name error shows only after Save and typing clears it', (
     tester,
   ) async {
-    await openNewGymDialog(tester);
+    await openNewGymSheet(tester);
     expect(find.text('New Gym'), findsOneWidget);
     expect(find.text(emptyError), findsNothing);
 

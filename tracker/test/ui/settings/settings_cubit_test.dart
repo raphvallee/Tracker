@@ -3,6 +3,8 @@ import 'package:hydrated_bloc/hydrated_bloc.dart';
 import 'package:tracker/domain/models/effort_scale.dart';
 import 'package:tracker/domain/models/graph_config.dart';
 import 'package:tracker/domain/models/number_entry.dart';
+import 'package:tracker/domain/models/rep_mode.dart';
+import 'package:tracker/domain/models/split_draft.dart';
 import 'package:tracker/domain/models/weight_unit.dart';
 import 'package:tracker/ui/settings/view_models/settings_cubit.dart';
 
@@ -319,6 +321,38 @@ void main() {
         ..forgetSplit(2);
       expect(cubit.state.currentSplitId, 3);
       expect(cubit.state.splitsUsedAt, isEmpty);
+    });
+  });
+
+  group('default set target', () {
+    setUp(() => HydratedBloc.storage = InMemoryStorage());
+
+    test('a range or fixed reps each keep the other kind', () {
+      final cubit = SettingsCubit();
+      addTearDown(cubit.close);
+
+      cubit.setDefaultSetTarget(const SetTarget(6));
+      expect(cubit.state.defaultRepMode, RepMode.fixed);
+      expect(cubit.state.defaultReps, 6);
+      expect(cubit.state.defaultRepRangeMin, 8, reason: 'range kept');
+      expect(cubit.state.defaultRepRangeMax, 12, reason: 'range kept');
+
+      cubit.setDefaultSetTarget(const SetTarget(5, 7));
+      expect(cubit.state.defaultRepMode, RepMode.range);
+      expect(cubit.state.defaultRepRangeMin, 5);
+      expect(cubit.state.defaultRepRangeMax, 7);
+      expect(cubit.state.defaultReps, 6, reason: 'fixed reps kept');
+    });
+
+    test('ignores targets below one rep or with the max under the min', () {
+      final cubit = SettingsCubit();
+      addTearDown(cubit.close);
+      final before = cubit.state;
+
+      cubit
+        ..setDefaultSetTarget(const SetTarget(0))
+        ..setDefaultSetTarget(const SetTarget(9, 4));
+      expect(cubit.state, before);
     });
   });
 }

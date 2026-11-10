@@ -110,7 +110,7 @@ void main() {
 
       await tester.tap(find.text('Settings'));
       await tester.pumpAndSettle();
-      expect(find.text('Units'), findsOneWidget);
+      expect(find.text('Weight unit'), findsOneWidget);
       expect(find.byIcon(FLucideIcons.chevronLeft), findsOneWidget);
 
       tester.platformDispatcher.platformBrightnessTestValue = Brightness.dark;
@@ -124,7 +124,7 @@ void main() {
 
       await tester.tap(find.byIcon(FLucideIcons.chevronLeft));
       await tester.pumpAndSettle();
-      expect(find.text('Units'), findsNothing);
+      expect(find.text('Weight unit'), findsNothing);
 
       expect(find.byIcon(FLucideIcons.chevronLeft), findsNothing);
       expect(

@@ -13,13 +13,14 @@ import 'package:tracker/data/repositories/tracker_repository.dart';
 import 'package:tracker/data/services/seed.dart';
 import 'package:tracker/domain/models/exercise.dart';
 import 'package:tracker/domain/models/gym.dart';
+import 'package:tracker/domain/models/number_entry.dart';
 import 'package:tracker/domain/models/workout_session.dart';
 import 'package:tracker/domain/models/workout_split.dart';
 import 'package:tracker/main.dart';
 import 'package:tracker/ui/core/ui/custom_route.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
 import 'package:tracker/ui/settings/view_models/settings_cubit.dart';
-import 'package:tracker/ui/settings/widgets/settings_page.dart';
+import 'package:tracker/ui/settings/widgets/splits_settings_page.dart';
 import 'package:tracker/ui/workout/view_models/workout_cubit.dart';
 
 import '../../../testing/fakes/in_memory_storage.dart';
@@ -161,63 +162,36 @@ Future<void> addGraphSheetScenario(
   await recorder.capture('add-graph sheet, scrolled to Save');
 }
 
-Future<void> settingsRepRangeScenario(
+Future<void> settingsRepTargetScenario(
   WidgetTester tester,
   ScreenshotRecorder recorder,
 ) async {
   final navigator = tester.state<NavigatorState>(find.byType(Navigator).first);
-  unawaited(pushTo<void>(navigator.context, const SettingsPage()));
+  // The phone keyboard entry types into real fields; the keypad never
+  // raises the system keyboard.
+  navigator.context.read<SettingsCubit>().setNumberEntry(
+    NumberEntry.phoneKeyboard,
+  );
+  unawaited(pushTo<void>(navigator.context, const SplitsSettingsPage()));
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 350));
   await tester.pumpAndSettle();
-  // The settings list builds lazily: scroll the row into existence first.
-  await tester.scrollUntilVisible(
-    find.text('Default rep range'),
-    200,
-    scrollable: find
-        .descendant(
-          of: find.byType(SettingsPage),
-          matching: find.byType(Scrollable),
-        )
-        .last,
-  );
-  await tester.pumpAndSettle();
-  await tester.tap(find.text('Default rep range'));
+  await tester.tap(find.text('Rep target'));
   await tester.pumpAndSettle();
 
-  final minField = fieldWithLabel('Min');
-  final maxField = fieldWithLabel('Max');
-  expect(minField, findsOneWidget);
-  expect(maxField, findsOneWidget);
-
-  double gap() =>
-      tester.getRect(maxField).left - tester.getRect(minField).right;
-  expect(
-    gap(),
-    closeTo(8, 0.5),
-    reason: 'the Min/Max inputs sit 8px apart before the keyboard opens',
-  );
+  final maxField = find.byType(TextField).last;
+  expect(find.byType(TextField), findsNWidgets(2), reason: 'min and max');
 
   await _openKeyboard(tester);
-  await tester.ensureVisible(maxField);
-  // ensureVisible jumps the scroll offset synchronously but the render tree
-  // only relayouts on the next frame; without this pump the tap evaluates
-  // stale positions and misses.
-  await tester.pump();
   await tester.tap(maxField);
   await tester.pumpAndSettle();
-  await recorder.capture('settings, rep-range Max focused, keyboard up');
+  await recorder.capture('settings, rep target max focused, keyboard up');
 
   final keyboardTop = _keyboardTop(tester);
   expect(
     tester.getRect(maxField).bottom,
     lessThanOrEqualTo(keyboardTop),
-    reason: 'the focused Max input must be fully visible above the keyboard',
-  );
-  expect(
-    gap(),
-    closeTo(8, 0.5),
-    reason: 'focusing Max must not change the 8px gap between the inputs',
+    reason: 'the focused max must be fully visible above the keyboard',
   );
 }
 
