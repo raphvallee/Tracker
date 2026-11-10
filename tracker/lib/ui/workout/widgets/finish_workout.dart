@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:forui/forui.dart';
+import 'package:tracker/ui/core/ui/relative_dates.dart';
 import 'package:tracker/ui/core/ui/accent_button.dart';
 import 'package:tracker/ui/core/ui/app_dialog.dart';
 import 'package:tracker/ui/core/ui/sheet_surface.dart';
@@ -66,15 +67,6 @@ Future<bool> confirmDiscardWorkout(BuildContext context) {
   );
 }
 
-/// "12 min", "1 h 5 min".
-String _workoutLength(Duration elapsed) {
-  final minutes = elapsed.isNegative ? 0 : elapsed.inMinutes;
-  if (minutes < 1) return 'under a minute';
-  if (minutes < 60) return '$minutes min';
-  final rest = minutes % 60;
-  return rest == 0 ? '${minutes ~/ 60} h' : '${minutes ~/ 60} h $rest min';
-}
-
 class _FinishSheet extends StatelessWidget {
   const _FinishSheet();
 
@@ -87,7 +79,7 @@ class _FinishSheet extends StatelessWidget {
         final entries = workoutEntries(state);
         final progress = plannedProgress(entries);
         final left = progress.total - progress.done;
-        final length = _workoutLength(
+        final length = lengthLabel(
           DateTime.now().difference(state.startTime ?? DateTime.now()),
         );
         final open = [

@@ -35,6 +35,8 @@ import 'effort_sheet.dart';
 import 'elapsed_clock.dart';
 import 'finish_workout.dart';
 import 'number_entry.dart';
+import 'plan_bar.dart';
+import 'set_comparison.dart';
 import 'workout_dock.dart';
 import 'workout_entries.dart';
 
@@ -985,7 +987,7 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
         ? NumberKeypad.height + 24
         : keyboard > 0
         ? keyboard + 80
-        : (widget.lastSetAt == null ? 96.0 : 128.0);
+        : 96.0;
 
     // The value fields are Material text fields; the page paints nothing.
     return Material(
@@ -1128,24 +1130,7 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
                 ],
               ),
               const SizedBox(height: 6),
-              Row(
-                children: <Widget>[
-                  for (final (i, entry) in entries.indexed) ...[
-                    if (i > 0) const SizedBox(width: 4),
-                    Expanded(
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(2),
-                        child: LinearProgressIndicator(
-                          minHeight: 4,
-                          value: entry.progress,
-                          color: accents.live,
-                          backgroundColor: theme.colors.muted,
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
+              PlanBar(segments: planSegments(entries, current: widget.index)),
             ],
           ),
         ),
@@ -1531,6 +1516,33 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
   }
 
   /// A label sitting on the open row's outline.
+  /// How the open row at [index] compares with the same set last time, from
+  /// what is typed or prefilled. Null when there is no such set, when it was
+  /// of the other kind (warm-up against working), or nothing differs.
+  SetComparison? _comparison(
+    int index,
+    SetGhost ghost, {
+    required bool warmup,
+  }) {
+    final sets = widget.previous?.sets;
+    if (sets == null || index >= sets.length) return null;
+    final last = sets[index];
+    if (last.isWarmup != warmup) return null;
+    final row = _rows[index];
+    final weight =
+        parseDecimal(row.weight.text, allowNegative: true) ??
+        (ghost.weight == null ? null : displayWeightOf(context, ghost.weight!));
+    final reps = parseDecimal(row.reps.text) ?? ghost.reps;
+    if (weight == null || reps == null) return null;
+    return compareWithLast(
+      weight: weight,
+      reps: reps,
+      lastWeight: displayWeightOf(context, last.weight),
+      lastReps: last.reps,
+      unit: weightUnitOf(context).symbol,
+    );
+  }
+
   Widget _legend(BuildContext context, Widget child) => Container(
     height: 16,
     color: context.theme.colors.background,
@@ -1568,6 +1580,8 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
       final last = _lastValue(index, kind);
       return last == null ? fallback : 'last $last';
     }
+
+    final comparison = _comparison(index, ghost, warmup: warmup);
 
     final values = steppers
         ? Row(
@@ -1641,9 +1655,10 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
     final opened = Stack(
       children: <Widget>[
         Container(
-          // The outline starts below the labels' midline.
-          margin: const EdgeInsets.only(top: 8),
-          padding: const EdgeInsets.fromLTRB(8, 16, 8, 8),
+          // The outline starts below the labels' midline, and ends above
+          // the comparison's.
+          margin: EdgeInsets.only(top: 8, bottom: comparison == null ? 0 : 8),
+          padding: EdgeInsets.fromLTRB(8, 16, 8, comparison == null ? 8 : 12),
           decoration: BoxDecoration(
             color: logged ? accents.liveSoft : theme.colors.background,
             borderRadius: BorderRadius.circular(14),
@@ -1693,6 +1708,30 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
                 maxLines: 1,
                 style: theme.typography.body.xs.copyWith(
                   color: theme.colors.mutedForeground,
+                ),
+              ),
+            ),
+          ),
+        if (comparison != null)
+          Positioned(
+            left: 12,
+            right: 12,
+            bottom: 0,
+            child: Center(
+              child: IntrinsicWidth(
+                child: _legend(
+                  context,
+                  Text(
+                    comparison.text,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.typography.body.xs.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: comparison.isAhead
+                          ? accents.live
+                          : theme.colors.mutedForeground,
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -1997,12 +2036,15 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
     List<String> badges,
     int? current,
   ) {
+    final lastSetAt = widget.lastSetAt;
     final Widget button;
     if (current != null && current >= sets.length) {
       final rating = _rows[current].rpe;
       button = AccentButton(
         large: true,
-        prefix: FLucideIcons.check,
+        // The rest clock takes its share of the row: the label keeps the
+        // room.
+        prefix: lastSetAt == null ? FLucideIcons.check : null,
         label: _logLabel(current, ghosts, badges),
         // The rating rides along on the side: weight and reps lead.
         trailing: rating == null ? null : effortLabel(widget.effort, rating),
@@ -2034,39 +2076,44 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
         onPress: () => Navigator.of(context).maybePop(),
       );
     }
-    final lastSetAt = widget.lastSetAt;
     return WorkoutDock(
-      above: lastSetAt == null ? null : _RestLine(since: lastSetAt),
+      leading: lastSetAt == null ? null : _RestClock(since: lastSetAt),
       child: button,
     );
   }
 }
 
-/// How long since the workout's last set: counts up, nothing to set.
-class _RestLine extends StatelessWidget {
-  const _RestLine({required this.since});
+/// How long since the workout's last set, beside the next step: counts up,
+/// nothing to set.
+class _RestClock extends StatelessWidget {
+  const _RestClock({required this.since});
 
   final DateTime since;
 
   @override
   Widget build(BuildContext context) {
     final theme = context.theme;
-    return SizedBox(
-      height: 30,
-      child: Row(
+    final accents = TrackerAccents.of(context);
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minWidth: 52),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Expanded(
-            child: Text(
-              'Resting',
-              style: theme.typography.body.xs.copyWith(
-                color: theme.colors.mutedForeground,
-              ),
-            ),
-          ),
           ElapsedClock(
             start: since,
-            style: theme.typography.body.xs.copyWith(
+            style: theme.typography.body.lg.copyWith(
+              color: accents.live,
               fontWeight: FontWeight.w700,
+              height: 1.15,
+            ),
+          ),
+          Text(
+            'Resting',
+            style: theme.typography.body.xs.copyWith(
+              fontSize: 11,
+              height: 1.2,
+              color: theme.colors.mutedForeground,
             ),
           ),
         ],

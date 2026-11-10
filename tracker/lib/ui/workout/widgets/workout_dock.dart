@@ -4,12 +4,14 @@ import 'package:tracker/ui/core/ui/max_width.dart';
 
 /// The bar docked at the bottom of every workout screen. It holds the one
 /// next step (Start, Log, Next, Finish), so that step is always in the same
-/// place. [above] is a quiet line over the button: the gym, the rest clock.
+/// place. [above] is a quiet line over the button (the gym); [leading]
+/// sits beside it (the rest clock), so it costs the page no height.
 class WorkoutDock extends StatelessWidget {
-  const WorkoutDock({super.key, required this.child, this.above});
+  const WorkoutDock({super.key, required this.child, this.above, this.leading});
 
   final Widget child;
   final Widget? above;
+  final Widget? leading;
 
   @override
   Widget build(BuildContext context) {
@@ -25,7 +27,19 @@ class WorkoutDock extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: <Widget>[?above, child],
+            children: <Widget>[
+              ?above,
+              if (leading case final leading?)
+                Row(
+                  children: <Widget>[
+                    leading,
+                    const SizedBox(width: 12),
+                    Expanded(child: child),
+                  ],
+                )
+              else
+                child,
+            ],
           ),
         ),
       ),

@@ -658,47 +658,27 @@ void main() {
     });
   });
 
-  group('Restore buttons', () {
-    testWidgets('the last saved workout offers a restore button', (
+  group('Start view', () {
+    testWidgets('a workout that just ended is not offered back here', (
       tester,
     ) async {
       useTallWindow(tester);
       final cubit = await pumpApp(tester);
       await openWorkoutTab(tester);
-      expect(find.text('Restore last workout'), findsNothing);
 
       cubit.startWorkout();
       cubit.logSet(exerciseId: 1, exerciseName: 'Squat', weight: 100, reps: 5);
       await cubit.endWorkout();
-      await tester.pump();
-      expect(find.text('Restore last workout'), findsOneWidget);
-
-      await tester.tap(find.text('Restore last workout'));
       await tester.pumpAndSettle();
-      expect(cubit.state.isInProgress, isTrue);
-      expect(cubit.state.sets.single.weight, 100);
-      expect(find.text('Finish'), findsOneWidget);
+      expect(cubit.state.canRestoreSaved(), isTrue);
       expect(find.text('Restore last workout'), findsNothing);
-    });
-
-    testWidgets('the last discarded workout offers a restore button', (
-      tester,
-    ) async {
-      useTallWindow(tester);
-      final cubit = await pumpApp(tester);
-      await openWorkoutTab(tester);
 
       cubit.startWorkout();
       cubit.logSet(exerciseId: 1, exerciseName: 'Squat', weight: 100, reps: 5);
       await cubit.discardWorkout();
-      // pump (not pumpAndSettle): the restore window ticker runs every 30 s.
-      await tester.pump();
-      expect(find.text('Restore last workout'), findsOneWidget);
-
-      await tester.tap(find.text('Restore last workout'));
       await tester.pumpAndSettle();
-      expect(cubit.state.isInProgress, isTrue);
-      expect(cubit.state.sets.single.weight, 100);
+      expect(cubit.state.canRestoreDiscarded(), isTrue);
+      expect(find.text('Restore last workout'), findsNothing);
     });
 
     testWidgets('with no split the start view offers an empty workout', (
@@ -708,6 +688,8 @@ void main() {
       final cubit = await pumpApp(tester);
       await openWorkoutTab(tester);
       expect(find.text('Plan your split'), findsOneWidget);
+      // With no day to start, the dock is the only way in.
+      expect(find.text('Empty workout'), findsNothing);
       await tester.tap(find.text('Start empty workout'));
       await tester.pumpAndSettle();
       expect(cubit.state.isInProgress, isTrue);

@@ -89,6 +89,24 @@ void main() {
     expect(ghostForRow(index: 0).weight, isNull);
   });
 
+  test('topSet is the heaviest working set, more reps among equals', () {
+    expect(previous.topSet!.reps, 10, reason: '30 x 10 over 30 x 9');
+    final heavier = PreviousPerformance(
+      date: DateTime(2026, 3, 1),
+      sets: [
+        WorkoutSet(exerciseId: 1, weight: 60, reps: 5, type: SetType.warmup),
+        WorkoutSet(exerciseId: 1, weight: 40, reps: 12, order: 1),
+        WorkoutSet(exerciseId: 1, weight: 50, reps: 6, order: 2),
+      ],
+    );
+    expect(heavier.topSet!.weight, 50, reason: 'warm-ups do not count');
+    final warmupsOnly = PreviousPerformance(
+      date: DateTime(2026, 3, 1),
+      sets: [WorkoutSet(exerciseId: 1, weight: 20, type: SetType.warmup)],
+    );
+    expect(warmupsOnly.topSet, isNull);
+  });
+
   test('leadingWarmups counts only the warm-ups before the first working '
       'set', () {
     expect(previous.leadingWarmups, 1);

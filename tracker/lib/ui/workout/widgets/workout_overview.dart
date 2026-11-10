@@ -21,6 +21,7 @@ import 'exercise_page.dart';
 import 'exercise_picker_page.dart';
 import 'finish_workout.dart';
 import 'gym_picker.dart';
+import 'plan_bar.dart';
 import 'workout_dock.dart';
 import 'workout_entries.dart';
 
@@ -99,12 +100,18 @@ class WorkoutOverview extends StatelessWidget {
   Widget _nextStep(BuildContext context, _Overview overview) {
     final upNext = overview.upNext;
     if (upNext != null) {
-      return AccentButton(
-        large: true,
-        label: 'Continue ${upNext.exercise.name}',
-        onPress: () => pushTo<void>(
-          context,
-          ExercisePage(exerciseId: upNext.exercise.exerciseId),
+      final prefill = SettingsCubit.maybeOf(context)?.state.prefillSets ?? true;
+      // The set the page opens on rides on the side: "Set 3".
+      return _WithPrevious(
+        exerciseId: upNext.exercise.exerciseId,
+        builder: (context, previous) => AccentButton(
+          large: true,
+          label: 'Continue ${upNext.exercise.name}',
+          trailing: _nextSetName(upNext, prefill ? previous : null),
+          onPress: () => pushTo<void>(
+            context,
+            ExercisePage(exerciseId: upNext.exercise.exerciseId),
+          ),
         ),
       );
     }
@@ -230,13 +237,10 @@ class _Header extends StatelessWidget {
                     child: Row(
                       children: <Widget>[
                         Expanded(
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(2),
-                            child: LinearProgressIndicator(
-                              minHeight: 4,
-                              value: progress.done / progress.total,
-                              color: accents.live,
-                              backgroundColor: theme.colors.muted,
+                          child: PlanBar(
+                            segments: planSegments(
+                              overview.entries,
+                              current: overview.current,
                             ),
                           ),
                         ),
@@ -483,11 +487,23 @@ class _EntryTile extends StatelessWidget {
     } else if (isCurrent) {
       subtitle = _NextSet(entry: entry);
     } else {
-      subtitle = Text(
-        _upcomingDetail(entry),
-        style: muted,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
+      // What it asks for, and what it did last time: enough to go and load
+      // the bar before its turn.
+      subtitle = _WithPrevious(
+        exerciseId: entry.exercise.exerciseId,
+        builder: (context, previous) {
+          final top = entry.sets.isEmpty ? previous?.topSet : null;
+          final detail = _upcomingDetail(entry);
+          return Text(
+            top == null
+                ? detail
+                : '$detail, last ${formatWeight(context, top.weight)} × '
+                      '${formatReps(top.reps)}',
+            style: muted,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          );
+        },
       );
     }
     final Widget trailing = entry.planned > 0
@@ -626,17 +642,31 @@ class _DoneMark extends StatelessWidget {
   }
 }
 
-/// "Next set 30 kg × 10" from the prefill, else the next planned target.
-class _NextSet extends StatefulWidget {
-  const _NextSet({required this.entry});
-
-  final WorkoutEntry entry;
-
-  @override
-  State<_NextSet> createState() => _NextSetState();
+/// The row the exercise page opens [entry] on, named as its badge names it:
+/// "Set 3", or "Warm-up". Null without a plan to count against.
+String? _nextSetName(WorkoutEntry entry, PreviousPerformance? previous) {
+  if (entry.planned == 0) return null;
+  final index = entry.sets.length;
+  final lead = leadingWarmupRows(entry.exercise.sets, previous);
+  final planned = plannedForRow(index, entry.exercise.sets, lead: lead);
+  if (index < lead || (planned?.isWarmup ?? false)) return 'Warm-up';
+  return 'Set ${entry.workingLogged + 1}';
 }
 
-class _NextSetState extends State<_NextSet> {
+/// Builds with the sets [exerciseId] got in the last session that logged
+/// it: null until they load, and when no session did.
+class _WithPrevious extends StatefulWidget {
+  const _WithPrevious({required this.exerciseId, required this.builder});
+
+  final int exerciseId;
+  final Widget Function(BuildContext context, PreviousPerformance? previous)
+  builder;
+
+  @override
+  State<_WithPrevious> createState() => _WithPreviousState();
+}
+
+class _WithPreviousState extends State<_WithPrevious> {
   Future<PreviousPerformance?>? _previous;
   int? _loadedFor;
 
@@ -647,31 +677,42 @@ class _NextSetState extends State<_NextSet> {
   }
 
   @override
-  void didUpdateWidget(covariant _NextSet oldWidget) {
+  void didUpdateWidget(covariant _WithPrevious oldWidget) {
     super.didUpdateWidget(oldWidget);
     _load();
   }
 
   void _load() {
-    final id = widget.entry.exercise.exerciseId;
-    if (_loadedFor == id) return;
-    _loadedFor = id;
+    if (_loadedFor == widget.exerciseId) return;
+    _loadedFor = widget.exerciseId;
     _previous = RepositoryScope.maybeOf(context)?.sessions
-        .getPreviousPerformance(id);
+        .getPreviousPerformance(widget.exerciseId);
   }
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<PreviousPerformance?>(
+    future: _previous,
+    builder: (context, snapshot) => widget.builder(context, snapshot.data),
+  );
+}
+
+/// "Next set 30 kg × 10" from the prefill, else the next planned target.
+class _NextSet extends StatelessWidget {
+  const _NextSet({required this.entry});
+
+  final WorkoutEntry entry;
 
   @override
   Widget build(BuildContext context) {
     final theme = context.theme;
     final style = theme.typography.body.xs;
     final prefill = SettingsCubit.maybeOf(context)?.state.prefillSets ?? true;
-    return FutureBuilder<PreviousPerformance?>(
-      future: _previous,
-      builder: (context, snapshot) {
-        final entry = widget.entry;
+    return _WithPrevious(
+      exerciseId: entry.exercise.exerciseId,
+      builder: (context, loaded) {
         final index = entry.sets.length;
         final last = entry.sets.isEmpty ? null : entry.sets.last;
-        final previous = prefill ? snapshot.data : null;
+        final previous = prefill ? loaded : null;
         final lead = leadingWarmupRows(entry.exercise.sets, previous);
         final ghost = ghostForRow(
           index: index,
