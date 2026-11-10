@@ -158,13 +158,12 @@ class MyApp extends StatelessWidget {
       builder: (context, child) => GestureDetector(
         onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
         child: FTheme(
-          data: keyboardAwareFieldReveal(
-            Theme.brightnessOf(context) == Brightness.light
-                ? navLightTheme
-                : navDarkTheme,
-            MediaQuery.viewInsetsOf(context).bottom,
+          data: Theme.brightnessOf(context) == Brightness.light
+              ? navLightTheme
+              : navDarkTheme,
+          child: KeyboardReveal(
+            child: FToaster(child: FTooltipGroup(child: child!)),
           ),
-          child: FToaster(child: FTooltipGroup(child: child!)),
         ),
       ),
       themeMode: ThemeMode.system,

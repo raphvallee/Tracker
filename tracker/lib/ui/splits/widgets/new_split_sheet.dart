@@ -6,7 +6,7 @@ import 'package:tracker/data/repositories/tracker_repository.dart';
 import 'package:tracker/data/services/app_log.dart';
 import 'package:tracker/domain/models/workout_split.dart';
 import 'package:tracker/domain/models/workout_split_templates.dart';
-import 'package:tracker/ui/core/ui/app_dialog.dart';
+import 'package:tracker/ui/core/ui/edit_sheet.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
 import 'package:tracker/ui/core/ui/sheet_surface.dart';
 import 'package:tracker/utils/form_validators.dart';
@@ -118,7 +118,7 @@ Future<int> createSplit(
   );
 }
 
-/// A dialog for a split's name and description; null when cancelled.
+/// A sheet for a split's name and description; null when cancelled.
 Future<({String title, String description})?> editSplitDetails(
   BuildContext context, {
   required String title,
@@ -126,9 +126,9 @@ Future<({String title, String description})?> editSplitDetails(
   String name = '',
   String description = '',
 }) {
-  return showFDialog<({String title, String description})>(
-    context: context,
-    builder: (dialogContext, _, _) => _SplitDetailsDialog(
+  return showEditSheet<({String title, String description})>(
+    context,
+    builder: (_) => _SplitDetailsSheet(
       title: title,
       confirmLabel: confirmLabel,
       name: name,
@@ -137,8 +137,8 @@ Future<({String title, String description})?> editSplitDetails(
   );
 }
 
-class _SplitDetailsDialog extends StatefulWidget {
-  const _SplitDetailsDialog({
+class _SplitDetailsSheet extends StatefulWidget {
+  const _SplitDetailsSheet({
     required this.title,
     required this.confirmLabel,
     required this.name,
@@ -151,10 +151,10 @@ class _SplitDetailsDialog extends StatefulWidget {
   final String description;
 
   @override
-  State<_SplitDetailsDialog> createState() => _SplitDetailsDialogState();
+  State<_SplitDetailsSheet> createState() => _SplitDetailsSheetState();
 }
 
-class _SplitDetailsDialogState extends State<_SplitDetailsDialog> {
+class _SplitDetailsSheetState extends State<_SplitDetailsSheet> {
   late final _name = TextEditingController(text: widget.name);
   late final _description = TextEditingController(text: widget.description);
   String? _error;
@@ -178,18 +178,10 @@ class _SplitDetailsDialogState extends State<_SplitDetailsDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AppDialog(
+    return EditSheet(
       title: widget.title,
-      scrollable: true,
-      headerGap: 16,
-      actions: [
-        FButton(
-          variant: .outline,
-          onPress: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        FButton(onPress: _confirm, child: Text(widget.confirmLabel)),
-      ],
+      actionLabel: widget.confirmLabel,
+      onAction: _confirm,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,

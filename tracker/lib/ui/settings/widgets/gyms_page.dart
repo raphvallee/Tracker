@@ -47,7 +47,7 @@ class _GymsPageState extends State<GymsPage> {
     if (gyms.isNotEmpty) {
       nextOrder = gyms.map((g) => g.order).reduce((a, b) => a > b ? a : b) + 1;
     }
-    final created = await editGymDialog(
+    final created = await editGymSheet(
       context,
       title: 'New Gym',
       initial: Gym(name: '', order: nextOrder, isPrimary: gyms.isEmpty),
@@ -60,7 +60,7 @@ class _GymsPageState extends State<GymsPage> {
 
   Future<void> _editGym(Gym gym) async {
     final repo = RepositoryScope.maybeOf(context);
-    final edited = await editGymDialog(
+    final edited = await editGymSheet(
       context,
       title: 'Edit Gym',
       initial: gym,

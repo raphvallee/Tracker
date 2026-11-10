@@ -26,7 +26,6 @@ import 'package:tracker/routing/home_page.dart';
 import 'package:tracker/ui/core/themes/material_theme_bridge.dart';
 import 'package:tracker/ui/core/ui/custom_app_bar.dart';
 import 'package:tracker/ui/core/ui/custom_route.dart';
-import 'package:tracker/ui/core/ui/keyboard_inset.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
 import 'package:tracker/ui/feed/widgets/feed_page.dart';
 import 'package:tracker/ui/settings/view_models/settings_cubit.dart';
@@ -195,8 +194,8 @@ class _Open {
       'frames in 300ms median=${frames.isEmpty ? 0 : ([...frames]..sort())[frames.length ~/ 2]}';
 }
 
-/// MyApp without `keyboardAwareFieldReveal`: the FTheme never changes with
-/// the keyboard inset.
+/// MyApp as it was before `KeyboardReveal`, minus the per-inset FTheme copy
+/// it then made: the FTheme never changes with the keyboard inset.
 class _NoRevealApp extends StatelessWidget {
   const _NoRevealApp();
 
@@ -384,31 +383,7 @@ Future<void> main() async {
       'max=${(kbUi.last / 1000).toStringAsFixed(2)}ms',
     );
 
-    // T: the theme work one inset change triggers, outside any frame.
-    final theme = FTheme.neutral.light.touch;
-    final revealUs = <int>[];
-    final lerpUs = <int>[];
-    final eqUs = <int>[];
-    for (var i = 0; i < 200; i++) {
-      final sw = Stopwatch()..start();
-      final revealed = keyboardAwareFieldReveal(theme, 100.0 + i);
-      sw.stop();
-      revealUs.add(sw.elapsedMicroseconds);
-      final sw2 = Stopwatch()..start();
-      FThemeData.lerp(theme, revealed, 0.5);
-      sw2.stop();
-      lerpUs.add(sw2.elapsedMicroseconds);
-      final sw3 = Stopwatch()..start();
-      // ignore: unnecessary_statements
-      theme == revealed;
-      sw3.stop();
-      eqUs.add(sw3.elapsedMicroseconds);
-    }
     String med(List<int> v) => '${(([...v]..sort())[v.length ~/ 2])}us';
-    print(
-      'BENCH settings | THEME per inset change | keyboardAwareFieldReveal '
-      '${med(revealUs)} | FThemeData.lerp ${med(lerpUs)} | == ${med(eqUs)}',
-    );
 
     // S: one switch toggle (cubit emit; BlocBuilder rebuilds the whole page).
     final toggleUi = <int>[];

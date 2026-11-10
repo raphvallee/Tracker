@@ -4,9 +4,9 @@ import 'package:tracker/domain/models/gym.dart';
 import 'package:tracker/domain/models/weight_unit.dart';
 import 'package:tracker/domain/models/workout_session.dart';
 import 'package:tracker/domain/models/workout_set.dart';
-import 'package:tracker/ui/core/ui/app_dialog.dart';
 import 'package:tracker/ui/core/ui/custom_app_bar.dart';
 import 'package:tracker/ui/core/ui/decimal_input_formatter.dart';
+import 'package:tracker/ui/core/ui/edit_sheet.dart';
 import 'package:tracker/ui/core/ui/keyboard_inset.dart';
 import 'package:tracker/ui/core/ui/max_width.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
@@ -180,7 +180,7 @@ class _SessionEditPageState extends State<SessionEditPage> {
   }
 
   Future<void> _editSet(int index) async {
-    final updated = await _editSetDialog(context, set: _sets[index]);
+    final updated = await _editSetSheet(context, set: _sets[index]);
     if (!mounted || updated == null) return;
     setState(() => _sets[index] = updated);
   }
@@ -428,24 +428,11 @@ Future<DateTime?> _pickDateTime(
   String title,
 ) {
   var picked = initial;
-  return showFDialog<DateTime>(
-    context: context,
-    builder: (dialogContext, _, _) => AppDialog(
+  return showEditSheet<DateTime>(
+    context,
+    builder: (sheetContext) => EditSheet(
       title: title,
-      headerGap: 12,
-      actionsGap: 16,
-      scrollable: true,
-      actions: [
-        FButton(
-          variant: .outline,
-          onPress: () => Navigator.pop(dialogContext),
-          child: const Text('Cancel'),
-        ),
-        FButton(
-          onPress: () => Navigator.pop(dialogContext, picked),
-          child: const Text('Save'),
-        ),
-      ],
+      onAction: () => Navigator.pop(sheetContext, picked),
       child: SizedBox(
         height: 200,
         child: FDateTimePicker(
@@ -459,26 +446,26 @@ Future<DateTime?> _pickDateTime(
   );
 }
 
-Future<WorkoutSet?> _editSetDialog(
+Future<WorkoutSet?> _editSetSheet(
   BuildContext context, {
   required WorkoutSet set,
 }) {
-  return showFDialog<WorkoutSet>(
-    context: context,
-    builder: (dialogContext, _, _) => _EditSetDialog(initial: set),
+  return showEditSheet<WorkoutSet>(
+    context,
+    builder: (_) => _EditSetSheet(initial: set),
   );
 }
 
-class _EditSetDialog extends StatefulWidget {
-  const _EditSetDialog({required this.initial});
+class _EditSetSheet extends StatefulWidget {
+  const _EditSetSheet({required this.initial});
 
   final WorkoutSet initial;
 
   @override
-  State<_EditSetDialog> createState() => _EditSetDialogState();
+  State<_EditSetSheet> createState() => _EditSetSheetState();
 }
 
-class _EditSetDialogState extends State<_EditSetDialog> {
+class _EditSetSheetState extends State<_EditSetSheet> {
   late final TextEditingController _weight;
   late final TextEditingController _reps;
   late final String _prefilledWeight;
@@ -508,18 +495,9 @@ class _EditSetDialogState extends State<_EditSetDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AppDialog(
+    return EditSheet(
       title: 'Edit set',
-      headerGap: 16,
-      scrollable: true,
-      actions: [
-        FButton(
-          variant: .outline,
-          onPress: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        FButton(onPress: _save, child: const Text('Save')),
-      ],
+      onAction: _save,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,

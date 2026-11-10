@@ -5,6 +5,7 @@ import 'package:tracker/domain/models/effort_scale.dart';
 import 'package:tracker/domain/models/graph_config.dart';
 import 'package:tracker/domain/models/number_entry.dart';
 import 'package:tracker/domain/models/rep_mode.dart';
+import 'package:tracker/domain/models/split_draft.dart';
 import 'package:tracker/domain/models/weight_unit.dart';
 
 class SettingsState {
@@ -335,6 +336,25 @@ class SettingsCubit extends HydratedCubit<SettingsState> {
   void setDefaultRepRange({required int min, required int max}) {
     if (min < 1 || max < min) return;
     emit(state.copyWith(defaultRepRangeMin: min, defaultRepRangeMax: max));
+  }
+
+  /// Makes [target] what new planned sets start with: fixed reps or a
+  /// range. The other kind keeps its numbers for when it is picked again.
+  void setDefaultSetTarget(SetTarget target) {
+    final max = target.maxReps;
+    if (target.minReps < 1 || (max != null && max < target.minReps)) return;
+    emit(
+      max == null
+          ? state.copyWith(
+              defaultRepMode: RepMode.fixed,
+              defaultReps: target.minReps,
+            )
+          : state.copyWith(
+              defaultRepMode: RepMode.range,
+              defaultRepRangeMin: target.minReps,
+              defaultRepRangeMax: max,
+            ),
+    );
   }
 
   void setShowHeavyWeightWarning(bool value) =>

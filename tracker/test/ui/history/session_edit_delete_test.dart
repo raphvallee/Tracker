@@ -9,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:forui/forui.dart';
 import 'package:hydrated_bloc/hydrated_bloc.dart';
 import 'package:tracker/domain/models/workout_session.dart';
+import 'package:tracker/ui/core/ui/edit_sheet.dart';
 import 'package:tracker/ui/history/widgets/session_edit_page.dart';
 
 import '../../../testing/fakes/in_memory_storage.dart';
@@ -40,7 +41,7 @@ void main() {
       expect(tester.widget<EditableText>(title).controller.text, 'Push');
     });
 
-    testWidgets('editing a set through the dialog updates the draft row', (
+    testWidgets('editing a set through the sheet updates the draft row', (
       tester,
     ) async {
       await pumpAppPage(tester, SessionEditPage(session: pastSession()));
@@ -50,7 +51,7 @@ void main() {
       expect(find.text('Edit set'), findsOneWidget);
 
       final fields = find.descendant(
-        of: find.byType(FDialog),
+        of: find.byType(EditSheet),
         matching: find.byType(EditableText),
       );
       expect(fields, findsNWidgets(2));
@@ -60,7 +61,10 @@ void main() {
       await tester.enterText(fields.last, '3');
       await tester.tap(find.text('Warm-up'));
       await tester.tap(
-        find.descendant(of: find.byType(FDialog), matching: find.text('Save')),
+        find.descendant(
+          of: find.byType(EditSheet),
+          matching: find.text('Save'),
+        ),
       );
       await tester.pumpAndSettle();
 
@@ -126,12 +130,19 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    Finder dialogField(int index) => find
+    Finder sheetField(int index) => find
         .descendant(
-          of: find.byType(FDialog),
+          of: find.byType(EditSheet),
           matching: find.byType(EditableText),
         )
         .at(index);
+
+    Future<void> tapInSheet(WidgetTester tester, String label) async {
+      await tester.tap(
+        find.descendant(of: find.byType(EditSheet), matching: find.text(label)),
+      );
+      await tester.pumpAndSettle();
+    }
 
     Future<void> tapInDialog(WidgetTester tester, String label) async {
       await tester.tap(
@@ -144,8 +155,8 @@ void main() {
       tester,
     ) async {
       await openSetEditor(tester);
-      await tester.enterText(dialogField(0), '-20');
-      await tapInDialog(tester, 'Save');
+      await tester.enterText(sheetField(0), '-20');
+      await tapInSheet(tester, 'Save');
 
       expect(find.text('Assisted machine?'), findsOneWidget);
       await tapInDialog(tester, 'Yes, log it');
@@ -159,8 +170,8 @@ void main() {
       'a heavy weight asks, and the set keeps its value once confirmed',
       (tester) async {
         await openSetEditor(tester);
-        await tester.enterText(dialogField(0), '600');
-        await tapInDialog(tester, 'Save');
+        await tester.enterText(sheetField(0), '600');
+        await tapInSheet(tester, 'Save');
 
         expect(find.text("That's a lot of weight"), findsOneWidget);
         await tapInDialog(tester, 'Use this weight');
@@ -173,8 +184,8 @@ void main() {
       tester,
     ) async {
       await openSetEditor(tester);
-      await tester.enterText(dialogField(0), '10001');
-      await tapInDialog(tester, 'Save');
+      await tester.enterText(sheetField(0), '10001');
+      await tapInSheet(tester, 'Save');
 
       expect(find.text('Must be between -1000 and 10000'), findsOneWidget);
       expect(find.text('Edit set'), findsOneWidget);
@@ -183,9 +194,9 @@ void main() {
 
     testWidgets('weight and reps keep two decimal places', (tester) async {
       await openSetEditor(tester);
-      await tester.enterText(dialogField(0), '82.255');
-      await tester.enterText(dialogField(1), '3.555');
-      await tapInDialog(tester, 'Save');
+      await tester.enterText(sheetField(0), '82.255');
+      await tester.enterText(sheetField(1), '3.555');
+      await tapInSheet(tester, 'Save');
 
       expect(find.text('82.25 kg × 3.55'), findsOneWidget);
     });
@@ -194,8 +205,8 @@ void main() {
       tester,
     ) async {
       await openSetEditor(tester);
-      await tester.enterText(dialogField(1), '.5');
-      await tapInDialog(tester, 'Save');
+      await tester.enterText(sheetField(1), '.5');
+      await tapInSheet(tester, 'Save');
 
       expect(find.text('Must be at least 1'), findsOneWidget);
       expect(find.text('Edit set'), findsOneWidget);

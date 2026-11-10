@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
 import 'package:tracker/domain/models/gym.dart';
-import 'package:tracker/ui/core/ui/app_dialog.dart';
+import 'package:tracker/ui/core/ui/edit_sheet.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
 import 'package:tracker/utils/form_validators.dart';
 
@@ -93,7 +93,7 @@ Future<Gym?> promptAddGym(BuildContext context, List<Gym> gyms) async {
   if (gyms.isNotEmpty) {
     nextOrder = gyms.map((g) => g.order).reduce((a, b) => a > b ? a : b) + 1;
   }
-  final created = await editGymDialog(
+  final created = await editGymSheet(
     context,
     title: 'New Gym',
     initial: Gym(name: '', order: nextOrder, isPrimary: gyms.isEmpty),
@@ -123,8 +123,8 @@ String _fmtGym(double v) =>
 
 String fmtGym(double v) => _fmtGym(v);
 
-class EditGymDialog extends StatefulWidget {
-  const EditGymDialog({
+class EditGymSheet extends StatefulWidget {
+  const EditGymSheet({
     super.key,
     required this.title,
     required this.initial,
@@ -136,10 +136,10 @@ class EditGymDialog extends StatefulWidget {
   final Future<List<Gym>> Function()? getExistingGyms;
 
   @override
-  State<EditGymDialog> createState() => _EditGymDialogState();
+  State<EditGymSheet> createState() => _EditGymSheetState();
 }
 
-class _EditGymDialogState extends State<EditGymDialog> {
+class _EditGymSheetState extends State<EditGymSheet> {
   late final TextEditingController _name;
   late final TextEditingController _description;
   late final TextEditingController _multiplier;
@@ -169,62 +169,50 @@ class _EditGymDialogState extends State<EditGymDialog> {
     super.dispose();
   }
 
+  Future<void> _save() async {
+    final nameText = _name.text.trim();
+    final multiplierError = _gymMultiplierError(
+      _multiplier.text,
+      isPrimary: widget.initial.isPrimary,
+    );
+    final nameError = _gymNameError(nameText);
+    if (nameError != null || multiplierError != null) {
+      setState(() {
+        _nameError = nameError;
+        _multiplierError = multiplierError;
+      });
+      return;
+    }
+    final candidate = Gym(
+      name: nameText,
+      description: _description.text.trim(),
+      isPrimary: widget.initial.isPrimary,
+      order: widget.initial.order,
+      multiplier: widget.initial.isPrimary
+          ? 1.0
+          : double.tryParse(_multiplier.text.trim()) ?? 1.0,
+    )..id = widget.initial.id;
+
+    final existing = await widget.getExistingGyms?.call() ?? const <Gym>[];
+    if (existing.any(
+      (gym) => gym.id != widget.initial.id && sameGymName(gym, candidate),
+    )) {
+      if (mounted) {
+        showFToast(
+          context: context,
+          title: const Text('A gym with this name already exists'),
+        );
+      }
+      return;
+    }
+    if (mounted) Navigator.of(context).pop(candidate);
+  }
+
   @override
   Widget build(BuildContext context) {
-    return AppDialog(
+    return EditSheet(
       title: widget.title,
-      headerGap: 16,
-      scrollable: true,
-      actions: [
-        FButton(
-          variant: .outline,
-          onPress: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        FButton(
-          onPress: () async {
-            final nameText = _name.text.trim();
-            final multiplierError = _gymMultiplierError(
-              _multiplier.text,
-              isPrimary: widget.initial.isPrimary,
-            );
-            final nameError = _gymNameError(nameText);
-            if (nameError != null || multiplierError != null) {
-              setState(() {
-                _nameError = nameError;
-                _multiplierError = multiplierError;
-              });
-              return;
-            }
-            final candidate = Gym(
-              name: nameText,
-              description: _description.text.trim(),
-              isPrimary: widget.initial.isPrimary,
-              order: widget.initial.order,
-              multiplier: widget.initial.isPrimary
-                  ? 1.0
-                  : double.tryParse(_multiplier.text.trim()) ?? 1.0,
-            )..id = widget.initial.id;
-
-            final existing =
-                await widget.getExistingGyms?.call() ?? const <Gym>[];
-            if (existing.any(
-              (gym) =>
-                  gym.id != widget.initial.id && sameGymName(gym, candidate),
-            )) {
-              if (context.mounted) {
-                showFToast(
-                  context: context,
-                  title: const Text('A gym with this name already exists'),
-                );
-              }
-              return;
-            }
-            if (context.mounted) Navigator.of(context).pop(candidate);
-          },
-          child: const Text('Save'),
-        ),
-      ],
+      onAction: _save,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -271,15 +259,15 @@ class _EditGymDialogState extends State<EditGymDialog> {
   }
 }
 
-Future<Gym?> editGymDialog(
+Future<Gym?> editGymSheet(
   BuildContext context, {
   required String title,
   required Gym initial,
   Future<List<Gym>> Function()? getExistingGyms,
 }) {
-  return showFDialog<Gym>(
-    context: context,
-    builder: (context, _, _) => EditGymDialog(
+  return showEditSheet<Gym>(
+    context,
+    builder: (_) => EditGymSheet(
       title: title,
       initial: initial,
       getExistingGyms: getExistingGyms,

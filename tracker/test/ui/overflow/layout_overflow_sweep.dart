@@ -13,7 +13,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:forui/forui.dart';
 import 'package:hydrated_bloc/hydrated_bloc.dart';
 import 'package:isar_community/isar.dart';
 import 'package:tracker/data/repositories/tracker_repository.dart';
@@ -39,8 +38,9 @@ import 'package:tracker/ui/history/widgets/session_detail_page.dart';
 import 'package:tracker/ui/history/widgets/session_edit_page.dart';
 import 'package:tracker/ui/settings/view_models/settings_cubit.dart';
 import 'package:tracker/ui/settings/widgets/gyms_page.dart';
-import 'package:tracker/ui/settings/widgets/rep_defaults_dialogs.dart';
 import 'package:tracker/ui/settings/widgets/settings_page.dart';
+import 'package:tracker/ui/settings/widgets/splits_settings_page.dart';
+import 'package:tracker/ui/settings/widgets/workout_settings_page.dart';
 import 'package:tracker/ui/splits/view_models/split_drafts_cubit.dart';
 import 'package:tracker/ui/splits/widgets/split_day_editor_page.dart';
 import 'package:tracker/ui/splits/widgets/splits_page.dart';
@@ -157,6 +157,8 @@ Future<void> sweepSize(WidgetTester tester, String label, Size size) async {
   await visit('ExercisesPage', const ExercisesPage());
 
   await visit('SettingsPage', const SettingsPage());
+  await visit('WorkoutSettingsPage', const WorkoutSettingsPage());
+  await visit('SplitsSettingsPage', const SplitsSettingsPage());
   await visit('GymsPage', const GymsPage());
   await visit('ProgressionPage', const ProgressionPage());
   await visit('NewExercisePage', const NewExercisePage());
@@ -197,11 +199,15 @@ Future<void> sweepSize(WidgetTester tester, String label, Size size) async {
 
   final pageContext = tester.element(find.byType(FeedPage));
 
-  Future<void> openAndClose(String what, Future<void> Function() open) async {
+  Future<void> openAndClose(
+    String what,
+    Future<void> Function() open, {
+    bool root = false,
+  }) async {
     _mark('$what @ $label');
     unawaited(open());
     await settle();
-    Navigator.of(pageContext).pop();
+    Navigator.of(pageContext, rootNavigator: root).pop();
     await settle();
   }
 
@@ -214,30 +220,21 @@ Future<void> sweepSize(WidgetTester tester, String label, Size size) async {
     ),
   );
   await openAndClose(
-    'EditGymDialog',
-    () => showFDialog<void>(
-      context: pageContext,
-      builder: (_, _, _) => EditGymDialog(
-        title: 'Edit Gym',
-        initial: Gym(
-          name: 'Very Long Gym Name - Westfield Century City',
-          description: 'Busy hours',
-          order: 1,
-        ),
+    'Edit gym sheet',
+    () => editGymSheet(
+      pageContext,
+      title: 'Edit Gym',
+      initial: Gym(
+        name: 'Very Long Gym Name - Westfield Century City',
+        description: 'Busy hours',
+        order: 1,
       ),
     ),
+    root: true,
   );
   await openAndClose(
     'Gym picker sheet',
     () => promptGym(pageContext, sweepFixtures.allGyms),
-  );
-  await openAndClose(
-    'DefaultRepsDialog',
-    () => editDefaultRepsDialog(pageContext, initial: 10),
-  );
-  await openAndClose(
-    'DefaultRepRangeDialog',
-    () => editDefaultRepRangeDialog(pageContext, min: 8, max: 12),
   );
 
   _mark('End-workout dialog @ $label');
