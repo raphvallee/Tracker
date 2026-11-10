@@ -57,17 +57,22 @@ void main() {
   });
 
   group('requiredReps', () {
-    test('accepts any decimal above zero, including fractions below one', () {
+    const message = 'Must be between 0.1 and 2000';
+
+    test('accepts 0.1 to 2000, partial reps included', () {
       expect(requiredReps('5'), isNull);
-      expect(requiredReps('0.25'), isNull);
+      expect(requiredReps('0.1'), isNull);
       expect(requiredReps('.5'), isNull);
+      expect(requiredReps('2000'), isNull);
     });
 
-    test('rejects zero, negatives and non-numeric input', () {
-      expect(requiredReps('0'), 'Must be greater than 0');
-      expect(requiredReps('-1'), 'Must be greater than 0');
-      expect(requiredReps(null), 'Must be greater than 0');
-      expect(requiredReps('abc'), 'Must be greater than 0');
+    test('rejects values outside the range and non-numeric input', () {
+      expect(requiredReps('0.09'), message);
+      expect(requiredReps('0'), message);
+      expect(requiredReps('-1'), message);
+      expect(requiredReps('2000.5'), message);
+      expect(requiredReps(null), message);
+      expect(requiredReps('abc'), message);
     });
   });
 }

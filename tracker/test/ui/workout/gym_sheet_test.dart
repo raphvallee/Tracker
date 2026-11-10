@@ -44,36 +44,55 @@ void main() {
     expect(find.text(emptyError), findsNothing);
   });
 
-  group('promptGym', () {
+  group('showGymPicker', () {
     final gyms = [
-      Gym(name: 'Home', isPrimary: true),
-      Gym(name: 'Commercial', order: 1),
+      Gym(name: 'Home', isPrimary: true)..id = 1,
+      Gym(name: 'Commercial', order: 1)..id = 2,
     ];
 
-    testWidgets('picking a gym returns it', (tester) async {
+    testWidgets('marks the gym in use and returns the one picked', (
+      tester,
+    ) async {
       await pumpApp(tester);
       final context = tester.element(find.byType(Navigator).first);
-      GymPick? pick;
-      unawaited(promptGym(context, gyms).then((r) => pick = r));
+      Object? picked;
+      unawaited(
+        showGymPicker(
+          context,
+          gyms,
+          currentId: 1,
+          oneWorkoutOnly: true,
+        ).then((r) => picked = r),
+      );
       await tester.pumpAndSettle();
 
+      expect(find.text('Training at'), findsOneWidget);
+      expect(find.text('Home gym'), findsOneWidget);
+      expect(find.byIcon(FLucideIcons.check), findsOneWidget);
+      expect(
+        find.text(
+          'Another gym counts for this workout only. The next one starts at '
+          'Home.',
+        ),
+        findsOneWidget,
+      );
       await tester.tap(find.text('Commercial'));
       await tester.pumpAndSettle();
 
-      expect(pick?.gym?.name, 'Commercial');
+      expect((picked as Gym?)?.name, 'Commercial');
     });
 
-    testWidgets('closing the picker without a choice returns no pick', (
+    testWidgets('closing the sheet without a choice returns null', (
       tester,
     ) async {
       await pumpApp(tester);
       final context = tester.element(find.byType(Navigator).first);
       var completed = false;
-      GymPick? pick;
+      Object? picked = const Object();
       unawaited(
-        promptGym(context, gyms).then((r) {
+        showGymPicker(context, gyms).then((r) {
           completed = true;
-          pick = r;
+          picked = r;
         }),
       );
       await tester.pumpAndSettle();
@@ -82,7 +101,23 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(completed, isTrue);
-      expect(pick, isNull);
+      expect(picked, isNull);
+    });
+
+    testWidgets('a gym added from the sheet asks for its name only', (
+      tester,
+    ) async {
+      await pumpApp(tester);
+      final context = tester.element(find.byType(Navigator).first);
+      unawaited(showGymPicker(context, gyms));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Add a gym'));
+      await tester.pumpAndSettle();
+      expect(find.text('New gym'), findsOneWidget);
+      expect(find.widgetWithText(FTextField, 'Gym name'), findsOneWidget);
+      expect(find.textContaining('multiplier'), findsNothing);
+      expect(find.textContaining('Description'), findsNothing);
     });
   });
 }

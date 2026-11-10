@@ -51,3 +51,12 @@ String agoLabel(DateTime date, {DateTime? now}) {
   if (days < 730) return '${days ~/ 30} months ago';
   return '${days ~/ 365} years ago';
 }
+
+/// How long something ran: "under a minute", "12 min", "1 h 5 min".
+String lengthLabel(Duration length) {
+  final minutes = length.isNegative ? 0 : length.inMinutes;
+  if (minutes < 1) return 'under a minute';
+  if (minutes < 60) return '$minutes min';
+  final rest = minutes % 60;
+  return rest == 0 ? '${minutes ~/ 60} h' : '${minutes ~/ 60} h $rest min';
+}

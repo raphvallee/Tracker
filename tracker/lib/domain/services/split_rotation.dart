@@ -6,11 +6,15 @@ class SplitDayVisit {
     required this.splitId,
     required this.dayIndex,
     required this.startTime,
+    this.duration,
   });
 
   final int splitId;
   final int dayIndex;
   final DateTime startTime;
+
+  /// How long the session ran; null when it has no end time.
+  final Duration? duration;
 }
 
 /// The split day the Workout tab offers to start next.
@@ -104,6 +108,21 @@ List<WorkoutSplit> splitsByLastUsed(
     return position[a.split.id]!.compareTo(position[b.split.id]!);
   });
   return [?current, for (final entry in rest) entry.split];
+}
+
+/// The most recent visit of [split]'s day at [dayIndex], or null when it
+/// was never trained.
+SplitDayVisit? lastVisitOf(
+  WorkoutSplit split,
+  int dayIndex,
+  List<SplitDayVisit> visits,
+) {
+  SplitDayVisit? last;
+  for (final visit in visits) {
+    if (visit.splitId != split.id || visit.dayIndex != dayIndex) continue;
+    if (last == null || visit.startTime.isAfter(last.startTime)) last = visit;
+  }
+  return last;
 }
 
 /// When each of [split]'s days (by position) was last trained.

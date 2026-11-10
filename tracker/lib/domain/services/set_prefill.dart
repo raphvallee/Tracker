@@ -19,6 +19,21 @@ class PreviousPerformance {
     }
     return count;
   }
+
+  /// The heaviest working set, the one with more reps among equals: what
+  /// "last time" means in one line. Null when only warm-ups were logged.
+  WorkoutSet? get topSet {
+    WorkoutSet? top;
+    for (final set in sets) {
+      if (set.isWarmup) continue;
+      if (top == null ||
+          set.weight > top.weight ||
+          (set.weight == top.weight && set.reps > top.reps)) {
+        top = set;
+      }
+    }
+    return top;
+  }
 }
 
 /// Placeholder values for a set row that is not logged yet.

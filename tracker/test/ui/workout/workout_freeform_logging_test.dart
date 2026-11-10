@@ -127,18 +127,18 @@ void main() {
     await tester.tap(find.text('Add exercise').last);
     await pumpUntil(find.text('Bench Press').hitTestable());
     await tester.tap(find.text('Bench Press'));
-    await pumpUntil(find.textContaining('Last time'));
+    await pumpUntil(find.text('Free workout, exercise 1 of 1'));
     expect(cubit.state.plan.single.exerciseId, exerciseId);
 
     // Last session's two sets come back as two prefilled rows, warm-up
     // included, so each one is a single tap.
-    expect(find.textContaining('W 40 × 10, 60 × 8'), findsOneWidget);
+    await pumpUntil(find.text('Log 40 kg × 10'));
     expect(weightField(1), findsOneWidget);
     expect(find.text('Log 40 kg × 10'), findsOneWidget);
     await tester.tap(find.text('Log 40 kg × 10'));
     await pumpUntil(find.text('Log 60 kg × 8'));
     await tester.tap(find.text('Log 60 kg × 8'));
-    await pumpUntil(find.text('Back to overview'));
+    await pumpUntil(find.text('Back to workout'));
 
     expect(cubit.state.sets.map((s) => (s.weight, s.reps, s.type)), [
       (40, 10, SetType.warmup),
@@ -149,7 +149,9 @@ void main() {
       isTrue,
     );
 
-    await tester.tap(find.text('Back to overview'));
+    // Logged rows keep last time's values small under today's.
+    expect(find.text('40'), findsNWidgets(2));
+    await tester.tap(find.text('Back to workout'));
     await pumpUntil(find.text('2 sets logged'));
     expect(find.text('2 sets'), findsOneWidget, reason: 'free workout header');
   });

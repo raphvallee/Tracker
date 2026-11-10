@@ -10,6 +10,7 @@ import 'package:tracker/domain/models/exercise.dart';
 import 'package:tracker/domain/models/gym.dart';
 import 'package:tracker/domain/models/muscle.dart';
 import 'package:tracker/domain/models/workout_session.dart';
+import 'package:tracker/domain/models/workout_set.dart';
 import 'package:tracker/domain/models/workout_split.dart';
 
 import '../../../testing/fakes/in_memory_storage.dart';
@@ -21,7 +22,7 @@ void main() {
   setUpAll(initIsarCore);
   setUp(() => HydratedBloc.storage = InMemoryStorage());
 
-  testWidgets('the day due is up next; a tap starts a day, a hold previews', (
+  testWidgets('the day due is open at home; a tap opens another day', (
     tester,
   ) async {
     useTallWindow(tester);
@@ -79,13 +80,19 @@ void main() {
         ],
       );
       await repo.splits.put(split);
-      // Push was trained yesterday: Pull is due.
+      // Push was trained yesterday, for 45 minutes: Pull is due.
+      final yesterday = DateTime.now().subtract(const Duration(days: 1));
       await repo.sessions.put(
         WorkoutSession(
           title: 'PPL · Push',
-          startTime: DateTime.now().subtract(const Duration(days: 1)),
+          startTime: yesterday,
+          endTime: yesterday.add(const Duration(minutes: 45)),
           splitId: split.id,
           splitDayIndex: 0,
+          sets: [
+            WorkoutSet(exerciseId: bench, weight: 77.5, reps: 10),
+            WorkoutSet(exerciseId: bench, weight: 80, reps: 8, order: 1),
+          ],
         ),
       );
     });
@@ -97,23 +104,32 @@ void main() {
         .onChange!(2);
     await pumpUntil(tester, find.text('Start Pull'));
 
-    expect(find.text('Up next in PPL'), findsOneWidget);
+    // The split's days in a row: the one up next is open, with its plan.
+    expect(find.text('PPL'), findsOneWidget);
+    expect(find.text('Up next'), findsOneWidget);
+    expect(find.text('Yesterday'), findsOneWidget, reason: 'Push');
     expect(find.text('Barbell Row'), findsOneWidget);
-    expect(find.text('1 exercise, 1 set. Not done yet.'), findsOneWidget);
-    expect(find.text('Iron Temple'), findsOneWidget, reason: 'primary gym');
-    expect(find.textContaining('last done yesterday'), findsOneWidget);
+    expect(find.text('1 × 10'), findsOneWidget, reason: 'the plan');
+    expect(find.text('1 set'), findsOneWidget);
     expect(
-      find.text('Tap a day to start it. Hold it to preview.'),
-      findsOneWidget,
+      find.text('Not done yet'),
+      findsNWidgets(2),
+      reason: 'Pull, open, and Legs in the row',
     );
+    expect(find.text('Iron Temple'), findsOneWidget, reason: 'home gym');
 
-    // Holding a day previews it; Start in the sheet starts it.
-    await tester.longPress(find.text('Push'));
+    // Tapping a day opens it in place, with what it did last time; Start
+    // follows it and lands on the exercise list.
+    await tester.tap(find.text('Push'));
     await pumpUntil(tester, find.text('Start Push'));
-    expect(find.text('3 sets of 8-12 reps'), findsOneWidget);
-    expect(find.text('Edit in Splits'), findsOneWidget);
+    expect(find.text('Last done yesterday, in 45 min'), findsOneWidget);
+    expect(find.text('3 × 8-12'), findsOneWidget);
+    expect(find.text('3 sets'), findsOneWidget);
+    await pumpUntil(tester, find.text('Last 80 kg × 8'));
+    expect(find.text('Up next'), findsOneWidget, reason: 'still Pull');
     await tester.tap(find.text('Start Push'));
-    await pumpUntil(tester, find.text('Finish'));
+    await pumpUntil(tester, find.text('Continue Bench Press'));
+    await pumpUntil(tester, find.text('Set 1'));
     final started = app.workout.state;
     expect(started.planTitle, 'Push');
     expect(started.splitTitle, 'PPL');
@@ -122,17 +138,35 @@ void main() {
     expect(started.gymName, 'Iron Temple');
     expect(started.plan.single.sets, hasLength(3));
 
+    // On the exercise, the set opens on last time's numbers: nothing to
+    // compare until one of them moves.
+    await tester.tap(find.text('Continue Bench Press'));
+    await pumpUntil(tester, find.text('last 77.5'));
+    expect(find.textContaining('than last time'), findsNothing);
+    await tester.tap(labelled('Increase reps'));
+    await tester.pump();
+    expect(find.text('1 rep more than last time'), findsOneWidget);
+
     await app.workout.discardWorkout();
     await pumpUntil(tester, find.text('Start Pull'));
 
-    // Pick another gym for next time, then tap a day: it starts at once.
-    app.workout.rememberGym(home);
+    // Pick another gym for the next workout, then open a day with nothing
+    // planned and start it: it starts there.
+    app.workout.pickNextGym(home);
     await pumpUntil(tester, find.text('Home'));
     await tester.tap(find.text('Legs'));
+    await pumpUntil(tester, find.text('Start Legs'));
+    expect(find.text('No exercises yet. Add some in Splits.'), findsOneWidget);
+    await tester.tap(find.text('Start Legs'));
     await pumpUntil(tester, find.text('Finish'));
     expect(app.workout.state.planTitle, 'Legs');
     expect(app.workout.state.splitDayIndex, 2);
     expect(app.workout.state.gymName, 'Home');
     expect(find.text('Add an exercise to start logging sets.'), findsOneWidget);
+
+    // The pick lasted one workout: the next one is back at home.
+    await app.workout.discardWorkout();
+    await pumpUntil(tester, find.text('Start Pull'));
+    expect(find.text('Iron Temple'), findsOneWidget);
   });
 }

@@ -18,12 +18,13 @@ SetTarget defaultSetTarget(SettingsState settings) =>
 SetTarget defaultSetTargetOf(BuildContext context) =>
     defaultSetTarget(SettingsCubit.maybeOf(context)?.state ?? SettingsState());
 
-/// The gym a new workout starts at: the last one used, else the primary gym,
-/// else the first; null when no gym is saved.
-Gym? startGymOf(List<Gym> gyms, int? lastGymId) {
+/// The gym a new workout starts at: the home (primary) gym, unless another
+/// one was picked for this workout ([pickedGymId]); the first gym when none
+/// is home, null when no gym is saved.
+Gym? startGymOf(List<Gym> gyms, int? pickedGymId) {
   if (gyms.isEmpty) return null;
   for (final gym in gyms) {
-    if (gym.id == lastGymId) return gym;
+    if (gym.id == pickedGymId) return gym;
   }
   for (final gym in gyms) {
     if (gym.isPrimary) return gym;
@@ -51,8 +52,8 @@ List<PlanExercise> planOf(
   ];
 }
 
-/// Starts [split]'s day at [dayIndex] at once, at the remembered gym, and
-/// shows the Workout tab.
+/// Starts [split]'s day at [dayIndex] at once, at the home gym or the one
+/// picked for this workout, and shows its exercise list in the Workout tab.
 Future<void> startSplitDay(
   BuildContext context, {
   required WorkoutSplit split,
@@ -70,17 +71,18 @@ Future<void> startSplitDay(
     splitTitle: split.title,
     splitId: split.id,
     splitDayIndex: dayIndex,
-    gym: startGymOf(gyms, cubit.state.lastGymId),
+    gym: startGymOf(gyms, cubit.state.nextGymId),
     exercises: planOf(split, dayIndex, names, fallback: fallback),
   );
   HomePageSingleton().changeTab(TabName.currentWorkout);
 }
 
-/// Starts a workout with no plan at the remembered gym.
+/// Starts a workout with no plan, at the home gym or the one picked for this
+/// workout.
 Future<void> startEmptyWorkout(BuildContext context) async {
   final cubit = context.read<WorkoutCubit>();
   final gyms = await RepositoryScope.maybeOf(context)?.gyms.getAll() ?? [];
   if (!context.mounted || cubit.state.isInProgress) return;
-  cubit.startWorkout(gym: startGymOf(gyms, cubit.state.lastGymId));
+  cubit.startWorkout(gym: startGymOf(gyms, cubit.state.nextGymId));
   HomePageSingleton().changeTab(TabName.currentWorkout);
 }

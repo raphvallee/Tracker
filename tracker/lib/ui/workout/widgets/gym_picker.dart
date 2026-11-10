@@ -1,85 +1,104 @@
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
 import 'package:tracker/domain/models/gym.dart';
+import 'package:tracker/ui/core/themes/accents.dart';
 import 'package:tracker/ui/core/ui/edit_sheet.dart';
+import 'package:tracker/ui/core/ui/item_card.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
+import 'package:tracker/ui/core/ui/sheet_surface.dart';
 import 'package:tracker/utils/form_validators.dart';
 
 class NoGym {
   const NoGym();
 }
 
-/// Gym a new workout starts at. `gym` is null when no gym is saved.
-typedef GymPick = ({Gym? gym});
-
-/// Null when the picker closes without a choice, so the workout must not start.
-Future<GymPick?> promptGym(BuildContext context, List<Gym> gyms) async {
-  if (gyms.length <= 1) {
-    return (gym: gyms.isEmpty ? null : gyms.first);
-  }
-  final picked = await showGymPicker(context, gyms, isDismissible: false);
-  return picked is Gym ? (gym: picked) : null;
-}
-
+/// The gym sheet: every gym, a check on the one in use ([currentId]) and a
+/// row to add one. Resolves to the [Gym] picked, a [NoGym] for the
+/// [includeNoGym] row, or null when it closes without a choice.
+///
+/// [oneWorkoutOnly] adds the note that another gym counts for one workout
+/// and the next starts at home again: true where a workout's gym is picked.
 Future<Object?> showGymPicker(
   BuildContext context,
   List<Gym> gyms, {
-  String title = 'Where are you training?',
+  String title = 'Training at',
+  int? currentId,
   bool includeNoGym = false,
-  bool isDismissible = true,
   String noGymLabel = 'No gym',
+  bool oneWorkoutOnly = false,
 }) {
-  return showModalBottomSheet<Object>(
+  return showFSheet<Object>(
     context: context,
-    isDismissible: isDismissible,
-    backgroundColor: context.theme.colors.background,
+    side: .btt,
+    useRootNavigator: true,
+    mainAxisMaxRatio: 0.85,
     builder: (sheetContext) {
-      return SafeArea(
-        top: false,
+      final theme = sheetContext.theme;
+      final accents = TrackerAccents.of(sheetContext);
+      Gym? home;
+      for (final gym in gyms) {
+        if (gym.isPrimary) home = gym;
+      }
+      return SheetSurface(
+        scrollable: true,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    title,
-                    style: sheetContext.theme.typography.body.md.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  FButton(
-                    variant: .outline,
-                    onPress: () async {
-                      final added = await promptAddGym(sheetContext, gyms);
-                      if (added != null && sheetContext.mounted) {
-                        Navigator.of(sheetContext).pop(added);
-                      }
-                    },
-                    child: const Text('Add Gym'),
-                  ),
-                ],
+            Text(
+              title,
+              style: theme.typography.body.lg.copyWith(
+                fontWeight: FontWeight.w700,
               ),
             ),
-            for (final gym in gyms)
-              FItem(
-                prefix: Icon(
-                  gym.isPrimary ? FLucideIcons.house : FLucideIcons.dumbbell,
+            const SizedBox(height: 14),
+            ItemCard(
+              divider: .full,
+              children: <FItem>[
+                for (final gym in gyms)
+                  FItem(
+                    prefix: Icon(
+                      gym.isPrimary
+                          ? FLucideIcons.house
+                          : FLucideIcons.dumbbell,
+                    ),
+                    title: Text(gym.name, overflow: TextOverflow.ellipsis),
+                    subtitle: gym.isPrimary ? const Text('Home gym') : null,
+                    suffix: gym.id == currentId
+                        ? Icon(FLucideIcons.check, color: accents.live)
+                        : null,
+                    selected: gym.id == currentId,
+                    onPress: () => Navigator.of(sheetContext).pop(gym),
+                  ),
+                if (includeNoGym)
+                  FItem(
+                    prefix: const Icon(FLucideIcons.ban),
+                    title: Text(noGymLabel),
+                    onPress: () =>
+                        Navigator.of(sheetContext).pop(const NoGym()),
+                  ),
+                FItem(
+                  prefix: const Icon(FLucideIcons.plus),
+                  title: const Text('Add a gym'),
+                  onPress: () async {
+                    final added = await promptAddGym(sheetContext, gyms);
+                    if (added != null && sheetContext.mounted) {
+                      Navigator.of(sheetContext).pop(added);
+                    }
+                  },
                 ),
-                title: Text(gym.name),
-                subtitle: gym.isPrimary ? const Text('Primary gym') : null,
-                onPress: () => Navigator.of(sheetContext).pop(gym),
+              ],
+            ),
+            if (oneWorkoutOnly && home != null && gyms.length > 1) ...[
+              const SizedBox(height: 12),
+              Text(
+                'Another gym counts for this workout only. The next one '
+                'starts at ${home.name}.',
+                style: theme.typography.body.xs.copyWith(
+                  color: theme.colors.mutedForeground,
+                ),
               ),
-            if (includeNoGym)
-              FItem(
-                prefix: const Icon(FLucideIcons.ban),
-                title: Text(noGymLabel),
-                onPress: () => Navigator.of(sheetContext).pop(const NoGym()),
-              ),
-            const SizedBox(height: 8),
+            ],
           ],
         ),
       );
@@ -87,6 +106,9 @@ Future<Object?> showGymPicker(
   );
 }
 
+/// Adds a gym from the gym sheet, asking for its name only: the weight
+/// multiplier is estimated when a workout there ends, and Settings edits
+/// the rest.
 Future<Gym?> promptAddGym(BuildContext context, List<Gym> gyms) async {
   final repo = RepositoryScope.maybeOf(context);
   var nextOrder = 0;
@@ -95,9 +117,10 @@ Future<Gym?> promptAddGym(BuildContext context, List<Gym> gyms) async {
   }
   final created = await editGymSheet(
     context,
-    title: 'New Gym',
+    title: 'New gym',
     initial: Gym(name: '', order: nextOrder, isPrimary: gyms.isEmpty),
     getExistingGyms: repo?.gyms.getAll,
+    nameOnly: true,
   );
   if (created != null && repo != null) {
     await repo.gyms.put(created);
@@ -129,11 +152,16 @@ class EditGymSheet extends StatefulWidget {
     required this.title,
     required this.initial,
     this.getExistingGyms,
+    this.nameOnly = false,
   });
 
   final String title;
   final Gym initial;
   final Future<List<Gym>> Function()? getExistingGyms;
+
+  /// Asks for the name alone, leaving the description and multiplier as
+  /// [initial] has them.
+  final bool nameOnly;
 
   @override
   State<EditGymSheet> createState() => _EditGymSheetState();
@@ -171,10 +199,12 @@ class _EditGymSheetState extends State<EditGymSheet> {
 
   Future<void> _save() async {
     final nameText = _name.text.trim();
-    final multiplierError = _gymMultiplierError(
-      _multiplier.text,
-      isPrimary: widget.initial.isPrimary,
-    );
+    final multiplierError = widget.nameOnly
+        ? null
+        : _gymMultiplierError(
+            _multiplier.text,
+            isPrimary: widget.initial.isPrimary,
+          );
     final nameError = _gymNameError(nameText);
     if (nameError != null || multiplierError != null) {
       setState(() {
@@ -225,34 +255,38 @@ class _EditGymSheetState extends State<EditGymSheet> {
             label: const Text('Gym name'),
             error: _nameError == null ? null : Text(_nameError!),
           ),
-          const SizedBox(height: 12),
-          FTextField(
-            control: FTextFieldControl.managed(controller: _description),
-            label: const Text('Description (optional)'),
-            minLines: 1,
-            maxLines: null,
-            keyboardType: TextInputType.multiline,
-          ),
-          const SizedBox(height: 12),
-          FTextField(
-            control: FTextFieldControl.managed(
-              controller: _multiplier,
-              onChange: (_) => setState(() => _multiplierError = null),
+          if (!widget.nameOnly) ...[
+            const SizedBox(height: 12),
+            FTextField(
+              control: FTextFieldControl.managed(controller: _description),
+              label: const Text('Description (optional)'),
+              minLines: 1,
+              maxLines: null,
+              keyboardType: TextInputType.multiline,
             ),
-            enabled: !widget.initial.isPrimary,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            label: Text(
-              widget.initial.isPrimary
-                  ? 'Multiplier (primary = ×1.0)'
-                  : 'Weight multiplier',
+            const SizedBox(height: 12),
+            FTextField(
+              control: FTextFieldControl.managed(
+                controller: _multiplier,
+                onChange: (_) => setState(() => _multiplierError = null),
+              ),
+              enabled: !widget.initial.isPrimary,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              label: Text(
+                widget.initial.isPrimary
+                    ? 'Multiplier (primary = ×1.0)'
+                    : 'Weight multiplier',
+              ),
+              description: Text(
+                widget.initial.isPrimary
+                    ? 'The primary gym is the fixed baseline.'
+                    : 'Scales logged weights to the primary gym.',
+              ),
+              error: _multiplierError == null ? null : Text(_multiplierError!),
             ),
-            description: Text(
-              widget.initial.isPrimary
-                  ? 'The primary gym is the fixed baseline.'
-                  : 'Scales logged weights to the primary gym.',
-            ),
-            error: _multiplierError == null ? null : Text(_multiplierError!),
-          ),
+          ],
         ],
       ),
     );
@@ -264,6 +298,7 @@ Future<Gym?> editGymSheet(
   required String title,
   required Gym initial,
   Future<List<Gym>> Function()? getExistingGyms,
+  bool nameOnly = false,
 }) {
   return showEditSheet<Gym>(
     context,
@@ -271,6 +306,7 @@ Future<Gym?> editGymSheet(
       title: title,
       initial: initial,
       getExistingGyms: getExistingGyms,
+      nameOnly: nameOnly,
     ),
   );
 }

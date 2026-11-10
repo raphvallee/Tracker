@@ -1,3 +1,4 @@
+import 'package:tracker/domain/models/rep_limits.dart';
 import 'package:tracker/domain/models/weight_unit.dart';
 import 'package:tracker/utils/decimal_input.dart';
 
@@ -33,9 +34,14 @@ String? requiredWeight(
       : msg;
 }
 
-/// Validates a typed reps count: a decimal above zero. Fractions below one are
-/// accepted here and rejected by the form, which asks for at least one rep.
-String? requiredReps(String? value, {String msg = 'Must be greater than 0'}) {
+/// Validates a typed reps count: a decimal from [minimumReps] to
+/// [maximumReps], so a partial rep can be logged.
+String? requiredReps(
+  String? value, {
+  String msg = 'Must be between 0.1 and 2000',
+}) {
   final number = parseDecimal(value ?? '');
-  return number != null && number > 0 ? null : msg;
+  return number != null && number >= minimumReps && number <= maximumReps
+      ? null
+      : msg;
 }

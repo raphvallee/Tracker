@@ -21,21 +21,11 @@ class WorkoutPage extends StatelessWidget {
         title: Text(state.saveError!),
         duration: const Duration(seconds: 4),
       ),
-      child:
-          BlocSelector<
-            WorkoutCubit,
-            WorkoutState,
-            ({bool isInProgress, bool canRestore})
-          >(
-            selector: (state) => (
-              isInProgress: state.isInProgress,
-              canRestore:
-                  state.canRestoreSaved() || state.canRestoreDiscarded(),
-            ),
-            builder: (context, view) => view.isInProgress
-                ? const WorkoutOverview()
-                : StartView(canRestore: view.canRestore),
-          ),
+      child: BlocSelector<WorkoutCubit, WorkoutState, bool>(
+        selector: (state) => state.isInProgress,
+        builder: (context, isInProgress) =>
+            isInProgress ? const WorkoutOverview() : const StartView(),
+      ),
     );
   }
 }

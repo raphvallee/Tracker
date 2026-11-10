@@ -44,7 +44,6 @@ import 'package:tracker/ui/splits/widgets/review_changes_sheet.dart';
 import 'package:tracker/ui/splits/widgets/set_target_sheet.dart';
 import 'package:tracker/ui/splits/widgets/split_day_editor_page.dart';
 import 'package:tracker/ui/workout/view_models/workout_cubit.dart';
-import 'package:tracker/ui/workout/widgets/day_preview_sheet.dart';
 import 'package:tracker/ui/workout/widgets/effort_sheet.dart';
 import 'package:tracker/ui/workout/widgets/exercise_page.dart';
 import 'package:tracker/ui/workout/widgets/exercise_picker_page.dart';
@@ -302,7 +301,8 @@ Future<void> captureScreensAt(
   await visit(
     'Exercise page',
     ExercisePage(exerciseId: fixtures.benchId),
-    dataReady: () => tester.any(find.textContaining('Last time')),
+    // Last session loaded: its values sit small under the logged ones.
+    dataReady: () => tester.any(find.text('82.5')),
   );
   await guarded('Exercise page (keypad)', () async {
     unawaited(
@@ -313,7 +313,7 @@ Future<void> captureScreensAt(
     );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 350));
-    await settleForData(() => tester.any(find.textContaining('Last time')));
+    await settleForData(() => tester.any(find.text('82.5')));
     await tester.tap(
       find
           .byWidgetPredicate(
@@ -330,6 +330,62 @@ Future<void> captureScreensAt(
     } finally {
       FocusManager.instance.primaryFocus?.unfocus();
       await settle();
+      navigator.pop();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 350));
+      await settle();
+    }
+  });
+  await guarded('Exercise page (errors)', () async {
+    unawaited(
+      pushTo<void>(
+        navigator.context,
+        ExercisePage(exerciseId: fixtures.benchId),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+    await settleForData(() => tester.any(find.text('82.5')));
+    // The open row (set 2, after the logged warm-up and set 1): a weight
+    // and a rep count out of range.
+    Finder field(String label) => find
+        .byWidgetPredicate(
+          (w) => w is TextField && w.focusNode?.debugLabel == label,
+        )
+        .at(2);
+    await tester.enterText(field('set weight'), '20000');
+    await tester.enterText(field('set reps'), '0.05');
+    FocusManager.instance.primaryFocus?.unfocus();
+    await settle();
+    try {
+      await recorder.capture('Exercise page (errors)');
+    } finally {
+      navigator.pop();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 350));
+      await settle();
+    }
+  });
+  await guarded('Exercise page (compared with last time)', () async {
+    unawaited(
+      pushTo<void>(
+        navigator.context,
+        ExercisePage(exerciseId: fixtures.benchId),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+    await settleForData(() => tester.any(find.text('82.5')));
+    // Open the logged set 1: it was lighter than last time's.
+    await tester.tap(
+      find.byWidgetPredicate(
+        (w) => w is Semantics && w.properties.label == 'Set 1 logged',
+      ),
+    );
+    await settle();
+    try {
+      await recorder.capture('Exercise page (compared with last time)');
+    } finally {
       navigator.pop();
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 350));
@@ -404,7 +460,13 @@ Future<void> captureScreensAt(
   );
   await openAndClose(
     'Gym picker sheet',
-    () => promptGym(pageContext, fixtures.allGyms),
+    () => showGymPicker(
+      pageContext,
+      fixtures.allGyms,
+      currentId: fixtures.allGyms.first.id,
+      oneWorkoutOnly: true,
+    ),
+    root: true,
   );
   await openAndClose(
     'Settings choice sheet',
@@ -427,17 +489,6 @@ Future<void> captureScreensAt(
       sets: const [SetTarget(8, 12)],
       index: 0,
       allowWarmup: false,
-    ),
-    root: true,
-  );
-  await openAndClose(
-    'Day preview sheet',
-    () => showDayPreview(
-      pageContext,
-      split: fixtures.split,
-      dayIndex: 0,
-      names: names,
-      lastDone: fixtures.session.startTime,
     ),
     root: true,
   );
@@ -546,6 +597,40 @@ Future<void> captureScreensAt(
     // The next day follows the workout just saved.
     await settleForData(() => tester.any(find.textContaining('Start Pull')));
     await recorder.capture('Workout tab (idle)');
+  });
+
+  await guarded('Workout tab (idle, long plan)', () async {
+    // A day too long for any of the sizes: the Empty workout row under its
+    // plan is out of sight, so the header offers it.
+    final library = await tester.runAsync(repo.exercises.getAll);
+    final long = WorkoutSplit(
+      title: 'Upper Lower',
+      order: 1,
+      splitDays: [
+        WorkoutSplitDay(
+          title: 'Upper',
+          exercises: [
+            for (final (i, exercise) in library!.take(8).indexed)
+              ExerciseItem(
+                exerciseId: exercise.id,
+                order: i,
+                sets: [
+                  for (var k = 0; k < 3; k++)
+                    PlannedSet(order: k, minReps: 8, maxReps: 12),
+                ],
+              ),
+          ],
+        ),
+      ],
+    );
+    await tester.runAsync(() => repo.splits.put(long));
+    tester
+        .element(find.byType(MyApp))
+        .read<SettingsCubit>()
+        .setCurrentSplit(long.id);
+    await settleForData(() => tester.any(find.text('Start Upper')));
+    await settle();
+    await recorder.capture('Workout tab (idle, long plan)');
   });
 
   await guarded('Workout tab (free workout)', () async {

@@ -7,6 +7,7 @@ import 'package:tracker/domain/models/workout_split.dart';
 import 'package:tracker/domain/services/split_diff.dart';
 import 'package:tracker/ui/core/themes/accents.dart';
 import 'package:tracker/ui/core/ui/app_dialog.dart';
+import 'package:tracker/ui/core/ui/item_card.dart';
 import 'package:tracker/ui/core/ui/sheet_surface.dart';
 import 'package:tracker/ui/core/ui/weight_format.dart';
 import 'package:tracker/ui/splits/view_models/split_drafts_cubit.dart';
@@ -134,7 +135,7 @@ class _ReviewChangesState extends State<_ReviewChanges> {
               for (final MapEntry(key: group, value: changes)
                   in groups.entries) ...[
                 Padding(
-                  padding: const EdgeInsets.only(top: 14, bottom: 2),
+                  padding: const EdgeInsets.only(top: 14, bottom: 6),
                   child: Text(
                     group ?? 'Split',
                     style: theme.typography.body.xs.copyWith(
@@ -143,7 +144,11 @@ class _ReviewChangesState extends State<_ReviewChanges> {
                     ),
                   ),
                 ),
-                for (final change in changes) _ChangeRow(change: change),
+                ItemCard(
+                  children: <FItem>[
+                    for (final change in changes) _changeItem(context, change),
+                  ],
+                ),
               ],
               if (problem != null)
                 Padding(
@@ -179,104 +184,74 @@ class _ReviewChangesState extends State<_ReviewChanges> {
   }
 }
 
-class _ChangeRow extends StatelessWidget {
-  const _ChangeRow({required this.change});
-
-  final SplitChange change;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = context.theme;
-    final accents = TrackerAccents.of(context);
-    final colors = theme.colors;
-    final (icon, background, foreground) = switch (change.kind) {
-      SplitChangeKind.added => (
-        FLucideIcons.plus,
-        colors.muted,
-        colors.foreground,
-      ),
-      SplitChangeKind.removed => (
-        FLucideIcons.minus,
-        colors.destructive.withValues(alpha: 0.12),
-        colors.destructive,
-      ),
-      SplitChangeKind.changed => (
-        FLucideIcons.pencil,
-        accents.draftSoft,
-        accents.draftInk,
-      ),
-      SplitChangeKind.moved => (
-        FLucideIcons.arrowUpDown,
-        colors.muted,
-        colors.foreground,
-      ),
-    };
-    final small = theme.typography.body.xs.copyWith(
-      color: colors.mutedForeground,
-    );
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: colors.border)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 9),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Container(
-              width: 26,
-              height: 26,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: background,
+/// One change: what changed, old struck through and new in bold.
+FItem _changeItem(BuildContext context, SplitChange change) {
+  final theme = context.theme;
+  final accents = TrackerAccents.of(context);
+  final colors = theme.colors;
+  final (icon, background, foreground) = switch (change.kind) {
+    SplitChangeKind.added => (
+      FLucideIcons.plus,
+      colors.muted,
+      colors.foreground,
+    ),
+    SplitChangeKind.removed => (
+      FLucideIcons.minus,
+      colors.destructive.withValues(alpha: 0.12),
+      colors.destructive,
+    ),
+    SplitChangeKind.changed => (
+      FLucideIcons.pencil,
+      accents.draftSoft,
+      accents.draftInk,
+    ),
+    SplitChangeKind.moved => (
+      FLucideIcons.arrowUpDown,
+      colors.muted,
+      colors.foreground,
+    ),
+  };
+  final small = theme.typography.body.xs.copyWith(
+    color: colors.mutedForeground,
+  );
+  return FItem(
+    prefix: Container(
+      width: 26,
+      height: 26,
+      decoration: BoxDecoration(shape: BoxShape.circle, color: background),
+      child: Icon(icon, size: 14, color: foreground),
+    ),
+    title: _wrapping(change.title),
+    subtitle: change.before != null && change.after != null
+        ? Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 6,
+            children: <Widget>[
+              _wrapping(
+                change.before!,
+                style: small.copyWith(decoration: TextDecoration.lineThrough),
               ),
-              child: Icon(icon, size: 14, color: foreground),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text(
-                    change.title,
-                    style: theme.typography.body.sm.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  if (change.before != null && change.after != null)
-                    Wrap(
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      spacing: 6,
-                      children: <Widget>[
-                        Text(
-                          change.before!,
-                          style: small.copyWith(
-                            decoration: TextDecoration.lineThrough,
-                          ),
-                        ),
-                        Icon(
-                          FLucideIcons.arrowRight,
-                          size: 14,
-                          color: colors.mutedForeground,
-                        ),
-                        Text(
-                          change.after!,
-                          style: theme.typography.body.xs.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        if (change.detail != null)
-                          Text(change.detail!, style: small),
-                      ],
-                    )
-                  else if (change.detail != null)
-                    Text(change.detail!, style: small),
-                ],
+              Icon(
+                FLucideIcons.arrowRight,
+                size: 14,
+                color: colors.mutedForeground,
               ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+              _wrapping(
+                change.after!,
+                style: theme.typography.body.xs.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              if (change.detail != null)
+                _wrapping(change.detail!, style: small),
+            ],
+          )
+        : change.detail == null
+        ? null
+        : _wrapping(change.detail!),
+  );
 }
+
+/// FItem cuts its text at one line; a change shows in full.
+Widget _wrapping(String text, {TextStyle? style}) =>
+    Text(text, softWrap: true, overflow: TextOverflow.visible, style: style);

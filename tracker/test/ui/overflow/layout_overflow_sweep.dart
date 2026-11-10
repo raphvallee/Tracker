@@ -234,7 +234,13 @@ Future<void> sweepSize(WidgetTester tester, String label, Size size) async {
   );
   await openAndClose(
     'Gym picker sheet',
-    () => promptGym(pageContext, sweepFixtures.allGyms),
+    () => showGymPicker(
+      pageContext,
+      sweepFixtures.allGyms,
+      currentId: sweepFixtures.allGyms.first.id,
+      oneWorkoutOnly: true,
+    ),
+    root: true,
   );
 
   _mark('End-workout dialog @ $label');

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
 import 'package:tracker/ui/core/ui/custom_app_bar.dart';
+import 'package:tracker/ui/core/ui/item_card.dart';
 import 'package:tracker/ui/core/ui/max_width.dart';
 import 'package:tracker/ui/core/ui/sheet_surface.dart';
 
@@ -78,7 +79,7 @@ class SettingsSection extends StatelessWidget {
               ),
             ),
           ),
-        _Group(children: children),
+        ItemCard(children: children),
         if (footer case final footer?)
           Padding(
             padding: const EdgeInsets.fromLTRB(_textInset, 8, _textInset, 0),
@@ -252,7 +253,7 @@ Future<T?> showChoiceSheet<T>(
             Text(description, style: _note(sheetContext)),
           ],
           const SizedBox(height: 14),
-          _Group(
+          ItemCard(
             divider: .full,
             children: <FItemMixin>[
               for (final option in options)
@@ -285,35 +286,6 @@ Future<T?> showChoiceSheet<T>(
 
 /// How far row text sits inside its card; headings and notes line up with it.
 const double _textInset = 14;
-
-/// How far a row's pressed or selected highlight sits inside its card and
-/// from the dividers.
-const double _highlightInset = 4;
-
-/// A card of rows. The card clips its rows inside its outline: they paint
-/// a background that would hide it otherwise. Each row is inset by the same
-/// gap on every side, so a highlight never touches a divider.
-class _Group extends StatelessWidget {
-  const _Group({this.divider = .indented, required this.children});
-
-  final FItemDivider divider;
-  final List<FItemMixin> children;
-
-  @override
-  Widget build(BuildContext context) => FCard(
-    clipBehavior: Clip.antiAlias,
-    child: FItemGroup(
-      divider: divider,
-      style: .delta(
-        spacing: 0,
-        itemStyles: .delta([
-          .all(const .delta(padding: .value(EdgeInsets.all(_highlightInset)))),
-        ]),
-      ),
-      children: children,
-    ),
-  );
-}
 
 /// A row with its value and a chevron on the title line, and the
 /// description below at full width. FItem's own layout drops the value

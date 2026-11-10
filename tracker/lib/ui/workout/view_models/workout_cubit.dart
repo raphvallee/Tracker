@@ -327,7 +327,8 @@ class WorkoutState {
     this.splitTitle,
     this.splitId,
     this.splitDayIndex,
-    this.lastGymId,
+    this.nextGymId,
+    this.lastSetAt,
     this.saveError,
     this.savedSnapshot,
     this.savedSessionId,
@@ -342,8 +343,11 @@ class WorkoutState {
   factory WorkoutState.fromJson(Map<String, dynamic> json) {
     // Hydrated-state schema versioning (PRODUCTION_READINESS.md Phase 1).
     // v1 = the original shape; v2 adds the restorable last-saved snapshot;
-    // v3 adds the split link, the split title, the last gym, set ratings
-    // (`rpe`) and planned warm-ups (`warmup`).
+    // v3 adds the split link, the split title, set ratings (`rpe`) and
+    // planned warm-ups (`warmup`); v4 adds the gym picked for the next
+    // workout and when the last set was logged. v3's `lastGymId` (the last
+    // gym used, which the next workout started at) is dropped: workouts
+    // start at the home gym.
     // Payloads written before versioning have no 'v' key and read as v1.
     // Unknown future versions fall back to a clean idle state instead of
     // crashing.
@@ -354,6 +358,8 @@ class WorkoutState {
         return _fromV2(json);
       case 3:
         return _fromV3(json);
+      case 4:
+        return _fromV4(json);
       default:
         return WorkoutState.initial();
     }
@@ -379,7 +385,14 @@ class WorkoutState {
             : null,
         splitId: _nullableInt(json['splitId']),
         splitDayIndex: _nullableInt(json['splitDayIndex']),
-        lastGymId: _nullableInt(json['lastGymId']),
+      );
+
+  static WorkoutState _fromV4(Map<String, dynamic> json) =>
+      _fromV3(json).copyWith(
+        nextGymId: _nullableInt(json['nextGymId']),
+        lastSetAt: json['lastSetAt'] is String
+            ? DateTime.tryParse(json['lastSetAt'] as String)
+            : null,
       );
 
   static WorkoutState _fromV1(Map<String, dynamic> json) {
@@ -428,8 +441,13 @@ class WorkoutState {
   final int? splitId;
   final int? splitDayIndex;
 
-  /// The gym the next workout starts at; survives the workout ending.
-  final int? lastGymId;
+  /// The gym picked for the next workout; null starts it at the home gym.
+  /// Starting a workout uses the pick up, so the one after is at home again.
+  final int? nextGymId;
+
+  /// When the running workout's last set was logged: the rest clock counts
+  /// from here.
+  final DateTime? lastSetAt;
 
   /// Set when the final Isar write in [WorkoutCubit.endWorkout] failed. Purely
   /// transient UI feedback - deliberately excluded from hydration JSON, so a
@@ -487,7 +505,8 @@ class WorkoutState {
       splitTitle == other.splitTitle &&
       splitId == other.splitId &&
       splitDayIndex == other.splitDayIndex &&
-      lastGymId == other.lastGymId &&
+      nextGymId == other.nextGymId &&
+      lastSetAt == other.lastSetAt &&
       saveError == other.saveError &&
       savedSnapshot == other.savedSnapshot &&
       savedSessionId == other.savedSessionId &&
@@ -507,7 +526,8 @@ class WorkoutState {
     splitTitle,
     splitId,
     splitDayIndex,
-    lastGymId,
+    nextGymId,
+    lastSetAt,
     saveError,
     savedSnapshot,
     savedSessionId,
@@ -533,7 +553,7 @@ class WorkoutState {
   static WorkoutState initial() => WorkoutState(isInProgress: false);
 
   Map<String, dynamic> toJson() => {
-    'v': 3,
+    'v': 4,
     'isInProgress': isInProgress,
     'startTime': startTime?.toIso8601String(),
     'gymId': gymId,
@@ -542,7 +562,8 @@ class WorkoutState {
     'splitTitle': splitTitle,
     'splitId': splitId,
     'splitDayIndex': splitDayIndex,
-    'lastGymId': lastGymId,
+    'nextGymId': nextGymId,
+    'lastSetAt': lastSetAt?.toIso8601String(),
     'plan': plan.map((e) => e.toJson()).toList(),
     'sets': sets.map((s) => s.toJson()).toList(),
     // Restorable last-saved workout (v2). The discarded snapshot is
@@ -561,7 +582,8 @@ class WorkoutState {
     Object? splitTitle = _unset,
     Object? splitId = _unset,
     Object? splitDayIndex = _unset,
-    Object? lastGymId = _unset,
+    Object? nextGymId = _unset,
+    Object? lastSetAt = _unset,
     Object? saveError = _unset,
     Object? savedSnapshot = _unset,
     Object? savedSessionId = _unset,
@@ -588,9 +610,12 @@ class WorkoutState {
       splitDayIndex: identical(splitDayIndex, _unset)
           ? this.splitDayIndex
           : splitDayIndex as int?,
-      lastGymId: identical(lastGymId, _unset)
-          ? this.lastGymId
-          : lastGymId as int?,
+      nextGymId: identical(nextGymId, _unset)
+          ? this.nextGymId
+          : nextGymId as int?,
+      lastSetAt: identical(lastSetAt, _unset)
+          ? this.lastSetAt
+          : lastSetAt as DateTime?,
       saveError: identical(saveError, _unset)
           ? this.saveError
           : saveError as String?,
@@ -639,7 +664,8 @@ class WorkoutCubit extends HydratedCubit<WorkoutState> {
         splitTitle: null,
         splitId: null,
         splitDayIndex: null,
-        lastGymId: gym?.id ?? state.lastGymId,
+        nextGymId: null,
+        lastSetAt: null,
         saveError: null,
         plan: const [],
         sets: const [],
@@ -668,7 +694,8 @@ class WorkoutCubit extends HydratedCubit<WorkoutState> {
         splitTitle: splitTitle,
         splitId: splitId,
         splitDayIndex: splitDayIndex,
-        lastGymId: gym?.id ?? state.lastGymId,
+        nextGymId: null,
+        lastSetAt: null,
         saveError: null,
         plan: exercises,
         sets: const [],
@@ -676,16 +703,17 @@ class WorkoutCubit extends HydratedCubit<WorkoutState> {
     );
   }
 
-  /// Move the running workout to [gym], which also becomes the gym the next
-  /// workout starts at.
+  /// Move the running workout to [gym]. The next workout still starts at
+  /// the home gym.
   void setGym(Gym gym) {
-    emit(state.copyWith(gymId: gym.id, gymName: gym.name, lastGymId: gym.id));
+    emit(state.copyWith(gymId: gym.id, gymName: gym.name));
   }
 
-  /// Pick the gym the next workout starts at, without touching a running one.
-  void rememberGym(Gym gym) {
-    if (gym.id == state.lastGymId) return;
-    emit(state.copyWith(lastGymId: gym.id));
+  /// Pick the gym the next workout starts at, without touching a running
+  /// one. The pick lasts for that one workout.
+  void pickNextGym(Gym gym) {
+    if (gym.id == state.nextGymId) return;
+    emit(state.copyWith(nextGymId: gym.id));
   }
 
   /// Move an exercise card from [oldIndex] to [newIndex] (the index after
@@ -782,7 +810,7 @@ class WorkoutCubit extends HydratedCubit<WorkoutState> {
         rpe: rpe,
       ),
     ];
-    emit(state.copyWith(sets: sets));
+    emit(state.copyWith(sets: sets, lastSetAt: _now()));
   }
 
   void removeSet(int order) {
@@ -825,6 +853,7 @@ class WorkoutCubit extends HydratedCubit<WorkoutState> {
       s.copyWith(
         isInProgress: false,
         startTime: null,
+        lastSetAt: null,
         gymId: null,
         gymName: null,
         planTitle: null,
@@ -935,6 +964,7 @@ class WorkoutCubit extends HydratedCubit<WorkoutState> {
       s.copyWith(
         isInProgress: false,
         startTime: null,
+        lastSetAt: null,
         gymId: null,
         gymName: null,
         planTitle: null,

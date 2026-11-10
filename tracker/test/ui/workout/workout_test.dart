@@ -11,6 +11,7 @@ import 'package:tracker/domain/models/workout_set.dart';
 import 'package:tracker/domain/models/workout_split.dart';
 import 'package:tracker/ui/workout/view_models/workout_cubit.dart';
 import 'package:tracker/ui/workout/widgets/elapsed_clock.dart';
+import 'package:tracker/ui/workout/widgets/number_entry.dart';
 import 'package:tracker/ui/workout/widgets/workout_overview.dart';
 
 import '../../../testing/fakes/in_memory_storage.dart';
@@ -67,19 +68,23 @@ void main() {
       expect(find.text('Push Day'), findsOneWidget);
       expect(find.text('Finish'), findsOneWidget);
       expect(find.text('1 of 5 sets'), findsOneWidget);
-      expect(find.text('Continue'), findsOneWidget);
-      expect(find.text('1 of 2 sets'), findsOneWidget);
-      expect(find.text('3 sets of 6-8 reps'), findsOneWidget);
+      // Each exercise counts its sets on the right; the next step is docked.
+      expect(find.text('1 of 2'), findsOneWidget);
+      expect(find.text('0 of 3'), findsOneWidget);
+      expect(find.text('6-8 reps'), findsOneWidget);
+      expect(find.text('Continue Bench Press'), findsOneWidget);
       expect(
         find.byType(ElapsedClock),
         findsNWidgets(2),
         reason: 'header and tab',
       );
 
-      await tester.tap(find.text('Continue'));
+      await tester.tap(find.text('Continue Bench Press'));
       await tester.pumpAndSettle();
       expect(logButton(), findsOneWidget);
-      expect(find.text('Target: 2 sets of 8-12 reps'), findsOneWidget);
+      expect(find.text('Push Day, exercise 1 of 2'), findsOneWidget);
+      expect(find.text('Aim for 8-12 reps'), findsOneWidget);
+      expect(find.text('Resting'), findsOneWidget, reason: 'a set is in');
     });
 
     testWidgets('a finished exercise shrinks to its best set', (tester) async {
@@ -97,7 +102,29 @@ void main() {
       expect(find.text('Best set 82.5 kg × 8'), findsOneWidget);
       expect(find.text('2 of 2'), findsOneWidget);
       expect(find.text('Overhead Press'), findsOneWidget);
-      expect(find.text('0 of 3 sets'), findsOneWidget, reason: 'now current');
+      expect(find.text('0 of 3'), findsOneWidget);
+      expect(find.text('Continue Overhead Press'), findsOneWidget);
+    });
+
+    testWidgets('the dock offers Finish once the plan is done', (tester) async {
+      final cubit = await pumpPush(tester);
+      for (final (id, name, count) in [
+        (1, 'Bench Press', 2),
+        (2, 'Overhead Press', 3),
+      ]) {
+        for (var i = 0; i < count; i++) {
+          cubit.logSet(exerciseId: id, exerciseName: name, weight: 60, reps: 8);
+        }
+      }
+      await openWorkoutTab(tester);
+
+      await tester.tap(find.text('Finish workout'));
+      await tester.pumpAndSettle();
+      expect(find.text('Finish Push Day?'), findsOneWidget);
+      expect(find.textContaining('not done'), findsNothing);
+      await tester.tap(find.text('Save workout'));
+      await tester.pumpAndSettle();
+      expect(cubit.state.isInProgress, isFalse);
     });
 
     testWidgets('swiping an exercise away asks first when it has sets', (
@@ -151,14 +178,46 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Finish'));
       await tester.pumpAndSettle();
-      expect(find.text('End workout?'), findsOneWidget);
-      await tester.tap(find.text('End & save'));
+      expect(find.text('Finish Push Day?'), findsOneWidget);
+      expect(find.text('4 planned sets are not done.'), findsOneWidget);
+      expect(find.text('Bench Press, Overhead Press'), findsOneWidget);
+      await tester.tap(find.text('Keep going'));
+      await tester.pumpAndSettle();
+      expect(cubit.state.isInProgress, isTrue);
+
+      await tester.tap(find.text('Finish'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Save workout'));
       await tester.pumpAndSettle();
       expect(cubit.state.isInProgress, isFalse);
       expect(cubit.state.savedSnapshot!.planTitle, 'Push Day');
     });
 
-    testWidgets('Cancel workout in the menu discards after asking', (
+    testWidgets('Finish also offers to discard the workout', (tester) async {
+      final cubit = await pumpPush(tester);
+      cubit.logSet(
+        exerciseId: 1,
+        exerciseName: 'Bench Press',
+        weight: 60,
+        reps: 8,
+      );
+      await openWorkoutTab(tester);
+
+      await tester.tap(find.text('Finish'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Discard workout'));
+      await tester.pumpAndSettle();
+      expect(
+        find.text('This deletes the 1 set logged in this workout.'),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Discard workout').last);
+      await tester.pumpAndSettle();
+      expect(cubit.state.isInProgress, isFalse);
+      expect(cubit.state.discardedSnapshot, isNotNull);
+    });
+
+    testWidgets('Discard workout in the menu discards after asking', (
       tester,
     ) async {
       final cubit = await pumpPush(tester);
@@ -172,13 +231,13 @@ void main() {
 
       await tester.tap(fButtonByTooltip('Workout options'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Cancel workout'));
+      await tester.tap(find.text('Discard workout'));
       await tester.pumpAndSettle();
       expect(
         find.text('This deletes the 1 set logged in this workout.'),
         findsOneWidget,
       );
-      await tester.tap(find.text('Cancel workout').last);
+      await tester.tap(find.text('Discard workout').last);
       await tester.pumpAndSettle();
       expect(cubit.state.isInProgress, isFalse);
       expect(cubit.state.discardedSnapshot, isNotNull);
@@ -219,25 +278,49 @@ void main() {
       expect(find.text('Next: Overhead Press'), findsOneWidget);
       await tester.tap(find.text('Next: Overhead Press'));
       await tester.pumpAndSettle();
-      expect(find.text('Target: 3 sets of 6-8 reps'), findsOneWidget);
+      expect(find.text('Push Day, exercise 2 of 2'), findsOneWidget);
+      expect(find.text('Aim for 6-8 reps'), findsOneWidget);
     });
 
-    testWidgets(
-      'the circle logs its own row, filling it from the placeholder',
-      (tester) async {
-        final cubit = await pumpPush(tester);
-        await openExercise(tester, 'Bench Press');
-        await typeSet(tester, 0, weight: '70', reps: '10');
-        await leaveRow(tester);
-        expect(cubit.state.sets.single.reps, 10);
+    testWidgets('a tap anywhere on a waiting row makes it the set', (
+      tester,
+    ) async {
+      await pumpPush(tester);
+      await openExercise(tester, 'Bench Press');
+      expect(find.text('Set 1'), findsOneWidget, reason: 'the open row');
 
-        await tester.tap(labelled('Log set 2'));
-        await tester.pumpAndSettle();
-        expect(cubit.state.sets.last.weight, 70);
-        expect(cubit.state.sets.last.reps, 8, reason: 'the plan, not row 1');
-        expect(textIn(tester, repsField(1)), '8');
-      },
-    );
+      // The empty end of set 2's row, past its fields and badge.
+      final reps = tester.getRect(repsField(1));
+      await tester.tapAt(Offset(reps.right + 30, reps.center.dy));
+      await tester.pumpAndSettle();
+      expect(find.text('Set 2'), findsOneWidget);
+      expect(find.text('Set 1'), findsNothing);
+      expect(find.byType(NumberKeypad), findsNothing, reason: 'no field taken');
+    });
+
+    testWidgets('only the dock logs; it fills the row from the placeholder', (
+      tester,
+    ) async {
+      final cubit = await pumpPush(tester);
+      await openExercise(tester, 'Bench Press');
+      await typeSet(tester, 0, weight: '70', reps: '10');
+      await leaveRow(tester);
+      expect(cubit.state.sets.single.reps, 10);
+      expect(labelled('Set 1 logged'), findsOneWidget);
+      // A waiting row has no button of its own to log it by mistake.
+      expect(
+        find.byWidgetPredicate(
+          (w) => w is Semantics && w.properties.label == 'Log set 2',
+        ),
+        findsNothing,
+      );
+
+      await tester.tap(find.text('Log 70 kg × 8'));
+      await tester.pumpAndSettle();
+      expect(cubit.state.sets.last.weight, 70);
+      expect(cubit.state.sets.last.reps, 8, reason: 'the plan, not row 1');
+      expect(textIn(tester, repsField(1)), '8');
+    });
 
     testWidgets('typing one value and leaving logs it with the placeholder', (
       tester,
@@ -259,23 +342,59 @@ void main() {
       expect(hint, 'Reps');
       await typeSet(tester, 0, weight: '90');
       await leaveRow(tester);
-      expect(find.text('Must be greater than 0'), findsOneWidget);
+      expect(find.text('Must be between 0.1 and 2000'), findsOneWidget);
       expect(cubit.state.sets, isEmpty);
     });
 
-    testWidgets('fractional reps log exactly and below one is an error', (
+    testWidgets('an error sits right under its own field', (tester) async {
+      await pumpPush(tester);
+      await openExercise(tester, 'Bench Press');
+      await typeSet(tester, 0, weight: '60', reps: '0.05');
+      await leaveRow(tester);
+
+      final error = tester.getRect(find.text('Must be between 0.1 and 2000'));
+      final field = tester.getRect(repsField(0));
+      expect(error.top, greaterThan(field.bottom));
+      expect(error.top - field.bottom, lessThan(40));
+      expect(error.center.dx, closeTo(field.center.dx, 2));
+    });
+
+    testWidgets('partial reps log; outside 0.1 to 2000 is an error', (
       tester,
     ) async {
       final cubit = await pumpPush(tester);
       await openExercise(tester, 'Bench Press');
-      await typeSet(tester, 0, weight: '60', reps: '0.5');
+      await typeSet(tester, 0, weight: '60', reps: '0.05');
       await leaveRow(tester);
-      expect(find.text('Must be at least 1'), findsOneWidget);
+      expect(find.text('Must be between 0.1 and 2000'), findsOneWidget);
       expect(cubit.state.sets, isEmpty);
 
-      await typeSet(tester, 0, reps: '7.5');
+      await typeSet(tester, 0, reps: '0.5');
       await leaveRow(tester);
-      expect(cubit.state.sets.single.reps, 7.5);
+      expect(cubit.state.sets.single.reps, 0.5);
+    });
+
+    testWidgets('more than 200 reps asks first', (tester) async {
+      final cubit = await pumpPush(tester);
+      await openExercise(tester, 'Bench Press');
+      await typeSet(tester, 0, weight: '20', reps: '250');
+      await leaveRow(tester);
+      expect(find.text("That's a lot of reps"), findsOneWidget);
+      await tester.tap(find.text('Go back'));
+      await tester.pumpAndSettle();
+      expect(cubit.state.sets, isEmpty);
+
+      await tester.tap(find.text('Log 20 kg × 250'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Use these reps'));
+      await tester.pumpAndSettle();
+      expect(cubit.state.sets.single.reps, 250);
+
+      // Changing only the weight of that set does not ask again.
+      await typeSet(tester, 0, weight: '25');
+      await leaveRow(tester);
+      expect(find.text("That's a lot of reps"), findsNothing);
+      expect(cubit.state.sets.single.weight, 25);
     });
 
     testWidgets('the set badge toggles warm-up before and after logging', (
@@ -321,10 +440,8 @@ void main() {
       );
       await openExercise(tester, 'Bench Press', prefill: false);
 
-      expect(
-        find.text('Target: 1 warm-up, then 1 set of 8-12 reps'),
-        findsOneWidget,
-      );
+      expect(find.text('Warm-up'), findsOneWidget, reason: 'the open row');
+      expect(find.text('Aim for 12 reps'), findsOneWidget);
       expect(labelled('Warm-up set, tap for a working set'), findsOneWidget);
       expect(labelled('Set 1, tap for a warm-up'), findsOneWidget);
       await typeSet(tester, 0, weight: '40', reps: '12');
@@ -338,20 +455,36 @@ void main() {
       final cubit = await pumpPush(tester);
       await openExercise(tester, 'Bench Press');
 
-      // Rated before it is logged: the open row keeps it for the set.
-      await tester.tap(labelled('Set 1 RPE, not rated'));
+      // Rated in the open row before it is logged: Log carries it, on the
+      // side, and the set keeps it.
+      await tester.tap(labelled('Rate set 1 RPE 9'));
+      await tester.pumpAndSettle();
+      expect(find.text('RPE 9'), findsOneWidget, reason: 'beside Log');
+      expect(cubit.state.sets, isEmpty);
+      // A second tap on the picked value clears it.
+      await tester.tap(labelled('Rate set 1 RPE 9'));
+      await tester.pumpAndSettle();
+      expect(find.text('RPE 9'), findsNothing);
+      await tester.tap(labelled('Rate set 1 RPE 9'));
+      await tester.pumpAndSettle();
+      await typeSet(tester, 0, weight: '80', reps: '8');
+      await leaveRow(tester);
+      expect(cubit.state.sets.single.rpe, 9);
+
+      // The rare values sit behind the strip's last chip, in the sheet.
+      await tester.tap(labelled('Rate set 2, other RPE values'));
       await tester.pumpAndSettle();
       expect(
         find.text('Rate of perceived exertion, from 0 to 10'),
         findsOneWidget,
       );
-      await tester.tap(labelled('RPE 9'));
+      await tester.tap(labelled('RPE 4'));
       await tester.pumpAndSettle();
-      expect(labelled('Set 1 RPE 9'), findsOneWidget);
-      expect(cubit.state.sets, isEmpty);
-      await typeSet(tester, 0, weight: '80', reps: '8');
-      await leaveRow(tester);
-      expect(cubit.state.sets.single.rpe, 9);
+      expect(find.text('RPE 4'), findsOneWidget, reason: 'beside Log');
+      await tester.tap(labelled('Rate set 2, other RPE values'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Clear rating'));
+      await tester.pumpAndSettle();
 
       // A logged set is rated in place.
       await tester.tap(labelled('Set 1 RPE 9'));
@@ -364,7 +497,11 @@ void main() {
       settingsOf(tester).setEffortScale(EffortScale.rir);
       await tester.pumpAndSettle();
       expect(labelled('Set 1 RIR 3'), findsOneWidget);
-      expect(find.text('RIR'), findsOneWidget, reason: 'the column header');
+      expect(
+        find.text('RIR'),
+        findsNWidgets(2),
+        reason: 'the column header and the open row',
+      );
       await tester.tap(labelled('Set 1 RIR 3'));
       await tester.pumpAndSettle();
       expect(find.text('Reps in reserve, from 0 to 10'), findsOneWidget);
@@ -437,7 +574,7 @@ void main() {
       await tester.tap(find.text('Remove from workout'));
       await tester.pumpAndSettle();
       expect(cubit.state.plan.map((e) => e.name), ['Overhead Press']);
-      expect(find.text('Continue'), findsOneWidget);
+      expect(find.text('Continue Overhead Press'), findsOneWidget);
     });
   });
 
@@ -499,7 +636,7 @@ void main() {
       final cubit = await pumpPush(tester);
       await openExercise(tester, 'Bench Press', entry: NumberEntry.steppers);
       expect(find.byType(TextField), findsNothing);
-      expect(find.text('Hold a number to type it'), findsOneWidget);
+      expect(find.text('Aim for 8-12 reps'), findsOneWidget);
 
       for (var i = 0; i < 3; i++) {
         await tester.tap(labelled('Increase weight'));
@@ -521,47 +658,27 @@ void main() {
     });
   });
 
-  group('Restore buttons', () {
-    testWidgets('the last saved workout offers a restore button', (
+  group('Start view', () {
+    testWidgets('a workout that just ended is not offered back here', (
       tester,
     ) async {
       useTallWindow(tester);
       final cubit = await pumpApp(tester);
       await openWorkoutTab(tester);
-      expect(find.text('Restore last workout'), findsNothing);
 
       cubit.startWorkout();
       cubit.logSet(exerciseId: 1, exerciseName: 'Squat', weight: 100, reps: 5);
       await cubit.endWorkout();
-      await tester.pump();
-      expect(find.text('Restore last workout'), findsOneWidget);
-
-      await tester.tap(find.text('Restore last workout'));
       await tester.pumpAndSettle();
-      expect(cubit.state.isInProgress, isTrue);
-      expect(cubit.state.sets.single.weight, 100);
-      expect(find.text('Finish'), findsOneWidget);
+      expect(cubit.state.canRestoreSaved(), isTrue);
       expect(find.text('Restore last workout'), findsNothing);
-    });
-
-    testWidgets('the last discarded workout offers a restore button', (
-      tester,
-    ) async {
-      useTallWindow(tester);
-      final cubit = await pumpApp(tester);
-      await openWorkoutTab(tester);
 
       cubit.startWorkout();
       cubit.logSet(exerciseId: 1, exerciseName: 'Squat', weight: 100, reps: 5);
       await cubit.discardWorkout();
-      // pump (not pumpAndSettle): the restore window ticker runs every 30 s.
-      await tester.pump();
-      expect(find.text('Restore last workout'), findsOneWidget);
-
-      await tester.tap(find.text('Restore last workout'));
       await tester.pumpAndSettle();
-      expect(cubit.state.isInProgress, isTrue);
-      expect(cubit.state.sets.single.weight, 100);
+      expect(cubit.state.canRestoreDiscarded(), isTrue);
+      expect(find.text('Restore last workout'), findsNothing);
     });
 
     testWidgets('with no split the start view offers an empty workout', (
@@ -571,6 +688,8 @@ void main() {
       final cubit = await pumpApp(tester);
       await openWorkoutTab(tester);
       expect(find.text('Plan your split'), findsOneWidget);
+      // With no day to start, the dock is the only way in.
+      expect(find.text('Empty workout'), findsNothing);
       await tester.tap(find.text('Start empty workout'));
       await tester.pumpAndSettle();
       expect(cubit.state.isInProgress, isTrue);

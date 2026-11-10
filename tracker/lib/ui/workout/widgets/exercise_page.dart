@@ -6,6 +6,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:forui/forui.dart';
 import 'package:tracker/domain/models/effort_scale.dart';
 import 'package:tracker/domain/models/number_entry.dart';
+import 'package:tracker/domain/models/rep_limits.dart';
 import 'package:tracker/domain/models/split_draft.dart';
 import 'package:tracker/domain/models/weight_unit.dart';
 import 'package:tracker/domain/models/workout_set.dart';
@@ -21,7 +22,6 @@ import 'package:tracker/ui/core/ui/decimal_input_formatter.dart';
 import 'package:tracker/ui/core/ui/effort_format.dart';
 import 'package:tracker/ui/core/ui/icon_button.dart';
 import 'package:tracker/ui/core/ui/max_width.dart';
-import 'package:tracker/ui/core/ui/relative_dates.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
 import 'package:tracker/ui/core/ui/swipe_to_delete.dart';
 import 'package:tracker/ui/core/ui/weight_confirmation.dart';
@@ -32,12 +32,19 @@ import 'package:tracker/utils/decimal_input.dart';
 import 'package:tracker/utils/form_validators.dart';
 
 import 'effort_sheet.dart';
+import 'elapsed_clock.dart';
+import 'finish_workout.dart';
 import 'number_entry.dart';
-import 'workout_overview.dart';
+import 'plan_bar.dart';
+import 'set_comparison.dart';
+import 'workout_dock.dart';
+import 'workout_entries.dart';
 
-/// One exercise of the running workout on its own page: a row per set with
-/// weight and reps side by side, the set being done opened up with steppers,
-/// and a Log button in thumb reach.
+/// One exercise of the running workout on its own page: where it sits in the
+/// workout, a row per set with weight and reps side by side (last time's
+/// values small under each), the set being done opened up with steppers and
+/// its rating, and the next step docked in thumb reach: Log, then Next, then
+/// Finish.
 class ExercisePage extends StatefulWidget {
   const ExercisePage({super.key, required this.exerciseId});
 
@@ -89,7 +96,13 @@ class _ExercisePageState extends State<ExercisePage> {
         }
         Widget body(SettingsState settings) => _ExerciseBody(
           entry: entries[index],
-          next: index + 1 < entries.length ? entries[index + 1] : null,
+          index: index,
+          entries: entries,
+          next: nextEntryAfter(entries, index),
+          title: state.planTitle ?? 'Free workout',
+          isPlan: state.planTitle != null,
+          startTime: state.startTime ?? DateTime.now(),
+          lastSetAt: state.lastSetAt,
           previous: _previous,
           prefill: settings.prefillSets,
           entryMode: settings.numberEntry,
@@ -175,7 +188,13 @@ class _Row {
 class _ExerciseBody extends StatefulWidget {
   const _ExerciseBody({
     required this.entry,
+    required this.index,
+    required this.entries,
     required this.next,
+    required this.title,
+    required this.isPlan,
+    required this.startTime,
+    required this.lastSetAt,
     required this.previous,
     required this.prefill,
     required this.entryMode,
@@ -183,7 +202,22 @@ class _ExerciseBody extends StatefulWidget {
   });
 
   final WorkoutEntry entry;
+
+  /// [entry]'s place in [entries], the running workout's exercises.
+  final int index;
+  final List<WorkoutEntry> entries;
+
+  /// The exercise to move on to: the next one with sets left.
   final WorkoutEntry? next;
+
+  /// The day's name ("Free workout" without a plan).
+  final String title;
+  final bool isPlan;
+  final DateTime startTime;
+
+  /// When the workout's last set was logged: the rest clock counts from it.
+  final DateTime? lastSetAt;
+
   final PreviousPerformance? previous;
   final bool prefill;
   final NumberEntry entryMode;
@@ -209,6 +243,13 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
   ({_Row row, _Kind kind})? _typing;
 
   OverlayEntry? _overlay;
+
+  /// The keypad is sliding away; its entry goes once it is out of sight.
+  bool _overlayClosing = false;
+  final _panelKey = GlobalKey<_SlidePanelState>();
+
+  /// The panel last shown, kept on screen while it slides away.
+  Widget? _lastPanel;
   Timer? _repeat;
 
   /// The field to lift above the keypad once the page has made room.
@@ -450,18 +491,41 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
         _focused != null &&
         (widget.entryMode == NumberEntry.keypad || _usesPhoneKeyboard);
     if (!wanted) {
-      _removeOverlay();
+      _hideOverlay();
       return;
     }
     if (_overlay == null) {
       _overlay = OverlayEntry(builder: _buildOverlay);
       Overlay.of(context, rootOverlay: true).insert(_overlay!);
     } else {
+      if (_overlayClosing) {
+        // Focus came back while it slid away: bring it back up.
+        _overlayClosing = false;
+        _panelKey.currentState?.show();
+      }
       _overlay!.markNeedsBuild();
     }
   }
 
+  /// Slides the panel away, then removes its entry.
+  void _hideOverlay() {
+    final entry = _overlay;
+    if (entry == null || _overlayClosing) return;
+    final panel = _panelKey.currentState;
+    if (panel == null) {
+      _removeOverlay();
+      return;
+    }
+    _overlayClosing = true;
+    entry.markNeedsBuild();
+    panel.hide().then((_) {
+      if (_overlayClosing && identical(_overlay, entry)) _removeOverlay();
+    });
+  }
+
   void _removeOverlay() {
+    _overlayClosing = false;
+    _lastPanel = null;
     _overlay?.remove();
     _overlay?.dispose();
     _overlay = null;
@@ -469,42 +533,57 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
 
   Widget _buildOverlay(BuildContext overlayContext) {
     final focused = _focused;
-    if (focused == null || !mounted) return const SizedBox.shrink();
+    if (focused != null && mounted && !_overlayClosing) {
+      _lastPanel = _panel(focused);
+    }
+    final panel = _lastPanel;
+    if (panel == null) return const SizedBox.shrink();
+    return Positioned(
+      left: 0,
+      right: 0,
+      // The keyboard bar rides on the phone's keyboard.
+      bottom: widget.entryMode == NumberEntry.keypad
+          ? 0
+          : MediaQuery.viewInsetsOf(overlayContext).bottom,
+      child: IgnorePointer(
+        ignoring: _overlayClosing,
+        child: _SlidePanel(key: _panelKey, child: panel),
+      ),
+    );
+  }
+
+  Widget _panel(({_Row row, _Kind kind}) focused) {
     final sets = _liveSets;
     final index = _rows.indexOf(focused.row);
     final ghosts = _ghosts(sets);
     final badges = _badges(sets, ghosts);
     final logged = index < sets.length;
     final logLabel = logged ? 'Done' : _logLabel(index, ghosts, badges);
+    final rating = logged ? null : focused.row.rpe;
+    final logTrailing = rating == null
+        ? null
+        : effortLabel(widget.effort, rating);
     final onLog = logged ? _unfocus : () => _logRow(focused.row);
     final isWeight = focused.kind == _Kind.weight;
     if (widget.entryMode == NumberEntry.keypad) {
       final unit = weightUnitOf(context).symbol;
-      return Positioned(
-        left: 0,
-        right: 0,
-        bottom: 0,
-        child: NumberKeypad(
-          caption: isWeight
-              ? 'Set ${badges[index]} weight, in $unit'
-              : 'Set ${badges[index]} reps',
-          allowSign: isWeight,
-          logLabel: logLabel,
-          onLog: onLog,
-          onKey: (key, digit) => _onKey(focused, key, digit),
-        ),
+      return NumberKeypad(
+        caption: isWeight
+            ? 'Set ${badges[index]} weight, in $unit'
+            : 'Set ${badges[index]} reps',
+        allowSign: isWeight,
+        logLabel: logLabel,
+        logTrailing: logTrailing,
+        onLog: onLog,
+        onKey: (key, digit) => _onKey(focused, key, digit),
       );
     }
-    return Positioned(
-      left: 0,
-      right: 0,
-      bottom: MediaQuery.viewInsetsOf(overlayContext).bottom,
-      child: KeyboardToolbar(
-        onSign: isWeight ? () => _onKey(focused, KeypadKey.sign, '') : null,
-        onNext: () => _onKey(focused, KeypadKey.next, ''),
-        logLabel: logLabel,
-        onLog: onLog,
-      ),
+    return KeyboardToolbar(
+      onSign: isWeight ? () => _onKey(focused, KeypadKey.sign, '') : null,
+      onNext: () => _onKey(focused, KeypadKey.next, ''),
+      logLabel: logLabel,
+      logTrailing: logTrailing,
+      onLog: onLog,
     );
   }
 
@@ -608,8 +687,7 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
     final weightDisplay = parseDecimal(weightText, allowNegative: true);
     final reps = parseDecimal(repsText);
     final weightError = requiredWeight(weightText);
-    var repsError = requiredReps(repsText);
-    if (reps != null && reps < 1) repsError = 'Must be at least 1';
+    final repsError = requiredReps(repsText);
     if (weightError != null ||
         repsError != null ||
         weightDisplay == null ||
@@ -634,7 +712,10 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
 
     final warmup = _isWarmup(index, sets, _ghosts(sets));
     row.busy = true;
-    final confirmed = await confirmWeightEntry(context, weightDisplay);
+    final confirmed =
+        await confirmWeightEntry(context, weightDisplay) &&
+        mounted &&
+        (mapped?.reps == reps || await confirmRepsEntry(context, reps));
     row.busy = false;
     if (!mounted || !confirmed) return;
 
@@ -727,15 +808,21 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
       rpe: _rpeAt(index, sets),
     );
     if (choice == null || !mounted) return;
-    // The tap that opened the sheet can blur the row, and that blur may have
-    // logged it since: re-read where the rating goes.
+    _rate(row, choice.rpe);
+  }
+
+  /// Rates [row]'s set ([rpe] null clears it). The tap that rated it can
+  /// blur the row, and that blur may have logged it since: re-read where the
+  /// rating goes.
+  void _rate(_Row row, double? rpe) {
     final at = _rows.indexOf(row);
     if (at < 0) return;
     final live = _liveSets;
     if (at < live.length) {
-      context.read<WorkoutCubit>().setRpe(live[at].order, choice.rpe);
+      context.read<WorkoutCubit>().setRpe(live[at].order, rpe);
     } else {
-      setState(() => row.rpe = choice.rpe);
+      setState(() => row.rpe = rpe);
+      _overlay?.markNeedsBuild();
     }
   }
 
@@ -795,7 +882,12 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
       row.weight.text = formatDecimal(next.toDouble());
     } else {
       final current = parseDecimal(row.reps.text) ?? ghost.reps ?? 0;
-      row.reps.text = formatDecimal(math.max(current + direction, 1));
+      // Stepping never goes below one rep, or below a partial rep typed in.
+      final next = (current + direction).clamp(
+        math.min(1.0, math.max(current, minimumReps)),
+        maximumReps,
+      );
+      row.reps.text = formatDecimal(next.toDouble());
     }
     setState(() {});
     _overlay?.markNeedsBuild();
@@ -877,7 +969,6 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
       // Another tab is showing: put the keypad away with the focus.
       WidgetsBinding.instance.addPostFrameCallback((_) => _unfocus());
     }
-    final theme = context.theme;
     final sets = widget.entry.sets;
     final ghosts = _ghosts(sets);
     final badges = _badges(sets, ghosts);
@@ -917,7 +1008,7 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: <Widget>[
-                        _context(context),
+                        _position(context),
                         _columnHeader(context),
                         for (var i = 0; i < _rows.length; i++)
                           KeyedSubtree(
@@ -961,7 +1052,7 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
             left: 0,
             right: 0,
             bottom: 0,
-            child: _dock(context, theme, sets, ghosts, badges, current),
+            child: _dock(context, sets, ghosts, badges, current),
           ),
         ],
       ),
@@ -998,34 +1089,83 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
     );
   }
 
-  Widget _context(BuildContext context) {
+  /// Where this exercise sits in the workout: the day, its place, the
+  /// workout clock and one segment per exercise. A tap goes back to the list.
+  Widget _position(BuildContext context) {
     final theme = context.theme;
-    final style = theme.typography.body.xs.copyWith(
-      color: theme.colors.mutedForeground,
-      height: 1.5,
-    );
-    final previous = widget.previous;
-    final planned = widget.entry.exercise.sets;
-    final lines = <String>[
-      if (previous != null && previous.sets.isNotEmpty)
-        'Last time, ${dayLabel(previous.date)}: '
-            '${previous.sets.map((set) => _setText(context, set)).join(', ')}',
-      if (planned.isNotEmpty)
-        'Target: '
-            '${setsSummary([for (final set in planned) SetTarget.fromPlanned(set)])}',
-    ];
-    if (lines.isEmpty) return const SizedBox(height: 4);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-      child: Text(lines.join('\n'), style: style),
+    final accents = TrackerAccents.of(context);
+    final entries = widget.entries;
+    return Semantics(
+      button: true,
+      hint: 'Back to the workout list',
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => Navigator.of(context).maybePop(),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              Row(
+                children: <Widget>[
+                  Expanded(
+                    child: Text(
+                      '${widget.title}, exercise ${widget.index + 1} of '
+                      '${entries.length}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.typography.body.xs.copyWith(
+                        color: theme.colors.mutedForeground,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  ElapsedClock(
+                    start: widget.startTime,
+                    style: theme.typography.body.xs.copyWith(
+                      color: accents.live,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              PlanBar(segments: planSegments(entries, current: widget.index)),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
-  static String _setText(BuildContext context, WorkoutSet set) {
-    final weight = formatDecimal(displayWeightOf(context, set.weight));
-    final text = '$weight × ${formatReps(set.reps)}';
-    return set.isWarmup ? 'W $text' : text;
+  /// Last session's value for the row at [index], small under the number:
+  /// null when there is none, or when [ghost] already shows it as the
+  /// placeholder.
+  String? _lastValue(int index, _Kind kind, {SetGhost? ghost}) {
+    final sets = widget.previous?.sets;
+    if (sets == null || index >= sets.length) return null;
+    final set = sets[index];
+    final value = kind == _Kind.weight
+        ? formatDecimal(displayWeightOf(context, set.weight))
+        : formatReps(set.reps);
+    if (ghost != null) {
+      final shown = kind == _Kind.weight
+          ? (ghost.weight == null
+                ? null
+                : formatDecimal(displayWeightOf(context, ghost.weight!)))
+          : (ghost.reps == null ? null : formatReps(ghost.reps!));
+      if (shown == value) return null;
+    }
+    return value;
   }
+
+  TextStyle _lastStyle(BuildContext context) =>
+      context.theme.typography.body.xs3.copyWith(
+        color: context.theme.colors.mutedForeground,
+        fontWeight: FontWeight.w500,
+        height: 1.2,
+        fontFeatures: const [FontFeature.tabularFigures()],
+      );
 
   Widget _columnHeader(BuildContext context) {
     final theme = context.theme;
@@ -1085,19 +1225,23 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
       onFocusChange: (focused) {
         if (!focused) _commitRow(row);
       },
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          SwipeToDelete(
-            canDelete: _canDelete(index),
-            onDelete: () => _onDeleted(row),
-            // The page color under the row's own rounded tint: the delete
-            // background never shows at rest, the corners stay round.
-            surface: colors.background,
-            child: content,
-          ),
-          _errors(context, row),
-        ],
+      child: SwipeToDelete(
+        canDelete: _canDelete(index),
+        onDelete: () => _onDeleted(row),
+        // The page color under the row's own rounded tint: the delete
+        // background never shows at rest, the corners stay round.
+        surface: colors.background,
+        // Switching the set being done opens one row and folds the other:
+        // both glide to their new height. The fields keep their keys, so
+        // the two layouts never overlap.
+        child: AnimatedSize(
+          duration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
+          alignment: Alignment.topCenter,
+          child: content,
+        ),
       ),
     );
   }
@@ -1114,62 +1258,111 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
     final accents = TrackerAccents.of(context);
     final theme = context.theme;
     final ghost = ghosts[index];
+    final rpe = _rpeAt(index, sets);
     Widget box(_Kind kind) {
       final field = _valueField(context, row, kind, ghost, big: false);
+      // A waiting row's placeholder is usually last time's value already.
+      final last = _lastValue(index, kind, ghost: logged ? null : ghost);
       return Container(
         height: 40,
         alignment: Alignment.center,
-        decoration: logged
-            ? null
-            : BoxDecoration(
-                color: theme.colors.background,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color:
-                      (kind == _Kind.weight
-                              ? row.weightError
-                              : row.repsError) ==
-                          null
-                      ? theme.colors.border
-                      : theme.colors.error,
-                ),
+        child: last == null
+            ? field
+            : Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  field,
+                  Text(
+                    last,
+                    textAlign: TextAlign.center,
+                    style: _lastStyle(context),
+                  ),
+                ],
               ),
-        child: field,
       );
     }
 
-    return Container(
-      height: 54,
-      padding: const EdgeInsets.symmetric(horizontal: 8),
+    final hasError = row.weightError != null || row.repsError != null;
+    // A set reads its state from its row: a waiting one is outlined in grey,
+    // the one being done in blue (the open row), a logged one filled in.
+    // The numbers sit in the same columns in all three.
+    final frame = Container(
+      constraints: const BoxConstraints(minHeight: 54),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
       decoration: BoxDecoration(
         color: logged ? accents.liveSoft : theme.colors.background,
         borderRadius: BorderRadius.circular(12),
+        border: logged
+            ? null
+            : Border.all(
+                color: hasError ? theme.colors.error : theme.colors.border,
+              ),
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           _badge(context, row, badges[index], _isWarmup(index, sets, ghosts)),
           const SizedBox(width: 8),
-          Expanded(child: box(_Kind.weight)),
-          _times(context),
-          Expanded(child: box(_Kind.reps)),
-          const SizedBox(width: 6),
-          _effortCell(
-            context,
-            row,
-            rpe: _rpeAt(index, sets),
-            badge: badges[index],
-            logged: logged,
+          Expanded(
+            child: _withError(context, box(_Kind.weight), row.weightError),
           ),
+          _times(context),
+          Expanded(child: _withError(context, box(_Kind.reps), row.repsError)),
+          const SizedBox(width: 6),
+          // A waiting set has nothing to rate or tick yet.
+          if (logged || rpe != null)
+            _effortCell(
+              context,
+              row,
+              rpe: rpe,
+              badge: badges[index],
+              logged: logged,
+            )
+          else
+            const SizedBox(width: _effortWidth),
           const SizedBox(width: 8),
-          _check(
-            context,
-            row,
-            logged: logged,
-            current: false,
-            label: badges[index],
+          SizedBox(
+            width: 40,
+            height: 40,
+            child: logged ? _loggedMark(context, badges[index]) : null,
           ),
         ],
       ),
+    );
+    // The whole row is the target: a tap anywhere makes it the set being
+    // done. The badge, the rating and the fields keep their own taps.
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () {
+        // Another row being typed in saves as its focus leaves.
+        if (_focused != null) FocusManager.instance.primaryFocus?.unfocus();
+        _select(row);
+      },
+      child: frame,
+    );
+  }
+
+  /// [field] with its error right under it, in its own column.
+  Widget _withError(BuildContext context, Widget field, String? error) {
+    if (error == null) return field;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        field,
+        Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Text(
+            error,
+            textAlign: TextAlign.center,
+            style: context.theme.typography.body.xs3.copyWith(
+              color: context.theme.colors.error,
+              height: 1.3,
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -1224,45 +1417,139 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
     );
   }
 
-  /// The opened row's rating: "RPE 8", or "RPE -" until rated.
-  Widget _effortChip(
+  /// The open row's rating in one tap: the usual values in a strip, the rest
+  /// behind its last chip in the full sheet. Tapping the picked value again
+  /// clears it. It stays quiet: the numbers are what the row is about.
+  Widget _effortStrip(
     BuildContext context,
     _Row row, {
     required double? rpe,
     required String badge,
   }) {
     final theme = context.theme;
+    final accents = TrackerAccents.of(context);
     final scale = widget.effort;
-    return Semantics(
-      button: true,
-      label: _effortSemantics(badge, rpe),
-      excludeSemantics: true,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () => _pickEffort(row),
-        child: Container(
-          height: 36,
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: theme.colors.background,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: theme.colors.border),
-          ),
-          child: Text(
-            rpe == null
-                ? '${scale.label} -'
-                : '${scale.label} ${formatEffort(scale, rpe)}',
-            style: theme.typography.body.xs.copyWith(
-              fontWeight: FontWeight.w600,
-              color: rpe == null ? theme.colors.mutedForeground : null,
-              fontFeatures: const [FontFeature.tabularFigures()],
+    final who = badge == 'W' ? 'warm-up' : 'set $badge';
+    final picked = rpe == null ? null : scale.fromRpe(rpe);
+    // RPE 6 to 10 (RIR 4 to 0) cover nearly every set worth rating.
+    final common = scale == EffortScale.rpe
+        ? const [6, 7, 8, 9, 10]
+        : const [0, 1, 2, 3, 4];
+    final rarePicked = picked != null && !common.any((v) => v == picked);
+
+    Widget chip(
+      String label, {
+      required bool selected,
+      required String semantics,
+      required VoidCallback onTap,
+    }) => Expanded(
+      child: Semantics(
+        button: true,
+        selected: selected,
+        label: semantics,
+        excludeSemantics: true,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap,
+          child: Container(
+            height: 34,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: selected ? accents.liveSoft : null,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: selected ? accents.liveSoft : theme.colors.border,
+              ),
+            ),
+            child: Text(
+              label,
+              style: theme.typography.body.xs.copyWith(
+                fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+                color: selected ? accents.live : theme.colors.mutedForeground,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
             ),
           ),
         ),
       ),
     );
+
+    final rare = chip(
+      rarePicked
+          ? formatEffort(scale, rpe!)
+          : (scale == EffortScale.rpe ? '<6' : '5+'),
+      selected: rarePicked,
+      semantics: 'Rate $who, other ${scale.label} values',
+      onTap: () => _pickEffort(row),
+    );
+    final chips = <Widget>[
+      for (final value in common)
+        chip(
+          '$value',
+          selected: picked == value,
+          semantics: 'Rate $who ${scale.label} $value',
+          onTap: () => _rate(
+            row,
+            picked == value ? null : scale.toRpe(value.toDouble()),
+          ),
+        ),
+    ];
+    return Row(
+      children: <Widget>[
+        SizedBox(
+          width: 34,
+          child: Text(
+            scale.label,
+            style: theme.typography.body.xs3.copyWith(
+              color: theme.colors.mutedForeground,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        for (final (i, item) in [
+          if (scale == EffortScale.rpe) rare,
+          ...chips,
+          if (scale == EffortScale.rir) rare,
+        ].indexed) ...[if (i > 0) const SizedBox(width: 5), item],
+      ],
+    );
   }
+
+  /// A label sitting on the open row's outline.
+  /// How the open row at [index] compares with the same set last time, from
+  /// what is typed or prefilled. Null when there is no such set, when it was
+  /// of the other kind (warm-up against working), or nothing differs.
+  SetComparison? _comparison(
+    int index,
+    SetGhost ghost, {
+    required bool warmup,
+  }) {
+    final sets = widget.previous?.sets;
+    if (sets == null || index >= sets.length) return null;
+    final last = sets[index];
+    if (last.isWarmup != warmup) return null;
+    final row = _rows[index];
+    final weight =
+        parseDecimal(row.weight.text, allowNegative: true) ??
+        (ghost.weight == null ? null : displayWeightOf(context, ghost.weight!));
+    final reps = parseDecimal(row.reps.text) ?? ghost.reps;
+    if (weight == null || reps == null) return null;
+    return compareWithLast(
+      weight: weight,
+      reps: reps,
+      lastWeight: displayWeightOf(context, last.weight),
+      lastReps: last.reps,
+      unit: weightUnitOf(context).symbol,
+    );
+  }
+
+  Widget _legend(BuildContext context, Widget child) => Container(
+    height: 16,
+    color: context.theme.colors.background,
+    padding: const EdgeInsets.symmetric(horizontal: 6),
+    alignment: Alignment.center,
+    child: child,
+  );
 
   Widget _openRow(
     BuildContext context,
@@ -1278,116 +1565,202 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
     final ghost = ghosts[index];
     final steppers = widget.entryMode == NumberEntry.steppers;
     final unit = weightUnitOf(context).symbol;
-    return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: logged ? accents.liveSoft : theme.colors.background,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: accents.live, width: 2),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          Row(
+    final badge = badges[index];
+    final warmup = _isWarmup(index, sets, ghosts);
+    final planned = _plannedAt(index);
+    final target = planned == null ? null : SetTarget.fromPlanned(planned);
+    final note = logged
+        ? 'Logged'
+        : target != null
+        ? 'Aim for ${target.label} ${target.unit}'
+        : steppers
+        ? 'Hold a number to type it'
+        : null;
+    String caption(_Kind kind, String fallback) {
+      final last = _lastValue(index, kind);
+      return last == null ? fallback : 'last $last';
+    }
+
+    final comparison = _comparison(index, ghost, warmup: warmup);
+
+    final values = steppers
+        ? Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              _badge(
-                context,
-                row,
-                badges[index],
-                _isWarmup(index, sets, ghosts),
-              ),
-              const SizedBox(width: 10),
               Expanded(
-                child: Text(
-                  _caption(index, logged: logged, steppers: steppers),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.typography.body.xs.copyWith(
-                    color: theme.colors.mutedForeground,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 6),
-              _effortChip(
-                context,
-                row,
-                rpe: _rpeAt(index, sets),
-                badge: badges[index],
-              ),
-              const SizedBox(width: 6),
-              _check(
-                context,
-                row,
-                logged: logged,
-                current: true,
-                label: badges[index],
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          if (steppers)
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: <Widget>[
-                Expanded(
-                  child: _verticalStepper(
+                child: _withError(
+                  context,
+                  _verticalStepper(
                     context,
                     row,
                     _Kind.weight,
                     ghost,
-                    unit,
+                    caption(_Kind.weight, unit),
                   ),
+                  row.weightError,
                 ),
-                _times(context),
-                Expanded(
-                  child: _verticalStepper(
+              ),
+              SizedBox(height: 144, child: _times(context)),
+              Expanded(
+                child: _withError(
+                  context,
+                  _verticalStepper(
                     context,
                     row,
                     _Kind.reps,
                     ghost,
-                    'reps',
+                    caption(_Kind.reps, 'reps'),
+                  ),
+                  row.repsError,
+                ),
+              ),
+            ],
+          )
+        : Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Expanded(
+                child: _withError(
+                  context,
+                  _stepperGroup(
+                    context,
+                    row,
+                    _Kind.weight,
+                    ghost,
+                    caption(_Kind.weight, unit),
+                  ),
+                  row.weightError,
+                ),
+              ),
+              SizedBox(height: 52, child: _times(context)),
+              Expanded(
+                child: _withError(
+                  context,
+                  _stepperGroup(
+                    context,
+                    row,
+                    _Kind.reps,
+                    ghost,
+                    caption(_Kind.reps, 'reps'),
+                  ),
+                  row.repsError,
+                ),
+              ),
+            ],
+          );
+    final label = theme.typography.body.xs.copyWith(
+      fontWeight: FontWeight.w700,
+      color: accents.live,
+    );
+    final opened = Stack(
+      children: <Widget>[
+        Container(
+          // The outline starts below the labels' midline, and ends above
+          // the comparison's.
+          margin: EdgeInsets.only(top: 8, bottom: comparison == null ? 0 : 8),
+          padding: EdgeInsets.fromLTRB(8, 16, 8, comparison == null ? 8 : 12),
+          decoration: BoxDecoration(
+            color: logged ? accents.liveSoft : theme.colors.background,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: accents.live, width: 2),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              values,
+              const SizedBox(height: 8),
+              _effortStrip(
+                context,
+                row,
+                rpe: _rpeAt(index, sets),
+                badge: badge,
+              ),
+            ],
+          ),
+        ),
+        Positioned(
+          top: 0,
+          left: 12,
+          child: Semantics(
+            button: true,
+            label: warmup
+                ? 'Warm-up set, tap for a working set'
+                : 'Set $badge, tap for a warm-up',
+            excludeSemantics: true,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => _toggleWarmup(row),
+              child: _legend(
+                context,
+                Text(warmup ? 'Warm-up' : 'Set $badge', style: label),
+              ),
+            ),
+          ),
+        ),
+        if (note != null)
+          Positioned(
+            top: 0,
+            right: 12,
+            child: _legend(
+              context,
+              Text(
+                note,
+                maxLines: 1,
+                style: theme.typography.body.xs.copyWith(
+                  color: theme.colors.mutedForeground,
+                ),
+              ),
+            ),
+          ),
+        if (comparison != null)
+          Positioned(
+            left: 12,
+            right: 12,
+            bottom: 0,
+            child: Center(
+              child: IntrinsicWidth(
+                child: _legend(
+                  context,
+                  Text(
+                    comparison.text,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.typography.body.xs.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: comparison.isAhead
+                          ? accents.live
+                          : theme.colors.mutedForeground,
+                    ),
                   ),
                 ),
-              ],
-            )
-          else
-            Row(
-              children: <Widget>[
-                Expanded(
-                  child: _stepperGroup(context, row, _Kind.weight, ghost, unit),
-                ),
-                _times(context),
-                Expanded(
-                  child: _stepperGroup(context, row, _Kind.reps, ghost, 'reps'),
-                ),
-              ],
+              ),
             ),
-        ],
-      ),
+          ),
+      ],
     );
-  }
-
-  String _caption(int index, {required bool logged, required bool steppers}) {
-    if (logged) return 'Logged. Change a number to fix it.';
-    if (steppers) return 'Hold a number to type it';
-    final previous = widget.previous;
-    final planned = _plannedAt(index);
-    final parts = <String>[
-      if (previous != null && index < previous.sets.length)
-        'Last time ${_setText(context, previous.sets[index])}',
-      if (planned != null)
-        'Target ${SetTarget.fromPlanned(planned).description}',
-    ];
-    return parts.isEmpty ? 'Next set' : parts.join('. ');
+    // Fades up as it opens, while the row around it grows into place.
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: MediaQuery.disableAnimationsOf(context)
+          ? Duration.zero
+          : const Duration(milliseconds: 220),
+      curve: Curves.easeOutCubic,
+      builder: (context, t, child) =>
+          Opacity(opacity: 0.35 + 0.65 * t, child: child),
+      child: opened,
+    );
   }
 
   Widget _times(BuildContext context) => SizedBox(
     width: 18,
-    child: Text(
-      '×',
-      textAlign: TextAlign.center,
-      style: context.theme.typography.body.xs.copyWith(
-        color: context.theme.colors.mutedForeground,
+    height: 40,
+    child: Center(
+      child: Text(
+        '×',
+        textAlign: TextAlign.center,
+        style: context.theme.typography.body.xs.copyWith(
+          color: context.theme.colors.mutedForeground,
+        ),
       ),
     ),
   );
@@ -1397,7 +1770,7 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
     _Row row,
     _Kind kind,
     SetGhost ghost,
-    String unit,
+    String caption,
   ) {
     final theme = context.theme;
     return Container(
@@ -1423,12 +1796,7 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
                   height: 32,
                   child: _valueField(context, row, kind, ghost, big: true),
                 ),
-                Text(
-                  unit,
-                  style: theme.typography.body.xs3.copyWith(
-                    color: theme.colors.mutedForeground,
-                  ),
-                ),
+                Text(caption, maxLines: 1, style: _lastStyle(context)),
               ],
             ),
           ),
@@ -1443,7 +1811,7 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
     _Row row,
     _Kind kind,
     SetGhost ghost,
-    String unit,
+    String caption,
   ) {
     final theme = context.theme;
     return Column(
@@ -1464,12 +1832,7 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
               color: theme.colors.mutedForeground,
             ),
             const SizedBox(width: 2),
-            Text(
-              unit,
-              style: theme.typography.body.xs3.copyWith(
-                color: theme.colors.mutedForeground,
-              ),
-            ),
+            Text(caption, maxLines: 1, style: _lastStyle(context)),
           ],
         ),
         const SizedBox(height: 4),
@@ -1641,97 +2004,50 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
     );
   }
 
-  Widget _check(
-    BuildContext context,
-    _Row row, {
-    required bool logged,
-    required bool current,
-    required String label,
-  }) {
-    final theme = context.theme;
+  /// A logged set's tick. Only the dock logs, so a stray tap on a waiting
+  /// row never saves it.
+  Widget _loggedMark(BuildContext context, String label) {
     final accents = TrackerAccents.of(context);
     return Semantics(
-      button: !logged,
-      label: logged
-          ? (label == 'W' ? 'Warm-up logged' : 'Set $label logged')
-          : (label == 'W' ? 'Log warm-up' : 'Log set $label'),
+      label: label == 'W' ? 'Warm-up logged' : 'Set $label logged',
       excludeSemantics: true,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: logged ? null : () => _logRow(row),
-        child: SizedBox(
-          width: 40,
-          height: 40,
-          child: Center(
-            child: Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: logged ? accents.live : null,
-                border: Border.all(
-                  color: logged || current ? accents.live : theme.colors.border,
-                  width: 2,
-                ),
-              ),
-              child: logged
-                  ? Icon(
-                      FLucideIcons.check,
-                      size: 18,
-                      color: accents.liveForeground,
-                    )
-                  : null,
-            ),
+      child: Center(
+        child: Container(
+          width: 28,
+          height: 28,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: accents.live,
+          ),
+          child: Icon(
+            FLucideIcons.check,
+            size: 16,
+            color: accents.liveForeground,
           ),
         ),
       ),
     );
   }
 
-  /// Each error sits under its own field, in a row that mirrors the field
-  /// row's columns.
-  Widget _errors(BuildContext context, _Row row) {
-    if (row.weightError == null && row.repsError == null) {
-      return const SizedBox.shrink();
-    }
-    final style = context.theme.typography.body.xs.copyWith(
-      color: context.theme.colors.error,
-    );
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(44, 4, 52 + 6 + _effortWidth, 0),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Expanded(
-            child: row.weightError == null
-                ? const SizedBox.shrink()
-                : Text(row.weightError!, style: style),
-          ),
-          const SizedBox(width: 18),
-          Expanded(
-            child: row.repsError == null
-                ? const SizedBox.shrink()
-                : Text(row.repsError!, style: style),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _dock(
     BuildContext context,
-    FThemeData theme,
     List<ActiveSet> sets,
     List<SetGhost> ghosts,
     List<String> badges,
     int? current,
   ) {
+    final lastSetAt = widget.lastSetAt;
     final Widget button;
     if (current != null && current >= sets.length) {
+      final rating = _rows[current].rpe;
       button = AccentButton(
         large: true,
-        prefix: FLucideIcons.check,
+        // The rest clock takes its share of the row: the label keeps the
+        // room.
+        prefix: lastSetAt == null ? FLucideIcons.check : null,
         label: _logLabel(current, ghosts, badges),
+        // The rating rides along on the side: weight and reps lead.
+        trailing: rating == null ? null : effortLabel(widget.effort, rating),
         onPress: () => _logRow(_rows[current]),
       );
     } else if (current != null) {
@@ -1746,23 +2062,61 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
           ExercisePage(exerciseId: next.exercise.exerciseId),
         ),
       );
-    } else {
+    } else if (widget.isPlan) {
       button = AccentButton(
         large: true,
-        label: 'Back to overview',
+        label: 'Finish workout',
+        onPress: () => finishWorkout(context),
+      );
+    } else {
+      // A free workout grows one exercise at a time from its list.
+      button = AccentButton(
+        large: true,
+        label: 'Back to workout',
         onPress: () => Navigator.of(context).maybePop(),
       );
     }
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: theme.colors.background,
-        border: Border(top: BorderSide(color: theme.colors.border)),
-      ),
-      child: MaxWidth(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
-          child: button,
-        ),
+    return WorkoutDock(
+      leading: lastSetAt == null ? null : _RestClock(since: lastSetAt),
+      child: button,
+    );
+  }
+}
+
+/// How long since the workout's last set, beside the next step: counts up,
+/// nothing to set.
+class _RestClock extends StatelessWidget {
+  const _RestClock({required this.since});
+
+  final DateTime since;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = context.theme;
+    final accents = TrackerAccents.of(context);
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minWidth: 52),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          ElapsedClock(
+            start: since,
+            style: theme.typography.body.lg.copyWith(
+              color: accents.live,
+              fontWeight: FontWeight.w700,
+              height: 1.15,
+            ),
+          ),
+          Text(
+            'Resting',
+            style: theme.typography.body.xs.copyWith(
+              fontSize: 11,
+              height: 1.2,
+              color: theme.colors.mutedForeground,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1770,3 +2124,63 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
 
 bool _sameKg(double stored, double committed) =>
     (stored - committed).abs() < 1e-9;
+
+/// Slides its child up from the bottom edge when it first shows; [hide]
+/// slides it back down. Instant when the platform asks for less motion.
+class _SlidePanel extends StatefulWidget {
+  const _SlidePanel({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  State<_SlidePanel> createState() => _SlidePanelState();
+}
+
+class _SlidePanelState extends State<_SlidePanel>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 240),
+    reverseDuration: const Duration(milliseconds: 170),
+  );
+
+  late final Animation<Offset> _offset = CurvedAnimation(
+    parent: _controller,
+    curve: Curves.easeOutCubic,
+    reverseCurve: Curves.easeInCubic,
+  ).drive(Tween(begin: const Offset(0, 1), end: Offset.zero));
+
+  bool get _instant => MediaQuery.disableAnimationsOf(context);
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_controller.isDismissed && !_controller.isAnimating) show();
+  }
+
+  void show() {
+    if (_instant) {
+      _controller.value = 1;
+    } else {
+      _controller.forward();
+    }
+  }
+
+  Future<void> hide() {
+    if (_instant) {
+      _controller.value = 0;
+      return Future<void>.value();
+    }
+    return _controller.reverse();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      SlideTransition(position: _offset, child: widget.child);
+}

@@ -142,14 +142,14 @@ void main() {
         ],
       );
       final json = state.toJson();
-      expect(json['v'], 3);
+      expect(json['v'], 4);
       final restored = WorkoutState.fromJson(json);
       expect(restored, state);
       expect(restored.startTime, state.startTime);
       expect(restored.sets.single.exerciseName, 'Bench');
     });
 
-    test('v3 carries the split link, split title and last gym', () {
+    test('v4 carries the split link, the next gym and the last set time', () {
       final state = WorkoutState(
         isInProgress: true,
         startTime: DateTime(2026, 9, 3, 10),
@@ -157,17 +157,34 @@ void main() {
         splitTitle: 'PPL',
         splitId: 4,
         splitDayIndex: 2,
-        lastGymId: 9,
+        nextGymId: 9,
+        lastSetAt: DateTime(2026, 9, 3, 10, 12),
       );
       final restored = WorkoutState.fromJson(state.toJson());
       expect(restored, state);
       expect(restored.splitTitle, 'PPL');
       expect(restored.splitId, 4);
       expect(restored.splitDayIndex, 2);
-      expect(restored.lastGymId, 9);
+      expect(restored.nextGymId, 9);
+      expect(restored.lastSetAt, DateTime(2026, 9, 3, 10, 12));
     });
 
-    test('v2 payloads restore with no split link or last gym', () {
+    test('v3 payloads keep the split link and drop the last gym used', () {
+      final state = WorkoutState.fromJson({
+        'v': 3,
+        'isInProgress': true,
+        'splitTitle': 'PPL',
+        'splitId': 4,
+        'splitDayIndex': 1,
+        'lastGymId': 9,
+      });
+      expect(state.splitTitle, 'PPL');
+      expect(state.splitId, 4);
+      expect(state.splitDayIndex, 1);
+      expect(state.nextGymId, isNull, reason: 'workouts start at home');
+    });
+
+    test('v2 payloads restore with no split link', () {
       final state = WorkoutState.fromJson({
         'v': 2,
         'isInProgress': true,
@@ -177,21 +194,22 @@ void main() {
       });
       expect(state.planTitle, 'PPL · Push');
       expect(state.splitId, isNull);
-      expect(state.lastGymId, isNull);
     });
 
-    test('malformed v3 fields fall back to null', () {
+    test('malformed v4 fields fall back to null', () {
       final state = WorkoutState.fromJson({
-        'v': 3,
+        'v': 4,
         'splitTitle': 3,
         'splitId': 'x',
         'splitDayIndex': Object(),
-        'lastGymId': 'y',
+        'nextGymId': 'y',
+        'lastSetAt': 'not a date',
       });
       expect(state.splitTitle, isNull);
       expect(state.splitId, isNull);
       expect(state.splitDayIndex, isNull);
-      expect(state.lastGymId, isNull);
+      expect(state.nextGymId, isNull);
+      expect(state.lastSetAt, isNull);
     });
 
     test('unknown schema version falls back to a clean idle state', () {
@@ -522,23 +540,36 @@ void main() {
       expect(cubit.state.splitTitle, isNull);
     });
 
-    test('the gym a workout starts at is remembered for the next', () async {
-      final iron = Gym(name: 'Iron', order: 0)..id = 3;
-      final home = Gym(name: 'Home', order: 1)..id = 5;
-      cubit.startWorkout(gym: iron);
-      expect(cubit.state.lastGymId, 3);
-      cubit.setGym(home);
-      expect(cubit.state.gymName, 'Home');
-      expect(cubit.state.lastGymId, 5);
-      await cubit.discardWorkout();
-      expect(cubit.state.gymId, isNull);
-      expect(cubit.state.lastGymId, 5);
-
-      cubit.rememberGym(iron);
+    test('a gym picked for the next workout lasts that one workout', () async {
+      final away = Gym(name: 'Away', order: 1)..id = 5;
+      cubit.pickNextGym(away);
       expect(cubit.state.isInProgress, isFalse);
-      expect(cubit.state.lastGymId, 3);
+      expect(cubit.state.nextGymId, 5);
+
+      cubit.startWorkout(gym: away);
+      expect(cubit.state.gymName, 'Away');
+      expect(cubit.state.nextGymId, isNull, reason: 'used up by the start');
+      await cubit.discardWorkout();
+      expect(cubit.state.nextGymId, isNull);
+    });
+
+    test('moving a running workout leaves the next one at home', () {
+      final home = Gym(name: 'Home', isPrimary: true)..id = 3;
+      final away = Gym(name: 'Away', order: 1)..id = 5;
+      cubit.startWorkout(gym: home);
+      cubit.setGym(away);
+      expect(cubit.state.gymId, 5);
+      expect(cubit.state.gymName, 'Away');
+      expect(cubit.state.nextGymId, isNull);
+    });
+
+    test('logging a set starts the rest clock; a new workout resets it', () {
       cubit.startWorkout();
-      expect(cubit.state.lastGymId, 3, reason: 'no gym keeps the last one');
+      expect(cubit.state.lastSetAt, isNull);
+      cubit.logSet(exerciseId: 1, exerciseName: 'Squat', weight: 100, reps: 5);
+      expect(cubit.state.lastSetAt, isNotNull);
+      cubit.startWorkout();
+      expect(cubit.state.lastSetAt, isNull);
     });
 
     test('reorderExercise moves a card and renumbers the plan', () {

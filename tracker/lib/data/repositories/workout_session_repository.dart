@@ -77,7 +77,7 @@ class WorkoutSessionRepository {
   }
 
   /// The split day of every session started from one, newest first. Reads
-  /// three properties only: no session sets are loaded.
+  /// four properties only: no session sets are loaded.
   Future<List<SplitDayVisit>> getSplitVisits() async {
     QueryBuilder<WorkoutSession, WorkoutSession, QAfterSortBy> query() => _isar
         .workoutSessions
@@ -85,10 +85,11 @@ class WorkoutSessionRepository {
         .splitIdIsNotNull()
         .splitDayIndexIsNotNull()
         .sortByStartTimeDesc();
-    final (splitIds, dayIndexes, startTimes) = await (
+    final (splitIds, dayIndexes, startTimes, endTimes) = await (
       query().splitIdProperty().findAll(),
       query().splitDayIndexProperty().findAll(),
       query().startTimeProperty().findAll(),
+      query().endTimeProperty().findAll(),
     ).wait;
     return [
       for (var i = 0; i < splitIds.length; i++)
@@ -97,6 +98,9 @@ class WorkoutSessionRepository {
             splitId: splitIds[i]!,
             dayIndex: dayIndexes[i]!,
             startTime: startTimes[i],
+            duration: i < endTimes.length
+                ? endTimes[i]?.difference(startTimes[i])
+                : null,
           ),
     ];
   }
@@ -115,6 +119,16 @@ class WorkoutSessionRepository {
         if (set.exerciseId == exerciseId) set,
     ]..sort((a, b) => a.order.compareTo(b.order));
     return PreviousPerformance(date: session.startTime, sets: sets);
+  }
+
+  /// [getPreviousPerformance] for each of [exerciseIds]; exercises never
+  /// logged are left out.
+  Future<Map<int, PreviousPerformance>> getPreviousPerformances(
+    Iterable<int> exerciseIds,
+  ) async {
+    final ids = exerciseIds.toSet().toList();
+    final found = await Future.wait(ids.map(getPreviousPerformance));
+    return {for (final (i, previous) in found.indexed) ids[i]: ?previous};
   }
 
   Stream<List<WorkoutSession>> watchAll() => _isar.workoutSessions

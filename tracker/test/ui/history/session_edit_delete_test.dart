@@ -201,14 +201,14 @@ void main() {
       expect(find.text('82.25 kg × 3.55'), findsOneWidget);
     });
 
-    testWidgets('reps below one are rejected inside the editor', (
+    testWidgets('reps outside 0.1 to 2000 are rejected inside the editor', (
       tester,
     ) async {
       await openSetEditor(tester);
-      await tester.enterText(sheetField(1), '.5');
+      await tester.enterText(sheetField(1), '.05');
       await tapInSheet(tester, 'Save');
 
-      expect(find.text('Must be at least 1'), findsOneWidget);
+      expect(find.text('Must be between 0.1 and 2000'), findsOneWidget);
       expect(find.text('Edit set'), findsOneWidget);
     });
   });

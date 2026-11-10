@@ -8,6 +8,7 @@ import 'package:tracker/domain/models/workout_split.dart';
 import 'package:tracker/domain/models/workout_split_templates.dart';
 import 'package:tracker/ui/core/ui/edit_sheet.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
+import 'package:tracker/ui/core/ui/item_card.dart';
 import 'package:tracker/ui/core/ui/sheet_surface.dart';
 import 'package:tracker/utils/form_validators.dart';
 
@@ -44,25 +45,23 @@ Future<void> showNewSplitSheet(BuildContext context) async {
               ),
             ),
             const SizedBox(height: 12),
-            FCard(
-              child: FItemGroup(
-                divider: .full,
-                children: <FItem>[
+            ItemCard(
+              divider: .full,
+              children: <FItem>[
+                FItem(
+                  prefix: const Icon(FLucideIcons.plus),
+                  title: const Text('Blank split'),
+                  subtitle: const Text('Name it, then add your days'),
+                  onPress: () => Navigator.of(sheetContext).pop(_blank),
+                ),
+                for (final template in workoutSplitTemplates)
                   FItem(
-                    prefix: const Icon(FLucideIcons.plus),
-                    title: const Text('Blank split'),
-                    subtitle: const Text('Name it, then add your days'),
-                    onPress: () => Navigator.of(sheetContext).pop(_blank),
+                    prefix: const Icon(FLucideIcons.layoutList),
+                    title: Text(template.title),
+                    subtitle: Text(template.days.join(', ')),
+                    onPress: () => Navigator.of(sheetContext).pop(template),
                   ),
-                  for (final template in workoutSplitTemplates)
-                    FItem(
-                      prefix: const Icon(FLucideIcons.layoutList),
-                      title: Text(template.title),
-                      subtitle: Text(template.days.join(', ')),
-                      onPress: () => Navigator.of(sheetContext).pop(template),
-                    ),
-                ],
-              ),
+              ],
             ),
           ],
         ),

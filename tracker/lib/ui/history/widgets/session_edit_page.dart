@@ -168,6 +168,7 @@ class _SessionEditPageState extends State<SessionEditPage> {
       context,
       gyms,
       title: 'Which gym?',
+      currentId: _gymId,
       includeNoGym: true,
       noGymLabel: 'Other gym',
     );
@@ -545,14 +546,21 @@ class _EditSetSheetState extends State<_EditSetSheet> {
     final weightError = requiredWeight(_weight.text);
     final displayed = parseDecimal(_weight.text, allowNegative: true);
     final reps = parseDecimal(_reps.text);
-    if (weightError != null || displayed == null || reps == null || reps < 1) {
+    final repsError = requiredReps(_reps.text);
+    if (weightError != null ||
+        repsError != null ||
+        displayed == null ||
+        reps == null) {
       setState(() {
         _weightError = weightError;
-        _repsError = reps == null || reps < 1 ? 'Must be at least 1' : null;
+        _repsError = repsError;
       });
       return;
     }
-    final confirmed = await confirmWeightEntry(context, displayed);
+    final confirmed =
+        await confirmWeightEntry(context, displayed) &&
+        mounted &&
+        (reps == widget.initial.reps || await confirmRepsEntry(context, reps));
     if (!mounted || !confirmed) return;
     // The prefilled text is the rounded display value, so converting it back
     // would drift the stored weight. Keep the original unless the user edited it.
