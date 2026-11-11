@@ -3,7 +3,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:tracker/domain/models/workout_session.dart';
-import 'package:tracker/ui/history/widgets/calendar/calendar_grid.dart';
+import 'package:tracker/domain/services/workout_dates.dart';
 
 import 'calendar_benchmark_support.dart';
 
@@ -33,26 +33,28 @@ void main() {
           iterations,
         ) async {
           for (var i = 0; i < iterations; i++) {
-            final label = i.isEven ? 'Next month' : 'Previous month';
-            await tapAndRender(tester, fButtonByTooltip(label));
+            await swipeMonth(tester, next: i.isEven);
             final current = monthHeader(tester);
-            expect(current, isNot(previous), reason: 'tap "$label" dropped');
+            expect(current, isNot(previous), reason: 'swipe dropped');
             previous = current;
           }
         });
       });
 
-      testWidgets('select day', (tester) async {
-        await pumpCalendarHost(tester, initial: buildSessions(count));
+      testWidgets('pick workout day', (tester) async {
+        var picked = 0;
+        await pumpCalendarHost(
+          tester,
+          initial: buildSessions(count),
+          onPickDay: (_) => picked++,
+        );
         final cells = dayCells();
         final cellCount = cells.evaluate().length;
-        var previous = selectionLabel(tester);
-        await _measure(binding, 'select day', count, (iterations) async {
+        await _measure(binding, 'pick workout day', count, (iterations) async {
           for (var i = 0; i < iterations; i++) {
+            final before = picked;
             await tapAndRender(tester, cells.at(i % cellCount));
-            final current = selectionLabel(tester);
-            expect(current, isNot(previous), reason: 'day tap $i dropped');
-            previous = current;
+            expect(picked, before + 1, reason: 'day tap $i dropped');
           }
         });
       });

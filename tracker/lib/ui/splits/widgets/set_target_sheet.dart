@@ -8,7 +8,7 @@ import 'package:tracker/domain/models/split_draft.dart';
 import 'package:tracker/ui/core/themes/accents.dart';
 import 'package:tracker/ui/core/ui/sheet_surface.dart';
 import 'package:tracker/ui/settings/view_models/settings_cubit.dart';
-import 'package:tracker/ui/workout/widgets/number_entry.dart';
+import 'package:tracker/ui/core/ui/number_keypad.dart';
 
 /// What the set target sheet hands back: a new target (for this set, or
 /// every set of its type), or a request to delete the set.

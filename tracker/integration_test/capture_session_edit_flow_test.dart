@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forui/forui.dart';
@@ -13,7 +12,6 @@ import 'package:tracker/domain/models/gym.dart';
 import 'package:tracker/domain/models/workout_session.dart';
 import 'package:tracker/domain/models/workout_set.dart';
 import 'package:tracker/main.dart';
-import 'package:tracker/ui/core/ui/edit_sheet.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
 import 'package:tracker/ui/settings/view_models/settings_cubit.dart';
 import 'package:tracker/ui/workout/view_models/workout_cubit.dart';
@@ -100,20 +98,16 @@ Future<void> main() async {
     await tester.tap(find.text('Edit'));
     await tester.pumpAndSettle();
     await pause(2000);
-    await tester.tap(find.text('80 kg × 6'));
+    // Open the last set in place and step its weight up: the row turns
+    // Edited and the save bar slides up.
+    await tester.tap(find.textContaining('80 kg × 6'));
     await tester.pumpAndSettle();
-    await pause(2000);
-
-    final fields = find.descendant(
-      of: find.byType(EditSheet),
-      matching: find.byType(EditableText),
-    );
-    await tester.enterText(fields.first, '90');
-    await pause(500);
-    await tester.tap(
-      find.descendant(of: find.byType(EditSheet), matching: find.text('Save')),
-    );
-    await tester.pumpAndSettle();
+    await pause(1500);
+    for (var i = 0; i < 4; i++) {
+      await tester.tap(find.bySemanticsLabel('Increase weight'));
+      await tester.pumpAndSettle();
+      await pause(300);
+    }
     await pause(1000);
 
     final dateRow = find.text('Started');
@@ -130,7 +124,18 @@ Future<void> main() async {
     await tester.pumpAndSettle();
     await pause(2500);
 
-    await tester.tap(find.text('Delete session'));
+    // Delete is behind the edit page's menu, and asks first.
+    await tester.tap(find.text('Edit'));
+    await tester.pumpAndSettle();
+    await pause(1500);
+    await tester.tap(
+      find.byWidgetPredicate(
+        (w) => w is FButton && w.semanticsTooltip == 'Workout options',
+      ),
+    );
+    await tester.pumpAndSettle();
+    await pause(1500);
+    await tester.tap(find.text('Delete workout'));
     await tester.pumpAndSettle();
     await pause(2000);
     await tester.tap(find.widgetWithText(FButton, 'Delete'));

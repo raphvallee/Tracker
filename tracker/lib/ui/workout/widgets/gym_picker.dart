@@ -18,6 +18,8 @@ class NoGym {
 ///
 /// [oneWorkoutOnly] adds the note that another gym counts for one workout
 /// and the next starts at home again: true where a workout's gym is picked.
+/// [live] checks the gym in use in the live accent; false checks it in ink,
+/// for a workout that is over.
 Future<Object?> showGymPicker(
   BuildContext context,
   List<Gym> gyms, {
@@ -26,6 +28,7 @@ Future<Object?> showGymPicker(
   bool includeNoGym = false,
   String noGymLabel = 'No gym',
   bool oneWorkoutOnly = false,
+  bool live = true,
 }) {
   return showFSheet<Object>(
     context: context,
@@ -65,7 +68,10 @@ Future<Object?> showGymPicker(
                     title: Text(gym.name, overflow: TextOverflow.ellipsis),
                     subtitle: gym.isPrimary ? const Text('Home gym') : null,
                     suffix: gym.id == currentId
-                        ? Icon(FLucideIcons.check, color: accents.live)
+                        ? Icon(
+                            FLucideIcons.check,
+                            color: live ? accents.live : null,
+                          )
                         : null,
                     selected: gym.id == currentId,
                     onPress: () => Navigator.of(sheetContext).pop(gym),

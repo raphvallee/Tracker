@@ -2,12 +2,9 @@
 // flutter_tester process with a fresh libisar native worker pool (see
 // docs/TESTING_ISAR_CI.md).
 
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:forui/forui.dart';
 import 'package:hydrated_bloc/hydrated_bloc.dart';
 import 'package:tracker/domain/models/weight_unit.dart';
-import 'package:tracker/ui/core/ui/edit_sheet.dart';
 
 import '../../../testing/fakes/in_memory_storage.dart';
 import '../../../testing/session_edit_helpers.dart';
@@ -21,7 +18,7 @@ void main() {
   });
 
   testWidgets(
-    'pounds: saving an untouched set keeps its stored weight exactly',
+    'pounds: a set stepped away and back keeps its stored weight exactly',
     (tester) async {
       final seeded = await pumpPersistenceApp(
         tester,
@@ -32,27 +29,20 @@ void main() {
       await tester.tap(find.text('Edit'));
       await settleSessionFlow(tester);
 
-      final title = find
-          .descendant(
-            of: find.byType(FTextField),
-            matching: find.byType(EditableText),
-          )
-          .first;
-      await tester.enterText(title, 'Push (renamed)');
-
-      // In lb the row shows 80 kg as a rounded pounds value. Opening the set
-      // and saving it without typing must not convert that rounded text back.
+      // In lb the row shows 80 kg as a rounded pounds value. Stepping it up
+      // and back down must land on the stored kilograms, not on the rounded
+      // text converted back.
       await tester.tap(find.textContaining(' × 5'));
       await settleSessionFlow(tester);
-      await tester.tap(
-        find.descendant(
-          of: find.byType(EditSheet),
-          matching: find.text('Save'),
-        ),
-      );
+      await tester.tap(find.bySemanticsLabel('Increase weight'));
       await settleSessionFlow(tester);
-      await tester.tap(find.text('Save'));
+      expect(find.text('1 unsaved change'), findsOneWidget);
+      await tester.tap(find.bySemanticsLabel('Decrease weight'));
       await settleSessionFlow(tester);
+      expect(find.textContaining('unsaved change'), findsNothing);
+
+      await renameWorkout(tester, 'Push (renamed)');
+      await tapSaveBar(tester);
 
       final id = seeded.session.id;
       await waitForRealIo(tester, () async {

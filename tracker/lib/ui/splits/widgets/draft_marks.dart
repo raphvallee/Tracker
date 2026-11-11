@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
 import 'package:tracker/ui/core/themes/accents.dart';
+import 'package:tracker/ui/core/ui/draft_tag.dart';
 import 'package:tracker/ui/core/ui/weight_format.dart';
+
+export 'package:tracker/ui/core/ui/draft_tag.dart';
 
 /// "5 unsaved changes" with a Review button, in the unsaved accent.
 class DraftStrip extends StatelessWidget {
@@ -42,46 +45,6 @@ class DraftStrip extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class DraftDot extends StatelessWidget {
-  const DraftDot({super.key});
-
-  @override
-  Widget build(BuildContext context) => Container(
-    width: 8,
-    height: 8,
-    decoration: BoxDecoration(
-      shape: BoxShape.circle,
-      color: TrackerAccents.of(context).draft,
-    ),
-  );
-}
-
-/// A tag beside a day or exercise: "New" or "Edited".
-class DraftTag extends StatelessWidget {
-  const DraftTag(this.label, {super.key});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final accents = TrackerAccents.of(context);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
-      decoration: BoxDecoration(
-        color: accents.draftSoft,
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        label,
-        style: context.theme.typography.body.xs3.copyWith(
-          color: accents.draftInk,
-          fontWeight: FontWeight.w600,
-        ),
       ),
     );
   }

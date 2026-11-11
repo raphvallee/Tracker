@@ -12,6 +12,7 @@ import 'package:tracker/domain/models/workout_session.dart';
 import 'package:tracker/domain/models/weight_unit.dart';
 import 'package:tracker/domain/models/workout_set.dart';
 import 'package:tracker/main.dart';
+import 'package:tracker/ui/core/ui/edit_sheet.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
 import 'package:tracker/ui/history/widgets/session_detail_page.dart';
 import 'package:tracker/ui/settings/view_models/settings_cubit.dart';
@@ -19,11 +20,19 @@ import 'package:tracker/ui/workout/view_models/workout_cubit.dart';
 
 import 'test_helpers.dart';
 
-WorkoutSession pastSession({int exerciseId = 1, int? gymId}) => WorkoutSession(
+WorkoutSession pastSession({
+  int exerciseId = 1,
+  int? gymId,
+  int? splitId,
+  int? splitDayIndex,
+  double? rpe,
+}) => WorkoutSession(
   title: 'Push',
   startTime: DateTime(2026, 1, 1, 9),
   endTime: DateTime(2026, 1, 1, 10),
   gymId: gymId,
+  splitId: splitId,
+  splitDayIndex: splitDayIndex,
   sets: [
     WorkoutSet(
       exerciseId: exerciseId,
@@ -31,6 +40,7 @@ WorkoutSession pastSession({int exerciseId = 1, int? gymId}) => WorkoutSession(
       reps: 5,
       type: SetType.working,
       order: 0,
+      rpe: rpe,
     ),
     WorkoutSet(
       exerciseId: exerciseId,
@@ -55,6 +65,9 @@ Future<({TrackerRepository repo, WorkoutSession session})> pumpPersistenceApp(
   WidgetTester tester,
   String dbName, {
   WeightUnit unit = WeightUnit.kilograms,
+  int? splitId,
+  int? splitDayIndex,
+  double? rpe,
 }) async {
   late TrackerRepository repo;
   late WorkoutSession session;
@@ -74,7 +87,13 @@ Future<({TrackerRepository repo, WorkoutSession session})> pumpPersistenceApp(
       ),
     );
     final gymId = await repo.gyms.put(Gym(name: 'Home', isPrimary: true));
-    session = pastSession(exerciseId: exerciseId, gymId: gymId);
+    session = pastSession(
+      exerciseId: exerciseId,
+      gymId: gymId,
+      splitId: splitId,
+      splitDayIndex: splitDayIndex,
+      rpe: rpe,
+    );
     await repo.sessions.put(session);
   });
 
@@ -142,12 +161,26 @@ Future<void> settleSessionFlow(WidgetTester tester) async {
   await tester.pump(const Duration(milliseconds: 400));
 }
 
-Finder sessionTitleField() => find
-    .descendant(
-      of: find.byType(FTextField),
-      matching: find.byType(EditableText),
-    )
-    .first;
+/// Renames the workout on the edit page through its Name sheet.
+Future<void> renameWorkout(WidgetTester tester, String name) async {
+  await tester.tap(find.text('Name'));
+  await settleSessionFlow(tester);
+  final field = find.descendant(
+    of: find.byType(EditSheet),
+    matching: find.byType(EditableText),
+  );
+  await tester.enterText(field, name);
+  await tester.tap(
+    find.descendant(of: find.byType(EditSheet), matching: find.text('Save')),
+  );
+  await settleSessionFlow(tester);
+}
+
+/// Taps the save bar's Save (not a sheet's).
+Future<void> tapSaveBar(WidgetTester tester) async {
+  await tester.tap(find.widgetWithText(FButton, 'Save').last);
+  await settleSessionFlow(tester);
+}
 
 Future<void> waitForText(WidgetTester tester, String text) =>
     waitForRealIo(tester, () async => find.text(text).evaluate().isNotEmpty);

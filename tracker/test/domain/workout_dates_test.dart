@@ -3,7 +3,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tracker/domain/models/workout_session.dart';
-import 'package:tracker/ui/history/widgets/calendar/calendar_grid.dart';
+import 'package:tracker/domain/services/workout_dates.dart';
 
 void main() {
   group('CalendarGrid math', () {
@@ -130,6 +130,70 @@ void main() {
         () => WorkoutDateIndex([DateTime(2026, 3, 1), DateTime(2026, 3, 2)]),
         throwsAssertionError,
       );
+    });
+  });
+
+  group('WorkoutDateIndex as a list', () {
+    final index = WorkoutDateIndex([
+      DateTime(2026, 11, 9, 18),
+      DateTime(2026, 11, 9, 7),
+      DateTime(2026, 11, 3, 18),
+      DateTime(2026, 10, 30, 18),
+      DateTime(2025, 12, 31, 23),
+    ]);
+
+    test('knows the month of each position and where months start', () {
+      expect(index.length, 5);
+      expect(index.startAt(3), DateTime(2026, 10, 30, 18));
+      expect(index.monthKeyAt(0), 202611);
+      expect(index.monthKeyAt(4), 202512);
+      expect(
+        [for (var i = 0; i < 5; i++) index.startsMonth(i)],
+        [true, false, false, true, true],
+      );
+    });
+
+    test('counts the workouts of a month, not its days', () {
+      expect(index.countInMonth(2026, 11), 3);
+      expect(index.countInMonth(2026, 10), 1);
+      expect(index.countInMonth(2026, 9), 0);
+      // Months normalize like DateTime: month 13 of 2025 is January 2026.
+      expect(index.countInMonth(2025, 12), 1);
+      expect(index.countInMonth(2025, 13), 0);
+    });
+
+    test('finds the newest workout of a day', () {
+      expect(index.firstIndexOn(DateTime(2026, 11, 9)), 0);
+      expect(index.firstIndexOn(DateTime(2026, 11, 3)), 2);
+      expect(index.firstIndexOn(DateTime(2025, 12, 31)), 4);
+      expect(index.firstIndexOn(DateTime(2026, 11, 4)), isNull);
+      expect(WorkoutDateIndex(const []).firstIndexOn(DateTime(2026)), isNull);
+    });
+
+    test('agrees with a full scan on a long random history', () {
+      final random = Random(11);
+      final starts = <DateTime>[];
+      var day = DateTime(2026, 11, 9, 20);
+      for (var i = 0; i < 400; i++) {
+        starts.add(day);
+        day = day.subtract(Duration(hours: 6 + random.nextInt(60)));
+      }
+      final index = WorkoutDateIndex(starts);
+      for (var i = 0; i < starts.length; i++) {
+        final start = starts[i];
+        expect(index.monthKeyAt(i), start.year * 100 + start.month);
+        final sameMonth = starts
+            .where((s) => s.year == start.year && s.month == start.month)
+            .length;
+        expect(index.countInMonth(start.year, start.month), sameMonth);
+        final first = starts.indexWhere(
+          (s) =>
+              s.year == start.year &&
+              s.month == start.month &&
+              s.day == start.day,
+        );
+        expect(index.firstIndexOn(start), first);
+      }
     });
   });
 

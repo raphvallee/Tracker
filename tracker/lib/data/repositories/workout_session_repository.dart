@@ -151,6 +151,22 @@ class WorkoutSessionRepository {
       .startTimeProperty()
       .findAllSync();
 
+  /// Ids and start times of every session, newest first: the same query
+  /// twice, so both lists come in the same order. Two property queries: no
+  /// titles or sets are decoded, so even a long history reads within a frame.
+  ({List<int> ids, List<DateTime> starts}) getTimelineSync() {
+    QueryBuilder<WorkoutSession, WorkoutSession, QAfterSortBy> query() =>
+        _isar.workoutSessions.where().sortByStartTimeDesc();
+    return (
+      ids: query().idProperty().findAllSync(),
+      starts: query().startTimeProperty().findAllSync(),
+    );
+  }
+
+  /// The sessions with [ids], in that order; null where one is gone.
+  List<WorkoutSession?> getByIdsSync(List<int> ids) =>
+      _isar.workoutSessions.getAllSync(ids);
+
   /// Sessions starting on [day]'s local calendar date, newest first.
   ///
   /// The query window is padded by a day on each side and the results are

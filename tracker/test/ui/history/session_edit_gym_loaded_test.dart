@@ -25,9 +25,8 @@ void main() {
     await waitForText(tester, 'Home');
     expect(find.text('Home'), findsOneWidget);
 
-    await tester.enterText(sessionTitleField(), 'Pull');
-    await tester.tap(find.text('Save'));
-    await settleSessionFlow(tester);
+    await renameWorkout(tester, 'Pull');
+    await tapSaveBar(tester);
 
     final id = seeded.session.id;
     await waitForRealIo(tester, () async {

@@ -20,9 +20,13 @@ import 'package:tracker/ui/core/ui/custom_app_bar.dart';
 import 'package:tracker/ui/core/ui/custom_route.dart';
 import 'package:tracker/ui/core/ui/decimal_input_formatter.dart';
 import 'package:tracker/ui/core/ui/effort_format.dart';
+import 'package:tracker/ui/core/ui/effort_sheet.dart';
+import 'package:tracker/ui/core/ui/effort_strip.dart';
 import 'package:tracker/ui/core/ui/icon_button.dart';
 import 'package:tracker/ui/core/ui/max_width.dart';
+import 'package:tracker/ui/core/ui/number_keypad.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
+import 'package:tracker/ui/core/ui/slide_up_panel.dart';
 import 'package:tracker/ui/core/ui/swipe_to_delete.dart';
 import 'package:tracker/ui/core/ui/weight_confirmation.dart';
 import 'package:tracker/ui/core/ui/weight_format.dart';
@@ -31,10 +35,8 @@ import 'package:tracker/ui/workout/view_models/workout_cubit.dart';
 import 'package:tracker/utils/decimal_input.dart';
 import 'package:tracker/utils/form_validators.dart';
 
-import 'effort_sheet.dart';
 import 'elapsed_clock.dart';
 import 'finish_workout.dart';
-import 'number_entry.dart';
 import 'plan_bar.dart';
 import 'set_comparison.dart';
 import 'workout_dock.dart';
@@ -246,7 +248,7 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
 
   /// The keypad is sliding away; its entry goes once it is out of sight.
   bool _overlayClosing = false;
-  final _panelKey = GlobalKey<_SlidePanelState>();
+  final _panelKey = GlobalKey<SlideUpPanelState>();
 
   /// The panel last shown, kept on screen while it slides away.
   Widget? _lastPanel;
@@ -547,7 +549,7 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
           : MediaQuery.viewInsetsOf(overlayContext).bottom,
       child: IgnorePointer(
         ignoring: _overlayClosing,
-        child: _SlidePanel(key: _panelKey, child: panel),
+        child: SlideUpPanel(key: _panelKey, child: panel),
       ),
     );
   }
@@ -1417,103 +1419,19 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
     );
   }
 
-  /// The open row's rating in one tap: the usual values in a strip, the rest
-  /// behind its last chip in the full sheet. Tapping the picked value again
-  /// clears it. It stays quiet: the numbers are what the row is about.
+  /// The open row's rating in one tap (see [EffortStrip]).
   Widget _effortStrip(
     BuildContext context,
     _Row row, {
     required double? rpe,
     required String badge,
-  }) {
-    final theme = context.theme;
-    final accents = TrackerAccents.of(context);
-    final scale = widget.effort;
-    final who = badge == 'W' ? 'warm-up' : 'set $badge';
-    final picked = rpe == null ? null : scale.fromRpe(rpe);
-    // RPE 6 to 10 (RIR 4 to 0) cover nearly every set worth rating.
-    final common = scale == EffortScale.rpe
-        ? const [6, 7, 8, 9, 10]
-        : const [0, 1, 2, 3, 4];
-    final rarePicked = picked != null && !common.any((v) => v == picked);
-
-    Widget chip(
-      String label, {
-      required bool selected,
-      required String semantics,
-      required VoidCallback onTap,
-    }) => Expanded(
-      child: Semantics(
-        button: true,
-        selected: selected,
-        label: semantics,
-        excludeSemantics: true,
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: onTap,
-          child: Container(
-            height: 34,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: selected ? accents.liveSoft : null,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: selected ? accents.liveSoft : theme.colors.border,
-              ),
-            ),
-            child: Text(
-              label,
-              style: theme.typography.body.xs.copyWith(
-                fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
-                color: selected ? accents.live : theme.colors.mutedForeground,
-                fontFeatures: const [FontFeature.tabularFigures()],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-
-    final rare = chip(
-      rarePicked
-          ? formatEffort(scale, rpe!)
-          : (scale == EffortScale.rpe ? '<6' : '5+'),
-      selected: rarePicked,
-      semantics: 'Rate $who, other ${scale.label} values',
-      onTap: () => _pickEffort(row),
-    );
-    final chips = <Widget>[
-      for (final value in common)
-        chip(
-          '$value',
-          selected: picked == value,
-          semantics: 'Rate $who ${scale.label} $value',
-          onTap: () => _rate(
-            row,
-            picked == value ? null : scale.toRpe(value.toDouble()),
-          ),
-        ),
-    ];
-    return Row(
-      children: <Widget>[
-        SizedBox(
-          width: 34,
-          child: Text(
-            scale.label,
-            style: theme.typography.body.xs3.copyWith(
-              color: theme.colors.mutedForeground,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
-        for (final (i, item) in [
-          if (scale == EffortScale.rpe) rare,
-          ...chips,
-          if (scale == EffortScale.rir) rare,
-        ].indexed) ...[if (i > 0) const SizedBox(width: 5), item],
-      ],
-    );
-  }
+  }) => EffortStrip(
+    scale: widget.effort,
+    rpe: rpe,
+    who: badge == 'W' ? 'warm-up' : 'set $badge',
+    onRate: (rpe) => _rate(row, rpe),
+    onMore: () => _pickEffort(row),
+  );
 
   /// A label sitting on the open row's outline.
   /// How the open row at [index] compares with the same set last time, from
@@ -2124,63 +2042,3 @@ class _RestClock extends StatelessWidget {
 
 bool _sameKg(double stored, double committed) =>
     (stored - committed).abs() < 1e-9;
-
-/// Slides its child up from the bottom edge when it first shows; [hide]
-/// slides it back down. Instant when the platform asks for less motion.
-class _SlidePanel extends StatefulWidget {
-  const _SlidePanel({super.key, required this.child});
-
-  final Widget child;
-
-  @override
-  State<_SlidePanel> createState() => _SlidePanelState();
-}
-
-class _SlidePanelState extends State<_SlidePanel>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 240),
-    reverseDuration: const Duration(milliseconds: 170),
-  );
-
-  late final Animation<Offset> _offset = CurvedAnimation(
-    parent: _controller,
-    curve: Curves.easeOutCubic,
-    reverseCurve: Curves.easeInCubic,
-  ).drive(Tween(begin: const Offset(0, 1), end: Offset.zero));
-
-  bool get _instant => MediaQuery.disableAnimationsOf(context);
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (_controller.isDismissed && !_controller.isAnimating) show();
-  }
-
-  void show() {
-    if (_instant) {
-      _controller.value = 1;
-    } else {
-      _controller.forward();
-    }
-  }
-
-  Future<void> hide() {
-    if (_instant) {
-      _controller.value = 0;
-      return Future<void>.value();
-    }
-    return _controller.reverse();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) =>
-      SlideTransition(position: _offset, child: widget.child);
-}

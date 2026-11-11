@@ -22,14 +22,17 @@ import 'package:tracker/domain/models/split_draft.dart';
 import 'package:tracker/domain/models/workout_session.dart';
 import 'package:tracker/domain/models/workout_set.dart';
 import 'package:tracker/domain/models/workout_split.dart';
+import 'package:tracker/domain/services/workout_dates.dart';
 import 'package:tracker/main.dart';
 import 'package:tracker/ui/analytics/widgets/graph_editor.dart';
 import 'package:tracker/ui/analytics/widgets/progression_page.dart';
 import 'package:tracker/ui/core/ui/custom_route.dart';
+import 'package:tracker/ui/core/ui/effort_sheet.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
 import 'package:tracker/ui/exercises/widgets/exercise_detail_page.dart';
 import 'package:tracker/ui/exercises/widgets/new_exercise_page.dart';
 import 'package:tracker/ui/feed/widgets/feed_page.dart';
+import 'package:tracker/ui/history/widgets/calendar/history_calendar.dart';
 import 'package:tracker/ui/history/widgets/session_detail_page.dart';
 import 'package:tracker/ui/history/widgets/session_edit_page.dart';
 import 'package:tracker/ui/settings/view_models/settings_cubit.dart';
@@ -44,7 +47,6 @@ import 'package:tracker/ui/splits/widgets/review_changes_sheet.dart';
 import 'package:tracker/ui/splits/widgets/set_target_sheet.dart';
 import 'package:tracker/ui/splits/widgets/split_day_editor_page.dart';
 import 'package:tracker/ui/workout/view_models/workout_cubit.dart';
-import 'package:tracker/ui/workout/widgets/effort_sheet.dart';
 import 'package:tracker/ui/workout/widgets/exercise_page.dart';
 import 'package:tracker/ui/workout/widgets/exercise_picker_page.dart';
 import 'package:tracker/ui/workout/widgets/gym_picker.dart';
@@ -234,15 +236,10 @@ Future<void> captureScreensAt(
     await settleForData(dataLoaded);
     await recorder.capture('Feed tab');
   });
-  await guarded('History tab (list)', () async {
+  await guarded('History tab', () async {
     switchTab(1);
-    await settleForData(() => tester.any(find.text('Calendar')));
-    await recorder.capture('History tab (list)');
-  });
-  await guarded('History calendar', () async {
-    await tester.tap(find.text('Calendar'));
-    await settle();
-    await recorder.capture('History calendar');
+    await settleForData(() => tester.any(find.text('Upper Body')));
+    await recorder.capture('History tab');
   });
   await guarded('Workout tab (in progress)', () async {
     switchTab(2);
@@ -298,6 +295,79 @@ Future<void> captureScreensAt(
     SessionEditPage(session: fixtures.session),
     dataReady: () => tester.any(find.text('Bench Press')),
   );
+  Future<void> pushSettled(Widget page) async {
+    unawaited(pushTo<void>(navigator.context, page));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+    await settle();
+  }
+
+  Future<void> popSettled() async {
+    navigator.pop();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+    await settle();
+  }
+
+  await guarded('Session detail page (folded)', () async {
+    await pushSettled(
+      SessionDetailPage(session: fixtures.session, gymName: 'Iron Temple'),
+    );
+    // Fold the first exercise to its best set.
+    await tester.tap(find.text('Bench Press').last);
+    await settle();
+    try {
+      await recorder.capture('Session detail page (folded)');
+    } finally {
+      await popSettled();
+    }
+  });
+  await guarded('Session edit page (edited set)', () async {
+    await pushSettled(SessionEditPage(session: fixtures.session));
+    // Open the working set and step its weight up: the row shows its
+    // steppers and rating, the Edited tag and the Was line, and the save
+    // bar slides up.
+    await tester.tap(find.textContaining('82.5 kg × 8').last);
+    await settle();
+    await tester.tap(find.bySemanticsLabel('Increase weight').last);
+    await settle();
+    try {
+      await recorder.capture('Session edit page (edited set)');
+      current = 'Session edit page (menu)';
+      await tester.tap(fButtonByTooltip('Workout options').last);
+      await settle();
+      await recorder.capture('Session edit page (menu)');
+      current = 'Delete workout dialog';
+      await tester.tap(find.text('Delete workout').last);
+      await settle();
+      await recorder.capture('Delete workout dialog');
+      await tester.tap(find.text('Cancel').last);
+      await settle();
+    } finally {
+      await popSettled();
+    }
+  });
+  await guarded('Session edit page (keypad)', () async {
+    await pushSettled(SessionEditPage(session: fixtures.session));
+    await tester.tap(find.textContaining('82.5 kg × 8').last);
+    await settle();
+    await tester.tap(
+      find.byWidgetPredicate(
+        (w) => w is TextField && w.focusNode?.debugLabel == 'edit set weight',
+      ),
+    );
+    // One settle opens the keypad and starts lifting the row above it, the
+    // second lets that scroll finish.
+    await settle();
+    await settle();
+    try {
+      await recorder.capture('Session edit page (keypad)');
+    } finally {
+      FocusManager.instance.primaryFocus?.unfocus();
+      await settle();
+      await popSettled();
+    }
+  });
   await visit(
     'Exercise page',
     ExercisePage(exerciseId: fixtures.benchId),
@@ -514,6 +584,14 @@ Future<void> captureScreensAt(
     root: true,
   );
   await openAndClose(
+    'History calendar sheet',
+    () => showHistoryCalendar(
+      pageContext,
+      index: WorkoutDateIndex.fromSessions(fixtures.allSessions),
+    ),
+    root: true,
+  );
+  await openAndClose(
     'Effort sheet',
     () => showEffortSheet(
       pageContext,
@@ -631,6 +709,27 @@ Future<void> captureScreensAt(
     await settleForData(() => tester.any(find.text('Start Upper')));
     await settle();
     await recorder.capture('Workout tab (idle, long plan)');
+  });
+
+  await guarded('History tab (restore strip)', () async {
+    // A workout discarded a moment ago can still come back.
+    cubit.startWorkout();
+    cubit.addExercise(exerciseId: fixtures.benchId, name: 'Bench Press');
+    cubit.logSet(
+      exerciseId: fixtures.benchId,
+      exerciseName: 'Bench Press',
+      weight: 80,
+      reps: 8,
+    );
+    await cubit.discardWorkout();
+    switchTab(1);
+    await settle();
+    try {
+      await recorder.capture('History tab (restore strip)');
+    } finally {
+      switchTab(2);
+      await settle();
+    }
   });
 
   await guarded('Workout tab (free workout)', () async {

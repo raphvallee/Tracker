@@ -1,5 +1,5 @@
-// Records the History first open (and the Calendar/List tab switches) with an
-// on-screen frame HUD, for before/after performance videos. Run in profile
+// Records the History first open (and the calendar sheet with a jump to a
+// day) with an on-screen frame HUD, for before/after performance videos. Run in profile
 // mode so the window shows release-like speed:
 //   flutter drive --profile -d windows --dart-define=CAPTURE_LABEL=AFTER \
 //     --driver=benchmark/drive/history_calendar_driver.dart \
@@ -42,6 +42,9 @@ const String _label = String.fromEnvironment(
 const int _sessionCount = 2000;
 
 final GlobalKey<_FrameHudState> _hud = GlobalKey<_FrameHudState>();
+
+/// The newest of [buildSessions]: History lists it first.
+bool _listOnScreen() => find.text('Workout 0').evaluate().isNotEmpty;
 
 bool _calendarOnScreen() => find.byType(HistoryCalendar).evaluate().isNotEmpty;
 
@@ -95,26 +98,38 @@ Future<void> main() async {
 
     await _hud.currentState!.track(
       'Tap the History tab (first open)',
-      _calendarOnScreen,
+      _listOnScreen,
       () => tester
           .widget<FBottomNavigationBar>(find.byType(FBottomNavigationBar))
           .onChange!(1),
     );
     await Future<void>.delayed(const Duration(seconds: 3));
 
-    final listTab = tester.getCenter(find.text('List'));
+    final calendar = tester.getCenter(
+      find.byWidgetPredicate(
+        (w) => w is FButton && w.semanticsTooltip == 'Calendar',
+      ),
+    );
     await _hud.currentState!.track(
-      'Tap "List"',
-      () => !_calendarOnScreen(),
-      () => tester.tapAt(listTab),
+      'Tap the calendar',
+      _calendarOnScreen,
+      () => tester.tapAt(calendar),
     );
     await Future<void>.delayed(const Duration(seconds: 3));
 
-    final calendarTab = tester.getCenter(find.text('Calendar'));
+    final day = tester.getCenter(
+      find
+          .byWidgetPredicate(
+            (w) =>
+                w is Semantics &&
+                (w.properties.label?.startsWith('Workout on') ?? false),
+          )
+          .first,
+    );
     await _hud.currentState!.track(
-      'Tap "Calendar"',
-      _calendarOnScreen,
-      () => tester.tapAt(calendarTab),
+      'Tap a workout day',
+      () => !_calendarOnScreen(),
+      () => tester.tapAt(day),
     );
     await Future<void>.delayed(const Duration(seconds: 3));
     _hud.currentState!.idle();

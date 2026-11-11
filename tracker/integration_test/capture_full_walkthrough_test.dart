@@ -175,24 +175,26 @@ Future<void> main() async {
 
     switchTab(1);
     await pause(1800);
-    final calendarToggle = find.text('Calendar');
-    if (tester.any(calendarToggle)) {
-      await tester.tap(calendarToggle.first, warnIfMissed: false);
+    final calendarButton = find.byWidgetPredicate(
+      (w) => w is FButton && w.semanticsTooltip == 'Calendar',
+    );
+    if (tester.any(calendarButton)) {
+      await tester.tap(calendarButton.first, warnIfMissed: false);
       await afterTap();
       await pause(1500);
-      final day21 = find.text('21');
-      if (tester.any(day21)) {
-        await tester.tap(day21.first, warnIfMissed: false);
+      // A workout day closes the sheet and scrolls the list to it.
+      final workoutDay = find.byWidgetPredicate(
+        (w) =>
+            w is Semantics &&
+            (w.properties.label?.startsWith('Workout on') ?? false),
+      );
+      if (tester.any(workoutDay)) {
+        await tester.tap(workoutDay.first, warnIfMissed: false);
         await afterTap();
         await pause(1600);
+      } else {
         await back();
         await pause(700);
-      }
-      final listToggle = find.text('List');
-      if (tester.any(listToggle)) {
-        await tester.tap(listToggle.first, warnIfMissed: false);
-        await afterTap();
-        await pause(900);
       }
     }
     final pullTile = find.textContaining('Pull Day');

@@ -73,6 +73,7 @@ class NumberKeypad extends StatelessWidget {
     required this.onLog,
     this.logTrailing,
     this.allowSign = true,
+    this.live = true,
   });
 
   final String caption;
@@ -83,6 +84,10 @@ class NumberKeypad extends StatelessWidget {
   final String? logTrailing;
   final VoidCallback? onLog;
   final bool allowSign;
+
+  /// The Log button in the live accent, for a running workout; false draws
+  /// it in ink, for values that start nothing.
+  final bool live;
 
   /// Height of the panel without the bottom safe area, so pages can keep
   /// the focused row above it.
@@ -275,13 +280,21 @@ class NumberKeypad extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 10),
-                AccentButton(
-                  large: true,
-                  prefix: FLucideIcons.check,
-                  label: logLabel,
-                  trailing: logTrailing,
-                  onPress: onLog,
-                ),
+                if (live)
+                  AccentButton(
+                    large: true,
+                    prefix: FLucideIcons.check,
+                    label: logLabel,
+                    trailing: logTrailing,
+                    onPress: onLog,
+                  )
+                else
+                  FButton(
+                    size: .lg,
+                    onPress: onLog,
+                    prefix: const Icon(FLucideIcons.check),
+                    child: Text(logLabel),
+                  ),
               ],
             ),
           ),
@@ -301,6 +314,7 @@ class KeyboardToolbar extends StatelessWidget {
     required this.logLabel,
     required this.onLog,
     this.logTrailing,
+    this.live = true,
   });
 
   final VoidCallback? onSign;
@@ -310,6 +324,9 @@ class KeyboardToolbar extends StatelessWidget {
   /// The rating the set logs with, beside [logLabel].
   final String? logTrailing;
   final VoidCallback? onLog;
+
+  /// The Log button in the live accent; false draws it in ink.
+  final bool live;
 
   @override
   Widget build(BuildContext context) {
@@ -341,12 +358,18 @@ class KeyboardToolbar extends StatelessWidget {
           const SizedBox(width: 8),
           Flexible(
             flex: 3,
-            child: AccentButton(
-              prefix: FLucideIcons.check,
-              label: logLabel,
-              trailing: logTrailing,
-              onPress: onLog,
-            ),
+            child: live
+                ? AccentButton(
+                    prefix: FLucideIcons.check,
+                    label: logLabel,
+                    trailing: logTrailing,
+                    onPress: onLog,
+                  )
+                : FButton(
+                    onPress: onLog,
+                    prefix: const Icon(FLucideIcons.check),
+                    child: Text(logLabel),
+                  ),
           ),
         ],
       ),

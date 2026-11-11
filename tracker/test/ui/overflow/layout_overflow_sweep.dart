@@ -23,6 +23,7 @@ import 'package:tracker/domain/models/gym.dart';
 import 'package:tracker/domain/models/workout_session.dart';
 import 'package:tracker/domain/models/workout_set.dart';
 import 'package:tracker/domain/models/workout_split.dart';
+import 'package:tracker/domain/services/workout_dates.dart';
 import 'package:tracker/main.dart';
 import 'package:tracker/ui/analytics/widgets/graph_editor.dart';
 import 'package:tracker/ui/analytics/widgets/progression_page.dart';
@@ -31,7 +32,6 @@ import 'package:tracker/ui/exercises/widgets/exercise_detail_page.dart';
 import 'package:tracker/ui/exercises/widgets/exercises_page.dart';
 import 'package:tracker/ui/exercises/widgets/new_exercise_page.dart';
 import 'package:tracker/ui/feed/widgets/feed_page.dart';
-import 'package:tracker/ui/history/widgets/calendar/calendar_grid.dart';
 import 'package:tracker/ui/history/widgets/calendar/history_calendar.dart';
 import 'package:tracker/ui/history/widgets/history_page.dart';
 import 'package:tracker/ui/history/widgets/session_detail_page.dart';
@@ -178,19 +178,66 @@ Future<void> sweepSize(WidgetTester tester, String label, Size size) async {
     'HistoryCalendar',
     Material(
       type: MaterialType.transparency,
-      // The app always hosts the calendar in a scrollable.
       child: SingleChildScrollView(
         child: HistoryCalendar(
           index: WorkoutDateIndex.fromSessions(sweepFixtures.allSessions),
-          sessionsOn: (day) => [
-            for (final s in sweepFixtures.allSessions)
-              if (DateUtils.isSameDay(s.startTime, day)) s,
-          ],
-          gymNames: sweepFixtures.gymNames,
+          onPickDay: (_) {},
         ),
       ),
     ),
   );
+
+  // These steps open menus, dialogs and folds: the fake clock has to move
+  // for them to finish.
+  Future<void> settleMotion() async {
+    await settle();
+    await tester.pump(const Duration(milliseconds: 400));
+  }
+
+  // A past workout with its first exercise folded to its best set.
+  _mark('SessionDetailPage (folded) @ $label');
+  unawaited(
+    navigator.push(
+      MaterialPageRoute<void>(
+        builder: (_) => SessionDetailPage(
+          session: sweepFixtures.session,
+          gymName: 'Iron Temple',
+        ),
+      ),
+    ),
+  );
+  await settleMotion();
+  await tester.tap(find.text('Bench Press').last);
+  await settleMotion();
+  navigator.pop();
+  await settleMotion();
+
+  // The edit page with a set opened up and changed: the steppers, the
+  // rating strip, the Edited tag, the Was line and the save bar; then its
+  // menu and the delete confirmation.
+  _mark('SessionEditPage (edited set) @ $label');
+  unawaited(
+    navigator.push(
+      MaterialPageRoute<void>(
+        builder: (_) => SessionEditPage(session: sweepFixtures.session),
+      ),
+    ),
+  );
+  await settleMotion();
+  await tester.tap(find.textContaining('82.5 kg × 8').last);
+  await settleMotion();
+  await tester.tap(find.bySemanticsLabel('Increase weight').last);
+  await settleMotion();
+  _mark('SessionEditPage menu @ $label');
+  await tester.tap(fButtonByTooltip('Workout options').last);
+  await settleMotion();
+  await tester.tap(find.text('Delete workout').last);
+  await settleMotion();
+  await tester.tap(find.text('Cancel').last);
+  await settleMotion();
+  navigator.pop();
+  await settleMotion();
+
   await visit(
     'SplitDayEditorPage',
     SplitDayEditorPage(splitId: sweepFixtures.split.id, dayIndex: 0),
@@ -239,6 +286,15 @@ Future<void> sweepSize(WidgetTester tester, String label, Size size) async {
       sweepFixtures.allGyms,
       currentId: sweepFixtures.allGyms.first.id,
       oneWorkoutOnly: true,
+    ),
+    root: true,
+  );
+
+  await openAndClose(
+    'History calendar sheet',
+    () => showHistoryCalendar(
+      pageContext,
+      index: WorkoutDateIndex.fromSessions(sweepFixtures.allSessions),
     ),
     root: true,
   );

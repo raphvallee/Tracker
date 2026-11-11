@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:forui/forui.dart';
 import 'package:tracker/domain/models/workout_session.dart';
 import 'package:tracker/domain/models/workout_set.dart';
-import 'package:tracker/ui/history/widgets/calendar/calendar_grid.dart';
+import 'package:tracker/domain/services/workout_dates.dart';
 import 'package:tracker/ui/history/widgets/calendar/history_calendar.dart';
 
 const List<int> sessionCounts = [500, 2000];
@@ -56,6 +56,7 @@ Future<ValueNotifier<List<WorkoutSession>?>> pumpCalendarHost(
   WidgetTester tester, {
   List<WorkoutSession>? initial,
   bool remountOnChange = false,
+  ValueChanged<DateTime>? onPickDay,
 }) async {
   final sessions = ValueNotifier<List<WorkoutSession>?>(initial);
   await tester.pumpWidget(
@@ -77,12 +78,7 @@ Future<ValueNotifier<List<WorkoutSession>?>> pumpCalendarHost(
                         index: WorkoutDateIndex([
                           for (final session in value) session.startTime,
                         ]),
-                        sessionsOn: (day) => [
-                          for (final session in value)
-                            if (DateUtils.isSameDay(session.startTime, day))
-                              session,
-                        ],
-                        gymNames: const {},
+                        onPickDay: onPickDay ?? (_) {},
                       ),
               ),
             ),
@@ -100,24 +96,23 @@ Future<void> tapAndRender(WidgetTester tester, Finder finder) async {
   await tester.pump();
 }
 
+/// Turns the month the way the user does: a swipe over the carousel, left
+/// for the next month and right for the previous one, settled on the month.
+Future<void> swipeMonth(WidgetTester tester, {required bool next}) async {
+  await tester.fling(find.byType(PageView), Offset(next ? -400 : 400, 0), 1000);
+  await tester.pumpAndSettle();
+}
+
 String monthHeader(WidgetTester tester) => tester
     .widgetList<Text>(find.byType(Text))
     .map((text) => text.data ?? '')
     .firstWhere((text) => RegExp(r'^[A-Z][a-z]+ \d{4}$').hasMatch(text));
 
-String selectionLabel(WidgetTester tester) => tester
-    .widgetList<Text>(find.byType(Text))
-    .map((text) => text.data ?? '')
-    .firstWhere((text) => text.startsWith('Workouts'));
-
-/// Day cells of the month grid: the only opaque GestureDetectors wrapping a
-/// 1px-margin Container (the month nav buttons are FButtons).
+/// Workout days of the month grid: the only cells that take a tap.
 Finder dayCells() => find.byWidgetPredicate(
   (widget) =>
-      widget is GestureDetector &&
-      widget.behavior == HitTestBehavior.opaque &&
-      widget.child is Container &&
-      (widget.child! as Container).margin == const EdgeInsets.all(1),
+      widget is Semantics &&
+      (widget.properties.label?.startsWith('Workout on') ?? false),
 );
 
 /// Copies [sessions] with brand-new DateTimes, the way Isar hands them out
