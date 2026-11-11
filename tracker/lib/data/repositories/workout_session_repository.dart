@@ -65,6 +65,9 @@ class WorkoutSessionRepository {
   Future<int> put(WorkoutSession session) =>
       _isar.writeTxn(() => _isar.workoutSessions.put(session));
 
+  Future<void> putAll(List<WorkoutSession> sessions) =>
+      _isar.writeTxn(() => _isar.workoutSessions.putAll(sessions));
+
   Future<bool> delete(int id) =>
       _isar.writeTxn(() => _isar.workoutSessions.delete(id));
 

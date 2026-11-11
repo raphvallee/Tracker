@@ -20,5 +20,6 @@ class TrackerRepository {
   final WorkoutSplitRepository splits;
   final WorkoutSessionRepository sessions;
 
-  Future<bool> close() => _isar.close();
+  Future<bool> close({bool deleteFromDisk = false}) =>
+      _isar.close(deleteFromDisk: deleteFromDisk);
 }

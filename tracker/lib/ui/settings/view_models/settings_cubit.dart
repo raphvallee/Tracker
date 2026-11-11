@@ -13,13 +13,16 @@ class SettingsState {
     // Hydrated-state schema versioning (PRODUCTION_READINESS.md Phase 1).
     // v1 = the original shape; v2 adds set prefill, number entry, the
     // effort scale, the current split and when splits were last picked. Payloads written before versioning have no 'v' key and
-    // read as v1. Unknown future versions fall back to defaults instead of
-    // crashing.
+    // read as v1. v3 adds the range every graph shows; its graphs each name
+    // an exercise (older ones without one are dropped). Unknown future
+    // versions fall back to defaults instead of crashing.
     switch (json['v'] as int? ?? 1) {
       case 1:
         return _fromV1(json);
       case 2:
         return _fromV2(json);
+      case 3:
+        return _fromV3(json);
       default:
         return SettingsState();
     }
@@ -41,6 +44,7 @@ class SettingsState {
     this.showHeavyWeightWarning = true,
     this.heavyWeightConfirmed = false,
     List<GraphConfig> graphs = const [],
+    this.graphRange = GraphTimeframe.last90Days,
   }) : splitsUsedAt = Map.unmodifiable(splitsUsedAt),
        graphs = List.unmodifiable(graphs);
 
@@ -120,6 +124,13 @@ class SettingsState {
         splitsUsedAt: _splitsUsedAt(json['splitsUsedAt']),
       );
 
+  static SettingsState _fromV3(Map<String, dynamic> json) =>
+      _fromV2(json).copyWith(
+        graphRange:
+            GraphTimeframe.values.asNameMap()[json['graphRange']] ??
+            GraphTimeframe.last90Days,
+      );
+
   static Map<int, DateTime> _splitsUsedAt(Object? json) {
     if (json is! Map) return const {};
     return {
@@ -160,6 +171,9 @@ class SettingsState {
 
   final List<GraphConfig> graphs;
 
+  /// How far back every graph looks.
+  final GraphTimeframe graphRange;
+
   SettingsState copyWith({
     WeightUnit? unit,
     bool? notificationsEnabled,
@@ -176,6 +190,7 @@ class SettingsState {
     bool? showHeavyWeightWarning,
     bool? heavyWeightConfirmed,
     List<GraphConfig>? graphs,
+    GraphTimeframe? graphRange,
   }) {
     return SettingsState(
       unit: unit ?? this.unit,
@@ -196,6 +211,7 @@ class SettingsState {
           showHeavyWeightWarning ?? this.showHeavyWeightWarning,
       heavyWeightConfirmed: heavyWeightConfirmed ?? this.heavyWeightConfirmed,
       graphs: graphs ?? this.graphs,
+      graphRange: graphRange ?? this.graphRange,
     );
   }
 
@@ -216,7 +232,8 @@ class SettingsState {
       defaultRepRangeMax == other.defaultRepRangeMax &&
       showHeavyWeightWarning == other.showHeavyWeightWarning &&
       heavyWeightConfirmed == other.heavyWeightConfirmed &&
-      _listEquals(graphs, other.graphs);
+      _listEquals(graphs, other.graphs) &&
+      graphRange == other.graphRange;
 
   @override
   int get hashCode => Object.hash(
@@ -237,6 +254,7 @@ class SettingsState {
     showHeavyWeightWarning,
     heavyWeightConfirmed,
     Object.hashAll(graphs),
+    graphRange,
   );
 
   static const _unset = Object();
@@ -258,7 +276,7 @@ class SettingsState {
   }
 
   Map<String, dynamic> toJson() => {
-    'v': 2,
+    'v': 3,
     'unit': unit.name,
     'notificationsEnabled': notificationsEnabled,
     'analyticsEnabled': analyticsEnabled,
@@ -277,6 +295,7 @@ class SettingsState {
     'showHeavyWeightWarning': showHeavyWeightWarning,
     'heavyWeightConfirmed': heavyWeightConfirmed,
     'graphs': graphs.map((graph) => graph.toJson()).toList(),
+    'graphRange': graphRange.name,
   };
 }
 
@@ -370,6 +389,9 @@ class SettingsCubit extends HydratedCubit<SettingsState> {
     final graphs = [...state.graphs]..[index] = graph;
     emit(state.copyWith(graphs: graphs));
   }
+
+  void setGraphRange(GraphTimeframe range) =>
+      emit(state.copyWith(graphRange: range));
 
   void removeGraph(int index) {
     if (index < 0 || index >= state.graphs.length) return;

@@ -86,6 +86,12 @@ String weekdayLabel(DateTime date) => _shortWeekdays[date.weekday - 1];
 /// "November".
 String monthName(int month) => _monthNames[month - 1];
 
+/// "Nov".
+String shortMonthName(int month) => _months[month - 1];
+
+/// "9 Nov".
+String dayMonthLabel(DateTime date) => '${date.day} ${_months[date.month - 1]}';
+
 /// "November", with the year when it is not this year's: "November 2025".
 String monthLabel(int year, int month, {DateTime? now}) =>
     year == (now ?? DateTime.now()).year

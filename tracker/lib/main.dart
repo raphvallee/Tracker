@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:forui/forui.dart';
 import 'package:hydrated_bloc/hydrated_bloc.dart';
@@ -12,14 +11,14 @@ import 'package:tracker/data/repositories/tracker_repository.dart';
 import 'package:tracker/data/services/app_env.dart';
 import 'package:tracker/data/services/app_log.dart';
 import 'package:tracker/data/services/db.dart';
+import 'package:tracker/data/services/sample_data.dart';
 import 'package:tracker/data/services/seed.dart';
+import 'package:tracker/data/services/test_mode.dart';
+import 'package:tracker/routing/app_session.dart';
 import 'package:tracker/routing/home_page.dart';
 import 'package:tracker/ui/core/themes/material_theme_bridge.dart';
 import 'package:tracker/ui/core/ui/keyboard_inset.dart';
-import 'package:tracker/ui/core/ui/repository_scope.dart';
-import 'package:tracker/ui/settings/view_models/settings_cubit.dart';
-import 'package:tracker/ui/splits/view_models/split_drafts_cubit.dart';
-import 'package:tracker/ui/workout/view_models/workout_cubit.dart';
+import 'package:tracker/ui/core/ui/test_mode_scope.dart';
 import 'package:window_size/window_size.dart';
 
 Future<void> main() async {
@@ -46,9 +45,10 @@ Future<void> main() async {
 Future<void> _bootstrap() async {
   final documentsPath = (await getApplicationDocumentsDirectory()).path;
 
-  HydratedBloc.storage = await HydratedStorage.build(
+  final storage = await HydratedStorage.build(
     storageDirectory: HydratedStorageDirectory(documentsPath),
   );
+  HydratedBloc.storage = storage;
   AppLog.init(documentsPath);
 
   // Open the single Isar instance and make the shell available immediately.
@@ -57,34 +57,28 @@ Future<void> _bootstrap() async {
   final isar = await DbInstance.getIsar();
   final repository = TrackerRepository(isar);
 
+  // Test mode starts every launch on fresh sample data (dev builds only).
+  (TrackerRepository, SampleData)? sandbox;
+  if (!isProd && TestMode.isOn(documentsPath)) {
+    try {
+      sandbox = await TestMode.openSandbox();
+    } catch (error, stackTrace) {
+      AppLog.error('test-mode', error, stackTrace);
+    }
+  }
+
   if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
     setWindowTitle("Tracker");
     setWindowMinSize(Size(320, 568));
   }
 
   runApp(
-    RepositoryProvider<TrackerRepository>.value(
-      value: repository,
-      child: RepositoryScope(
-        repository: repository,
-        child: MultiBlocProvider(
-          providers: [
-            BlocProvider<WorkoutCubit>(
-              create: (_) => WorkoutCubit(repository: repository),
-              lazy: false,
-            ),
-            BlocProvider<SettingsCubit>(
-              create: (_) => SettingsCubit(),
-              lazy: false,
-            ),
-            BlocProvider<SplitDraftsCubit>(
-              create: (_) => SplitDraftsCubit(repository: repository),
-              lazy: false,
-            ),
-          ],
-          child: const MyApp(),
-        ),
-      ),
+    AppSession(
+      repository: repository,
+      storage: storage,
+      documentsPath: documentsPath,
+      sandbox: sandbox,
+      app: const MyApp(),
     ),
   );
 
@@ -161,8 +155,10 @@ class MyApp extends StatelessWidget {
           data: Theme.brightnessOf(context) == Brightness.light
               ? navLightTheme
               : navDarkTheme,
-          child: KeyboardReveal(
-            child: FToaster(child: FTooltipGroup(child: child!)),
+          child: TestModeBanner(
+            child: KeyboardReveal(
+              child: FToaster(child: FTooltipGroup(child: child!)),
+            ),
           ),
         ),
       ),

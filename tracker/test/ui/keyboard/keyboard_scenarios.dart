@@ -116,52 +116,6 @@ Future<void> runKeyboardScenario(
   debugDefaultTargetPlatformOverride = null;
 }
 
-Future<void> addGraphSheetScenario(
-  WidgetTester tester,
-  ScreenshotRecorder recorder,
-) async {
-  expect(
-    tester.any(find.text('Add graph')),
-    isTrue,
-    reason: 'precondition: the feed analytics header is visible',
-  );
-
-  await _openKeyboard(tester);
-  await tester.tap(find.text('Add graph'));
-  await tester.pump();
-  await tester.pump(const Duration(milliseconds: 400));
-  await tester.pumpAndSettle();
-
-  await tester.tap(fieldWithLabel('Title'));
-  await tester.pumpAndSettle();
-  await recorder.capture('add-graph sheet, title focused, keyboard up');
-
-  final keyboardTop = _keyboardTop(tester);
-  final titleRect = tester.getRect(fieldWithLabel('Title'));
-  expect(
-    titleRect.bottom,
-    lessThanOrEqualTo(keyboardTop),
-    reason: 'the focused title field must be fully visible above the keyboard',
-  );
-
-  await tester.dragUntilVisible(
-    find.text('Save'),
-    find.descendant(
-      of: find.byType(BottomSheet),
-      matching: find.byType(SingleChildScrollView),
-    ),
-    const Offset(0, -120),
-  );
-  await tester.pumpAndSettle();
-  final saveRect = tester.getRect(find.text('Save'));
-  expect(
-    saveRect.bottom,
-    lessThanOrEqualTo(keyboardTop),
-    reason: 'the Save action must be reachable above the keyboard',
-  );
-  await recorder.capture('add-graph sheet, scrolled to Save');
-}
-
 Future<void> settingsRepTargetScenario(
   WidgetTester tester,
   ScreenshotRecorder recorder,

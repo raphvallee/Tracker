@@ -1,5 +1,4 @@
 import 'package:flutter/widgets.dart';
-import 'package:tracker/domain/services/analytics.dart';
 import 'package:tracker/domain/models/weight_unit.dart';
 import 'package:tracker/ui/settings/view_models/settings_cubit.dart';
 import 'package:tracker/utils/decimal_input.dart';
@@ -22,14 +21,19 @@ String formatWeight(BuildContext context, double kilograms) {
 String formatReps(double reps) => formatDecimal(reps);
 
 /// A total lifted, rounded and grouped by thousands: "5,540 kg".
-String formatVolume(BuildContext context, double kilograms) {
-  final digits = displayWeightOf(context, kilograms).round().abs().toString();
+String formatVolume(BuildContext context, double kilograms) =>
+    '${groupedNumber(displayWeightOf(context, kilograms))} '
+    '${weightUnitOf(context).symbol}';
+
+/// [value] rounded and grouped by thousands: "5,540".
+String groupedNumber(double value) {
+  final digits = value.round().abs().toString();
   final grouped = StringBuffer();
   for (var i = 0; i < digits.length; i++) {
     if (i > 0 && (digits.length - i) % 3 == 0) grouped.write(',');
     grouped.write(digits[i]);
   }
-  return '$grouped ${weightUnitOf(context).symbol}';
+  return grouped.toString();
 }
 
 String formatDecimal(double value) {
@@ -37,20 +41,6 @@ String formatDecimal(double value) {
   return value
       .toStringAsFixed(maxDecimalPlaces)
       .replaceFirst(RegExp(r'\.?0+$'), '');
-}
-
-List<ProgressionPoint> displayProgressionPoints(
-  BuildContext context,
-  List<ProgressionPoint> points,
-) {
-  final unit = weightUnitOf(context);
-  return [
-    for (final point in points)
-      ProgressionPoint(
-        date: point.date,
-        value: unit.fromKilograms(point.value),
-      ),
-  ];
 }
 
 String plural(String noun, int n) => n == 1 ? '1 $noun' : '$n ${noun}s';

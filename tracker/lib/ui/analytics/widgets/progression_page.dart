@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
-import 'package:tracker/domain/models/weight_unit.dart';
+import 'package:tracker/domain/models/graph_config.dart';
 import 'package:tracker/domain/models/workout_session.dart';
 import 'package:tracker/domain/services/analytics.dart';
+import 'package:tracker/domain/services/graph_series.dart';
+import 'package:tracker/ui/analytics/widgets/graph_panel.dart';
 import 'package:tracker/ui/core/ui/custom_app_bar.dart';
-import 'package:tracker/ui/core/ui/line_chart.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
 import 'package:tracker/ui/core/ui/weight_format.dart';
 
@@ -30,6 +31,8 @@ class _ProgressionPageState extends State<ProgressionPage> {
     exerciseId: null,
     revision: null,
   );
+  GraphSeries? _volume;
+  GraphSeries? _best1rm;
 
   @override
   void didChangeDependencies() {
@@ -75,6 +78,17 @@ class _ProgressionPageState extends State<ProgressionPage> {
           exerciseId: null,
           revision: sessions.length,
         );
+        GraphSeries series(GraphMetric metric) => graphSeries(
+          sessions: sessions,
+          exerciseId: null,
+          metric: metric,
+          range: GraphTimeframe.all,
+          now: DateTime.now(),
+          multipliers: _multipliers,
+          exerciseMultipliers: exerciseMultipliers,
+        );
+        _volume = series(GraphMetric.volume);
+        _best1rm = series(GraphMetric.best1rm);
         _loading = false;
       });
     } catch (error) {
@@ -112,12 +126,12 @@ class _ProgressionPageState extends State<ProgressionPage> {
 
     final theme = context.theme;
     final summary = _snapshot.summary;
-    final volume = displayProgressionPoints(context, _snapshot.volume);
-    final totalVolume = volume.fold<double>(
+    final totalVolume = _snapshot.volume.fold<double>(
       0,
       (sum, point) => sum + point.value,
     );
-    final best1rm = displayProgressionPoints(context, _snapshot.best1rm);
+    final volume = _volume;
+    final best1rm = _best1rm;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -145,7 +159,7 @@ class _ProgressionPageState extends State<ProgressionPage> {
           children: [
             _Stat(
               label: 'Total volume',
-              value: formatWeight(context, totalVolume),
+              value: formatVolume(context, totalVolume),
             ),
           ],
         ),
@@ -155,14 +169,14 @@ class _ProgressionPageState extends State<ProgressionPage> {
           style: theme.typography.body.md.copyWith(fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 8),
-        LineChart(points: volume, unit: weightUnitOf(context).symbol),
+        if (volume != null) GraphPanel(series: volume),
         const SizedBox(height: 24),
         Text(
           'Best estimated 1RM over time',
           style: theme.typography.body.md.copyWith(fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 8),
-        LineChart(points: best1rm, unit: weightUnitOf(context).symbol),
+        if (best1rm != null) GraphPanel(series: best1rm),
         const SizedBox(height: 16),
         Text(
           'Warm-up sets are excluded; weights are normalized by each '

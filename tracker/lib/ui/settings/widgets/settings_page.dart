@@ -3,10 +3,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:forui/forui.dart';
+import 'package:tracker/data/services/app_env.dart';
 import 'package:tracker/domain/models/gym.dart';
 import 'package:tracker/domain/models/weight_unit.dart';
 import 'package:tracker/ui/core/ui/custom_route.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
+import 'package:tracker/ui/core/ui/test_mode_scope.dart';
 import 'package:tracker/ui/settings/view_models/settings_cubit.dart';
 import 'package:tracker/ui/settings/widgets/gyms_page.dart';
 import 'package:tracker/ui/settings/widgets/settings_list.dart';
@@ -104,6 +106,34 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
             ],
           ),
+          if (!isProd)
+            if (TestModeScope.maybeOf(context) case final testMode?)
+              SettingsSection(
+                title: 'Testing',
+                footer: testMode.enabled
+                    ? 'Nothing done in test mode is kept: it starts over on '
+                          'every launch. Turn it off to get your own data back.'
+                    : 'Your own workouts, splits and settings are kept aside, '
+                          'untouched, while test mode is on.',
+                children: [
+                  SettingsSwitchItem(
+                    title: 'Test mode',
+                    description:
+                        'Fourteen months of sample workouts, two splits, '
+                        'two gyms and graphs, in a throwaway database',
+                    value: testMode.enabled,
+                    onChanged: (on) => unawaited(testMode.setEnabled(on)),
+                  ),
+                  if (testMode.enabled)
+                    FItem(
+                      prefix: const Icon(FLucideIcons.rotateCcw),
+                      title: const Text('Reset sample data'),
+                      subtitle: const Text('Start over from the full history'),
+                      enabled: !testMode.busy,
+                      onPress: () => unawaited(testMode.reset()),
+                    ),
+                ],
+              ),
         ],
       ),
     );

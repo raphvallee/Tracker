@@ -49,7 +49,7 @@ void main() {
       });
       expect(state, SettingsState());
       expect(
-        () => state.graphs.add(const GraphConfig(title: 'x')),
+        () => state.graphs.add(const GraphConfig(exerciseId: 1)),
         throwsUnsupportedError,
       );
     });
@@ -80,31 +80,53 @@ void main() {
       );
     });
 
-    test('persists graph configurations and ignores malformed entries', () {
-      const graph = GraphConfig(
-        title: 'Bench progress',
-        exerciseId: 7,
-        metric: GraphMetric.peakWeight,
-        timeframe: GraphTimeframe.last90Days,
+    test('persists graphs and their range, ignoring malformed entries', () {
+      const graph = GraphConfig(exerciseId: 7, metric: GraphMetric.record1rm);
+      final state = SettingsState(
+        graphs: [graph],
+        graphRange: GraphTimeframe.lastYear,
       );
-      final state = SettingsState(graphs: [graph]);
       final restored = SettingsState.fromJson({
         ...state.toJson(),
         'graphs': [
           ...state.toJson()['graphs'] as List<dynamic>,
-          {'title': ''},
+          {'metric': 'volume'},
         ],
       });
-      expect(restored.graphs, hasLength(1));
-      expect(restored.graphs.single.title, 'Bench progress');
-      expect(restored.graphs.single.metric, GraphMetric.peakWeight);
-      expect(restored.graphs.single.timeframe, GraphTimeframe.last90Days);
+      expect(restored.graphs, [graph]);
+      expect(restored.graphRange, GraphTimeframe.lastYear);
     });
 
-    test('graph config supports clearing exercise filter', () {
-      const graph = GraphConfig(title: 'x', exerciseId: 2);
-      expect(graph.copyWith(exerciseId: null).exerciseId, isNull);
-      expect(GraphConfig.fromJson(graph.toJson()).exerciseId, 2);
+    test('v2 graphs keep their exercise; "All exercises" ones are dropped', () {
+      final restored = SettingsState.fromJson({
+        'v': 2,
+        'graphs': [
+          {
+            'title': 'Bench progress',
+            'exerciseId': 7,
+            'metric': 'peakWeight',
+            'timeframe': 'last30Days',
+          },
+          {'title': 'Everything', 'exerciseId': null, 'metric': 'volume'},
+        ],
+      });
+      expect(restored.graphs, [
+        const GraphConfig(exerciseId: 7, metric: GraphMetric.peakWeight),
+      ]);
+      expect(restored.graphRange, GraphTimeframe.last90Days);
+    });
+
+    test('an unknown graph range reads as three months', () {
+      final restored = SettingsState.fromJson({'v': 3, 'graphRange': 'decade'});
+      expect(restored.graphRange, GraphTimeframe.last90Days);
+    });
+
+    test('setGraphRange changes the range every graph shows', () {
+      HydratedBloc.storage = InMemoryStorage();
+      final cubit = SettingsCubit();
+      addTearDown(cubit.close);
+      cubit.setGraphRange(GraphTimeframe.all);
+      expect(cubit.state.graphRange, GraphTimeframe.all);
     });
   });
 
@@ -144,7 +166,7 @@ void main() {
         notificationsEnabled: false,
       );
       final json = state.toJson();
-      expect(json['v'], 2);
+      expect(json['v'], 3);
       final restored = SettingsState.fromJson(json);
       expect(restored, state);
     });

@@ -24,7 +24,11 @@ import 'package:tracker/domain/models/workout_set.dart';
 import 'package:tracker/domain/models/workout_split.dart';
 import 'package:tracker/domain/services/workout_dates.dart';
 import 'package:tracker/main.dart';
+import 'package:tracker/ui/analytics/view_models/analytics_data.dart';
 import 'package:tracker/ui/analytics/widgets/graph_editor.dart';
+import 'package:tracker/ui/analytics/widgets/graph_page.dart';
+import 'package:tracker/ui/analytics/widgets/graph_tile.dart';
+import 'package:tracker/ui/core/ui/graph_chart.dart';
 import 'package:tracker/ui/analytics/widgets/progression_page.dart';
 import 'package:tracker/ui/core/ui/custom_route.dart';
 import 'package:tracker/ui/core/ui/effort_sheet.dart';
@@ -120,8 +124,18 @@ Future<void> captureScreensAt(
         BlocProvider<SplitDraftsCubit>.value(value: drafts),
         BlocProvider<SettingsCubit>(
           create: (_) => SettingsCubit()
+            ..addGraph(GraphConfig(exerciseId: fixtures.benchId))
             ..addGraph(
-              const GraphConfig(title: 'Strength - upper body progression'),
+              GraphConfig(
+                exerciseId: fixtures.benchId,
+                metric: GraphMetric.record1rm,
+              ),
+            )
+            ..addGraph(
+              GraphConfig(
+                exerciseId: fixtures.inclineId,
+                metric: GraphMetric.volume,
+              ),
             ),
           lazy: false,
         ),
@@ -237,6 +251,25 @@ Future<void> captureScreensAt(
     await settleForData(dataLoaded);
     await recorder.capture('Feed tab');
   });
+  await guarded('Feed analytics', () async {
+    // The graphs sit under the recent activity: scroll down to them.
+    final feed = find
+        .descendant(
+          of: find.byType(FeedPage),
+          matching: find.byType(Scrollable),
+        )
+        .first;
+    await settleForData(() => tester.any(find.byType(GraphTile)));
+    await tester.scrollUntilVisible(
+      find.text('Add graph'),
+      200,
+      scrollable: feed,
+    );
+    await settle();
+    await recorder.capture('Feed analytics');
+    await tester.drag(feed, const Offset(0, 4000));
+    await settle();
+  });
   await guarded('History tab', () async {
     switchTab(1);
     await settleForData(() => tester.any(find.text('Upper Body')));
@@ -276,6 +309,17 @@ Future<void> captureScreensAt(
     dataReady: () => tester.any(find.text('Iron Temple')),
   );
   await visit(
+    'Graph page',
+    GraphPage(
+      index: 0,
+      data: AnalyticsData(
+        sessions: fixtures.allSessions,
+        exercises: fixtures.exercises,
+        gyms: fixtures.allGyms,
+      ),
+    ),
+  );
+  await visit(
     'Progression page',
     const ProgressionPage(),
     dataReady: dataLoaded,
@@ -284,7 +328,7 @@ Future<void> captureScreensAt(
   await visit(
     'Exercise detail page',
     ExerciseDetailPage(exercise: fixtures.bench),
-    dataReady: () => !tester.any(find.text('No data yet')),
+    dataReady: () => tester.any(find.byType(GraphChart)),
   );
   await visit(
     'Session detail page',
@@ -504,8 +548,9 @@ Future<void> captureScreensAt(
     () => GraphEditor.show(
       pageContext,
       exercises: fixtures.exercises,
-      initial: const GraphConfig(title: 'Strength - upper body'),
+      initial: GraphConfig(exerciseId: fixtures.benchId),
     ),
+    root: true,
   );
   await openAndClose(
     'Edit gym sheet',
