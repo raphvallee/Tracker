@@ -16,7 +16,9 @@ import 'package:tracker/domain/models/workout_split.dart';
 import 'package:tracker/domain/services/workout_dates.dart';
 import 'package:tracker/main.dart';
 import 'package:tracker/routing/tab_navigation.dart';
+import 'package:tracker/ui/analytics/view_models/analytics_data.dart';
 import 'package:tracker/ui/analytics/widgets/graph_editor.dart';
+import 'package:tracker/ui/analytics/widgets/graph_page.dart';
 import 'package:tracker/ui/analytics/widgets/progression_page.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
 import 'package:tracker/ui/exercises/widgets/exercise_detail_page.dart';
@@ -121,7 +123,14 @@ void main() {
             providers: [
               BlocProvider<WorkoutCubit>.value(value: cubit),
               BlocProvider<SettingsCubit>(
-                create: (_) => SettingsCubit(),
+                create: (_) => SettingsCubit()
+                  ..addGraph(GraphConfig(exerciseId: fixtures.benchId))
+                  ..addGraph(
+                    GraphConfig(
+                      exerciseId: fixtures.benchId,
+                      metric: GraphMetric.record1rm,
+                    ),
+                  ),
                 lazy: false,
               ),
               BlocProvider<SplitDraftsCubit>(
@@ -195,6 +204,17 @@ void main() {
       await visit('SplitsSettingsPage', const SplitsSettingsPage());
       await visit('GymsPage', const GymsPage());
       await visit('ProgressionPage', const ProgressionPage());
+      await visit(
+        'GraphPage',
+        GraphPage(
+          index: 0,
+          data: AnalyticsData(
+            sessions: fixtures.allSessions,
+            exercises: fixtures.exercises,
+            gyms: fixtures.allGyms,
+          ),
+        ),
+      );
       await visit('NewExercisePage', const NewExercisePage());
       await visit(
         'ExerciseDetailPage',
@@ -249,8 +269,9 @@ void main() {
         () => GraphEditor.show(
           pageContext,
           exercises: fixtures.exercises,
-          initial: const GraphConfig(title: 'Strength - upper body'),
+          initial: GraphConfig(exerciseId: fixtures.benchId),
         ),
+        root: true,
       );
       await openAndClose(
         'Edit gym sheet',

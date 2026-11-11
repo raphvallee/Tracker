@@ -1,69 +1,63 @@
-enum GraphMetric { best1rm, peakWeight, volume }
+/// What a graph shows for its exercise. Saved by name: new values go last.
+enum GraphMetric {
+  /// Each session's best set, worked out to one rep.
+  best1rm,
 
+  /// The most weight on the bar each session, any reps.
+  peakWeight,
+
+  /// Weight × reps of every working set, per week or month.
+  volume,
+
+  /// The best estimated 1RM ever lifted: it only climbs on a new record.
+  record1rm,
+}
+
+/// How far back the graphs look. One range is shared by every graph.
 enum GraphTimeframe { all, last30Days, last90Days, lastYear }
 
+/// A graph of one exercise. It names itself after the exercise and what it
+/// shows, so there is nothing to type.
 class GraphConfig {
   const GraphConfig({
-    required this.title,
-    this.exerciseId,
+    required this.exerciseId,
     this.metric = GraphMetric.best1rm,
-    this.timeframe = GraphTimeframe.all,
   });
 
-  final String title;
-  final int? exerciseId;
+  final int exerciseId;
   final GraphMetric metric;
-  final GraphTimeframe timeframe;
 
-  GraphConfig copyWith({
-    String? title,
-    Object? exerciseId = _unset,
-    GraphMetric? metric,
-    GraphTimeframe? timeframe,
-  }) => GraphConfig(
-    title: title ?? this.title,
-    exerciseId: identical(exerciseId, _unset)
-        ? this.exerciseId
-        : exerciseId as int?,
+  GraphConfig copyWith({int? exerciseId, GraphMetric? metric}) => GraphConfig(
+    exerciseId: exerciseId ?? this.exerciseId,
     metric: metric ?? this.metric,
-    timeframe: timeframe ?? this.timeframe,
   );
 
   Map<String, dynamic> toJson() => {
-    'title': title,
     'exerciseId': exerciseId,
     'metric': metric.name,
-    'timeframe': timeframe.name,
   };
 
   @override
   bool operator ==(Object other) =>
       other is GraphConfig &&
-      title == other.title &&
       exerciseId == other.exerciseId &&
-      metric == other.metric &&
-      timeframe == other.timeframe;
+      metric == other.metric;
 
   @override
-  int get hashCode => Object.hash(title, exerciseId, metric, timeframe);
-
-  static const _unset = Object();
+  int get hashCode => Object.hash(exerciseId, metric);
 
   // ignore: sort_constructors_first
   factory GraphConfig.fromJson(Map<String, dynamic> json) {
-    final title = json['title'];
-    if (title is! String || title.trim().isEmpty) {
-      throw const FormatException('Graph title is required');
-    }
+    // Graphs saved before every graph had its own exercise ("All
+    // exercises") carry no id and are dropped by the caller.
     final exerciseId = json['exerciseId'];
+    if (exerciseId is! num) {
+      throw const FormatException('Graph exercise is required');
+    }
     return GraphConfig(
-      title: title,
-      exerciseId: exerciseId is num ? exerciseId.toInt() : null,
+      exerciseId: exerciseId.toInt(),
       metric:
           GraphMetric.values.asNameMap()[json['metric']] ?? GraphMetric.best1rm,
-      timeframe:
-          GraphTimeframe.values.asNameMap()[json['timeframe']] ??
-          GraphTimeframe.all,
     );
   }
 }

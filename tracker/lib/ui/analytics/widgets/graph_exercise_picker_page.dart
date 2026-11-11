@@ -5,19 +5,7 @@ import 'package:tracker/domain/models/muscle.dart';
 import 'package:tracker/ui/core/ui/custom_app_bar.dart';
 import 'package:tracker/ui/core/ui/keyboard_inset.dart';
 
-enum PickKind { all, specific, cancelled }
-
-class GraphExercisePick {
-  const GraphExercisePick.all() : kind = PickKind.all, exercise = null;
-  const GraphExercisePick.specific(this.exercise) : kind = PickKind.specific;
-  const GraphExercisePick.cancelled()
-    : kind = PickKind.cancelled,
-      exercise = null;
-
-  final PickKind kind;
-  final Exercise? exercise;
-}
-
+/// Picks the exercise a graph follows; pops it, or nothing when left.
 class GraphExercisePickerPage extends StatefulWidget {
   const GraphExercisePickerPage({
     super.key,
@@ -143,16 +131,6 @@ class _GraphExercisePickerPageState extends State<GraphExercisePickerPage> {
             ),
           ),
         ),
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-            child: FItem(
-              title: const Text('All exercises'),
-              onPress: () =>
-                  Navigator.of(context).pop(const GraphExercisePick.all()),
-            ),
-          ),
-        ),
         SliverList(
           delegate: SliverChildBuilderDelegate((context, index) {
             final exercise = _shown[index];
@@ -165,9 +143,7 @@ class _GraphExercisePickerPageState extends State<GraphExercisePickerPage> {
                 exercise.primaryMuscle.map((m) => m.scientificName).join(', '),
                 overflow: TextOverflow.ellipsis,
               ),
-              onPress: () =>
-                  Navigator.of(context)
-                      .pop(GraphExercisePick.specific(exercise)),
+              onPress: () => Navigator.of(context).pop(exercise),
             );
           }, childCount: _shown.length),
         ),

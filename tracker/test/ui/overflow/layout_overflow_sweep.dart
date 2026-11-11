@@ -25,7 +25,9 @@ import 'package:tracker/domain/models/workout_set.dart';
 import 'package:tracker/domain/models/workout_split.dart';
 import 'package:tracker/domain/services/workout_dates.dart';
 import 'package:tracker/main.dart';
+import 'package:tracker/ui/analytics/view_models/analytics_data.dart';
 import 'package:tracker/ui/analytics/widgets/graph_editor.dart';
+import 'package:tracker/ui/analytics/widgets/graph_page.dart';
 import 'package:tracker/ui/analytics/widgets/progression_page.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
 import 'package:tracker/ui/exercises/widgets/exercise_detail_page.dart';
@@ -113,8 +115,18 @@ Future<void> sweepSize(WidgetTester tester, String label, Size size) async {
         BlocProvider<SplitDraftsCubit>.value(value: drafts),
         BlocProvider<SettingsCubit>(
           create: (_) => SettingsCubit()
+            ..addGraph(GraphConfig(exerciseId: sweepFixtures.benchId))
             ..addGraph(
-              const GraphConfig(title: 'Strength - upper body progression'),
+              GraphConfig(
+                exerciseId: sweepFixtures.benchId,
+                metric: GraphMetric.record1rm,
+              ),
+            )
+            ..addGraph(
+              GraphConfig(
+                exerciseId: sweepFixtures.inclineId,
+                metric: GraphMetric.volume,
+              ),
             ),
           lazy: false,
         ),
@@ -161,6 +173,17 @@ Future<void> sweepSize(WidgetTester tester, String label, Size size) async {
   await visit('SplitsSettingsPage', const SplitsSettingsPage());
   await visit('GymsPage', const GymsPage());
   await visit('ProgressionPage', const ProgressionPage());
+  await visit(
+    'GraphPage',
+    GraphPage(
+      index: 0,
+      data: AnalyticsData(
+        sessions: sweepFixtures.allSessions,
+        exercises: sweepFixtures.exercises,
+        gyms: sweepFixtures.allGyms,
+      ),
+    ),
+  );
   await visit('NewExercisePage', const NewExercisePage());
   await visit(
     'ExerciseDetailPage',
@@ -263,8 +286,9 @@ Future<void> sweepSize(WidgetTester tester, String label, Size size) async {
     () => GraphEditor.show(
       pageContext,
       exercises: sweepFixtures.exercises,
-      initial: const GraphConfig(title: 'Strength - upper body'),
+      initial: GraphConfig(exerciseId: sweepFixtures.benchId),
     ),
+    root: true,
   );
   await openAndClose(
     'Edit gym sheet',

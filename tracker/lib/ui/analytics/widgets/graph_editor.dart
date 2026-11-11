@@ -2,341 +2,152 @@ import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
 import 'package:tracker/domain/models/exercise.dart';
 import 'package:tracker/domain/models/graph_config.dart';
-import 'package:tracker/domain/services/analytics.dart';
-import 'package:tracker/ui/core/ui/keyboard_inset.dart';
-import 'package:tracker/ui/core/ui/custom_route.dart';
 import 'package:tracker/ui/analytics/widgets/graph_exercise_picker_page.dart';
-import 'package:tracker/utils/form_validators.dart';
+import 'package:tracker/ui/analytics/widgets/graph_readout.dart';
+import 'package:tracker/ui/core/ui/custom_route.dart';
+import 'package:tracker/ui/core/ui/edit_sheet.dart';
+import 'package:tracker/ui/core/ui/item_card.dart';
 
-/// Modal bottom-sheet editor for creating or editing a feed graph.
-///
-/// Built on `showModalBottomSheet` instead of `FDialog` on purpose: the
-/// dialog's full-screen animated backdrop blur dropped the entrance to a
-/// frame-by-frame crawl over the chart-heavy feed, and its autofocus only
-/// fired after the route animation finished, so the keyboard lagged
-/// visibly behind the popup. The sheet uses a plain dim barrier and slides up
-/// with no blur. No field is autofocused so the keyboard does not pop up when
-/// the sheet opens.
+/// The sheet that adds or edits a graph: which exercise, and what to
+/// measure. The graph names itself from both, and the range lives on the
+/// graphs, so there is nothing else to fill in.
 abstract final class GraphEditor {
   static Future<GraphConfig?> show(
     BuildContext context, {
     GraphConfig? initial,
     required List<Exercise> exercises,
-  }) => showModalBottomSheet<GraphConfig>(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: context.theme.colors.background,
-    constraints: BoxConstraints(
-      maxWidth: MediaQuery.sizeOf(context).width - 10,
-    ),
-    builder: (sheetContext) {
-      // The sheet lifts its bottom edge above the keyboard (padding outside
-      // the scroll view below), so the keyboard can never cover its content
-      // and fields inside must not use the app's keyboard-height reveal
-      // overshoot - with the exercise picker open it would over-scroll the
-      // search field. Give the fields the plain reveal gap instead.
-      final theme = sheetContext.theme.copyWith(
-        textFieldStyles: sheetContext.theme.textFieldStyles.apply([
-          .all(
-            .delta(
-              scrollPadding: EdgeInsetsDelta.delta(bottom: kKeyboardRevealGap),
-            ),
-          ),
-        ]),
-      );
-      return FTheme(
-        data: theme,
-        child: _GraphEditorSheet(initial: initial, exercises: exercises),
-      );
-    },
+  }) => showEditSheet<GraphConfig>(
+    context,
+    builder: (_) => _GraphSheet(initial: initial, exercises: exercises),
   );
 }
 
-class _GraphEditorSheet extends StatefulWidget {
-  const _GraphEditorSheet({this.initial, required this.exercises});
+class _GraphSheet extends StatefulWidget {
+  const _GraphSheet({this.initial, required this.exercises});
 
   final GraphConfig? initial;
   final List<Exercise> exercises;
 
   @override
-  State<_GraphEditorSheet> createState() => _GraphEditorSheetState();
+  State<_GraphSheet> createState() => _GraphSheetState();
 }
 
-class _GraphEditorSheetState extends State<_GraphEditorSheet> {
-  late final TextEditingController _title;
-  late final TextEditingController _exerciseDisplay;
-  late final FocusNode _titleFocus;
-  late int? _exerciseId;
-  late GraphMetric _metric;
-  late GraphTimeframe _timeframe;
+class _GraphSheetState extends State<_GraphSheet> {
+  late Exercise? _exercise = _exerciseOf(widget.initial?.exerciseId);
+  late GraphMetric _metric = widget.initial?.metric ?? GraphMetric.best1rm;
+  bool _missingExercise = false;
+  bool _picking = false;
 
-  bool _titleEditedByUser = false;
-  String? _titleError;
-
-  bool _isPicking = false;
-
-  @override
-  void initState() {
-    super.initState();
-    final initial = widget.initial;
-    _title = TextEditingController(text: initial?.title ?? '');
-    _titleFocus = FocusNode();
-    _exerciseId = initial?.exerciseId;
-    _metric = initial?.metric ?? GraphMetric.best1rm;
-    _timeframe = initial?.timeframe ?? GraphTimeframe.all;
-    _exerciseDisplay = TextEditingController(text: _exerciseValueLabel);
-    _titleEditedByUser = initial != null && initial.title.isNotEmpty;
-    // Clear the empty-title error once the title has actual text. The
-    // controller also notifies on selection changes (e.g. when focusing the
-    // field after a failed save), which must not dismiss the error.
-    _title.addListener(() {
-      if (_titleError != null && _title.text.trim().isNotEmpty) {
-        setState(() => _titleError = null);
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _title.dispose();
-    _exerciseDisplay.dispose();
-    _titleFocus.dispose();
-    super.dispose();
-  }
-
-  String get _exerciseValueLabel => _exerciseId == null
-      ? 'All exercises'
-      : widget.exercises
-                .where((exercise) => exercise.id == _exerciseId)
-                .map((exercise) => exercise.title)
-                .firstOrNull ??
-            'Exercise';
-
-  void _save() {
-    final error = requiredText(_title.text);
-    if (error != null) {
-      setState(() => _titleError = error);
-      _titleFocus.requestFocus();
-      return;
+  Exercise? _exerciseOf(int? id) {
+    for (final exercise in widget.exercises) {
+      if (exercise.id == id) return exercise;
     }
-    Navigator.of(context).pop(
-      GraphConfig(
-        title: _title.text.trim(),
-        exerciseId: _exerciseId,
-        metric: _metric,
-        timeframe: _timeframe,
-      ),
-    );
+    return null;
   }
 
   Future<void> _pickExercise() async {
-    if (_isPicking) return;
-    _isPicking = true;
-    FocusScope.of(context).unfocus();
+    if (_picking) return;
+    _picking = true;
     try {
-      final pick = await pushTo<GraphExercisePick>(
+      final picked = await pushTo<Exercise>(
         context,
         GraphExercisePickerPage(
           exercises: widget.exercises,
-          selectedId: _exerciseId,
+          selectedId: _exercise?.id,
         ),
       );
-      if (!mounted || pick == null) return;
-      switch (pick.kind) {
-        case PickKind.specific:
-          setState(() {
-            _exerciseId = pick.exercise!.id;
-            _exerciseDisplay.text = pick.exercise!.title;
-            if (!_titleEditedByUser || _title.text.trim().isEmpty) {
-              _title.text = '${pick.exercise!.title} Progress';
-            }
-          });
-          break;
-        case PickKind.all:
-          setState(() {
-            _exerciseId = null;
-            _exerciseDisplay.text = 'All exercises';
-            if (!_titleEditedByUser || _title.text.trim().isEmpty) {
-              _title.text = 'All exercises Progress';
-            }
-          });
-          break;
-        case PickKind.cancelled:
-          break;
-      }
+      if (!mounted || picked == null) return;
+      setState(() {
+        _exercise = picked;
+        _missingExercise = false;
+      });
     } finally {
-      _isPicking = false;
+      _picking = false;
     }
+  }
+
+  void _save() {
+    final exercise = _exercise;
+    if (exercise == null) {
+      setState(() => _missingExercise = true);
+      return;
+    }
+    Navigator.of(context)
+        .pop(GraphConfig(exerciseId: exercise.id, metric: _metric));
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = context.theme;
-    return SafeArea(
-      // The sheet is hosted by the tab navigator, which already stops above
-      // the shell's bottom navigation bar. Applying the bottom safe-area inset
-      // here would add a second gap below the Save button.
-      top: false,
-      bottom: false,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          // The sheet lifts its bottom edge above the keyboard by padding
-          // OUTSIDE the scroll view. (It used to pad the scroll content
-          // instead: the sheet is bottom-anchored and grows to fit its
-          // content, so the growing keyboard padding stretched the sheet by
-          // the keyboard's full height, pushing the card to the top of the
-          // screen and leaving a large blank, scrollable strip under the
-          // Save button.)
-          //
-          // This sheet is hosted by the tab navigator, which stops above the
-          // shell's bottom navigation bar, so the sheet's container bottom
-          // already sits above the screen bottom and only part of the sheet
-          // would actually be covered by the keyboard: lift by the covered
-          // part only (keyboard inset minus that bottom gap), never the full
-          // inset, or the content loses height and clips.
-          final inset = keyboardInsetOf(context);
-          final obstructed =
-              MediaQuery.sizeOf(context).height - constraints.maxHeight;
-          final lift = (inset - obstructed).clamp(0.0, inset).toDouble();
-          return Padding(
-            padding: EdgeInsets.only(bottom: lift),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _header(theme),
-                  const SizedBox(height: 16),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: FTextField(
-                      control: FTextFieldControl.managed(controller: _title),
-                      focusNode: _titleFocus,
-                      label: const Text('Title'),
-                      hint: 'e.g. Squat progress',
-                      error: _titleError == null ? null : Text(_titleError!),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  _exerciseSection(theme),
-                  const SizedBox(height: 12),
-                  _optionGroup(
-                    theme,
-                    label: 'Metric',
-                    options: [
-                      for (final metric in GraphMetric.values)
-                        (
-                          label: graphMetricLabel(metric),
-                          selected: metric == _metric,
-                          onPress: () => setState(() => _metric = metric),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  _optionGroup(
-                    theme,
-                    label: 'Timeframe',
-                    options: [
-                      for (final timeframe in GraphTimeframe.values)
-                        (
-                          label: graphTimeframeLabel(timeframe),
-                          selected: timeframe == _timeframe,
-                          onPress: () => setState(() => _timeframe = timeframe),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: FButton(onPress: _save, child: const Text('Save')),
-                  ),
-                  const SizedBox(height: 16),
-                ],
+    final adding = widget.initial == null;
+    return EditSheet(
+      title: adding ? 'Add graph' : 'Edit graph',
+      actionLabel: adding ? 'Add graph' : 'Save',
+      onAction: _save,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          ItemCard(
+            children: <FItemMixin>[
+              FItem(
+                title: const Text('Exercise'),
+                details: Text(
+                  _exercise?.title ?? 'Pick one',
+                  style: _exercise == null
+                      ? TextStyle(color: theme.colors.mutedForeground)
+                      : null,
+                ),
+                suffix: const Icon(FLucideIcons.chevronRight),
+                onPress: _pickExercise,
+              ),
+            ],
+          ),
+          if (_missingExercise)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 6, 14, 0),
+              child: Text(
+                'Pick the exercise to graph',
+                style: theme.typography.body.xs.copyWith(
+                  color: theme.colors.error,
+                ),
               ),
             ),
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _header(FThemeData theme) => Padding(
-    padding: const EdgeInsets.fromLTRB(16, 12, 8, 0),
-    child: Row(
-      children: [
-        Expanded(
-          child: Text(
-            widget.initial == null ? 'Add graph' : 'Edit graph',
-            style: theme.typography.body.lg.copyWith(
+          const SizedBox(height: 16),
+          Text(
+            'Measure',
+            style: theme.typography.body.sm.copyWith(
               fontWeight: FontWeight.w600,
             ),
           ),
-        ),
-        FButton.icon(
-          variant: .ghost,
-          onPress: () => Navigator.of(context).pop(),
-          child: const Icon(FLucideIcons.x),
-        ),
-      ],
-    ),
-  );
-
-  Widget _exerciseSection(FThemeData theme) => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 16),
-    child: Semantics(
-      button: true,
-      child: GestureDetector(
-        // The field spans the whole row, and its internals are absorbed:
-        // otherwise the read-only input's own focus/tap recognizer (and any
-        // suffix button) wins the gesture arena, leaving only part of the row
-        // clickable. With the child absorbed, every pixel of the row routes to
-        // this single tap handler.
-        behavior: HitTestBehavior.opaque,
-        onTap: _pickExercise,
-        child: AbsorbPointer(
-          child: FTextField(
-            control: FTextFieldControl.managed(controller: _exerciseDisplay),
-            label: const Text('Exercise'),
-            readOnly: true,
-            suffixBuilder: (context, style, variants) => Icon(
-              FLucideIcons.chevronRight,
-              color: theme.colors.mutedForeground,
-            ),
+          const SizedBox(height: 8),
+          ItemCard(
+            divider: .full,
+            children: <FItemMixin>[
+              for (final metric in graphMetrics)
+                FItem(
+                  selected: metric == _metric,
+                  semanticsInMutuallyExclusiveGroup: true,
+                  title: Text(
+                    graphMetricLabel(metric),
+                    style: metric == _metric
+                        ? const TextStyle(fontWeight: FontWeight.w600)
+                        : null,
+                  ),
+                  subtitle: Text(
+                    graphMetricDescription(metric),
+                    softWrap: true,
+                    overflow: TextOverflow.visible,
+                    style: const TextStyle(height: 1.35),
+                  ),
+                  suffix: metric == _metric
+                      ? const Icon(FLucideIcons.check)
+                      : const SizedBox(width: 16),
+                  onPress: () => setState(() => _metric = metric),
+                ),
+            ],
           ),
-        ),
+        ],
       ),
-    ),
-  );
-
-  Widget _optionGroup(
-    FThemeData theme, {
-    required String label,
-    required List<({String label, bool selected, VoidCallback onPress})>
-    options,
-  }) => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 16),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: theme.typography.body.sm.copyWith(fontWeight: FontWeight.w600),
-        ),
-        const SizedBox(height: 4),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            for (final option in options)
-              FButton(
-                variant: option.selected ? .secondary : .outline,
-                mainAxisSize: .min,
-                onPress: option.onPress,
-                child: Text(option.label),
-              ),
-          ],
-        ),
-      ],
-    ),
-  );
+    );
+  }
 }

@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
 import 'package:tracker/domain/models/exercise.dart';
-import 'package:tracker/domain/models/weight_unit.dart';
+import 'package:tracker/domain/models/graph_config.dart';
 import 'package:tracker/domain/models/workout_session.dart';
 import 'package:tracker/domain/services/analytics.dart';
+import 'package:tracker/domain/services/graph_series.dart';
+import 'package:tracker/ui/analytics/widgets/graph_panel.dart';
 import 'package:tracker/ui/core/ui/custom_app_bar.dart';
 import 'package:tracker/ui/core/ui/custom_route.dart';
-import 'package:tracker/ui/core/ui/line_chart.dart';
 import 'package:tracker/ui/core/ui/max_width.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
 import 'package:tracker/ui/core/ui/weight_format.dart';
@@ -34,6 +35,7 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage> {
     exerciseId: null,
     revision: null,
   );
+  GraphSeries? _best1rm;
 
   @override
   void didChangeDependencies() {
@@ -65,6 +67,15 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage> {
         exerciseId: widget.exercise.id,
         revision: sessions.length,
       );
+      _best1rm = graphSeries(
+        sessions: sessions,
+        exerciseId: widget.exercise.id,
+        metric: GraphMetric.best1rm,
+        range: GraphTimeframe.all,
+        now: DateTime.now(),
+        multipliers: _multipliers,
+        exerciseMultipliers: exerciseMultipliers,
+      );
     });
   }
 
@@ -91,7 +102,7 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage> {
   Widget build(BuildContext context) {
     final theme = context.theme;
     final exercise = _exercise;
-    final series = displayProgressionPoints(context, _snapshot.best1rm);
+    final best1rm = _best1rm;
     final summary = _snapshot.summary;
 
     return CustomScrollView(
@@ -176,7 +187,7 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage> {
                     style: theme.typography.body.sm,
                   ),
                   const SizedBox(height: 8),
-                  LineChart(points: series, unit: weightUnitOf(context).symbol),
+                  if (best1rm != null) GraphPanel(series: best1rm),
                 ],
               ),
             ),

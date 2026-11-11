@@ -44,7 +44,7 @@ Future<void> main() async {
     ], name: 'isar_capture_walkthrough');
     final repo = TrackerRepository(isar);
     await seedExercisesIfNeeded(repo);
-    await seedSweepFixtures(repo);
+    final fixtures = await seedSweepFixtures(repo);
     final cubit = WorkoutCubit(repository: repo);
 
     await tester.pumpWidget(
@@ -55,7 +55,13 @@ Future<void> main() async {
             BlocProvider<WorkoutCubit>.value(value: cubit),
             BlocProvider<SettingsCubit>(
               create: (_) => SettingsCubit()
-                ..addGraph(const GraphConfig(title: 'Strength - upper body')),
+                ..addGraph(GraphConfig(exerciseId: fixtures.benchId))
+                ..addGraph(
+                  GraphConfig(
+                    exerciseId: fixtures.benchId,
+                    metric: GraphMetric.record1rm,
+                  ),
+                ),
               lazy: false,
             ),
           ],

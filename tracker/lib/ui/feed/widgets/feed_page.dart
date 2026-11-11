@@ -2,17 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:forui/forui.dart';
 import 'package:tracker/data/services/app_log.dart';
-import 'package:tracker/ui/core/ui/app_dialog.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
 import 'package:tracker/routing/tab_navigation.dart';
-import 'package:tracker/domain/models/exercise.dart';
 import 'package:tracker/domain/models/workout_session.dart';
+import 'package:tracker/ui/analytics/view_models/analytics_data.dart';
 import 'package:tracker/ui/analytics/widgets/graph_editor.dart';
+import 'package:tracker/ui/analytics/widgets/graph_page.dart';
+import 'package:tracker/ui/analytics/widgets/graph_range_control.dart';
+import 'package:tracker/ui/analytics/widgets/graph_tile.dart';
 import 'package:tracker/ui/analytics/widgets/progression_page.dart';
 import 'package:tracker/ui/core/ui/custom_app_bar.dart';
 import 'package:tracker/ui/core/ui/custom_route.dart';
 import 'package:tracker/ui/feed/view_models/feed_cubit.dart';
-import 'package:tracker/ui/feed/widgets/feed_page_graph_card.dart';
 import 'package:tracker/ui/history/widgets/session_detail_page.dart';
 import 'package:tracker/ui/settings/view_models/settings_cubit.dart';
 import 'package:tracker/ui/core/ui/weight_format.dart';
@@ -29,9 +30,9 @@ class FeedPage extends StatefulWidget {
 class _FeedPageState extends State<FeedPage> {
   FeedCubit? _cubit;
   Map<int, String> _gymNames = const {};
-  List<WorkoutSession> _allSessions = const [];
-  List<Exercise> _exercises = const [];
-  Map<int, double> _multipliers = const {};
+
+  /// What the graphs are drawn from; null until first read.
+  AnalyticsData? _analytics;
   bool _didLoad = false;
   bool _wasActive = true;
   Object? _analyticsError;
@@ -42,81 +43,48 @@ class _FeedPageState extends State<FeedPage> {
     final repo = RepositoryScope.maybeOf(context);
     if (repo == null) return;
     try {
-      final results = await Future.wait([
-        repo.sessions.getAll(),
-        repo.exercises.getAll(),
-        repo.gyms.getAll(),
-      ]);
+      final data = await AnalyticsData.load(repo);
       if (!mounted) return;
       setState(() {
-        _allSessions = results[0] as List<WorkoutSession>;
-        _exercises = results[1] as List<Exercise>;
-        final gyms = results[2] as List<dynamic>;
-        _multipliers = {
-          for (final gym in gyms) gym.id as int: gym.multiplier as double,
-        };
-        _gymNames = {for (final gym in gyms) gym.id as int: gym.name as String};
+        _analytics = data;
+        _gymNames = data.gymNames;
         _analyticsError = null;
       });
     } catch (error, stackTrace) {
       AppLog.error('feed-analytics', error, stackTrace);
       if (!mounted) return;
-      // Without this the graph cards silently render as "No data yet".
+      // Without this the graphs silently read "No sessions".
       setState(() => _analyticsError = error);
     }
   }
 
-  Future<void> _editGraph({int? index}) async {
+  Future<void> _addGraph() async {
     final settings = _settings;
     if (settings == null) return;
     final result = await GraphEditor.show(
       context,
-      initial: index == null ? null : settings.state.graphs[index],
-      exercises: _exercises,
+      exercises: _analytics?.exercises ?? const [],
     );
     if (!mounted || result == null) return;
-    if (index == null) {
-      settings.addGraph(result);
-    } else {
-      settings.updateGraph(index, result);
-    }
+    settings.addGraph(result);
   }
 
-  Future<void> _deleteGraph(int index) async {
-    final settings = _settings;
-    if (settings == null) return;
-    final confirmed = await showConfirmDialog(
-      context,
-      title: 'Delete graph?',
-      message:
-          'Remove "${settings.state.graphs[index].title}" from your '
-          'analytics? You can recreate it with "Add graph".',
-      confirmLabel: 'Delete',
-      destructive: true,
-    );
-    if (!mounted || !confirmed) return;
-    settings.removeGraph(index);
+  Future<void> _openGraph(int index, AnalyticsData data) async {
+    await pushTo<void>(context, GraphPage(index: index, data: data));
+    // A past workout may have been edited from the graph.
+    if (mounted) await _loadAnalyticsData();
   }
 
   Widget _analyticsSection(BuildContext context) {
     final settings = _settings;
-    final header = Row(
-      children: [
-        Expanded(
-          child: Text(
-            'Analytics',
-            style: context.theme.typography.body.xl.copyWith(
-              fontWeight: FontWeight.w600,
-            ),
-          ),
+    final header = Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Text(
+        'Analytics',
+        style: context.theme.typography.body.xl.copyWith(
+          fontWeight: FontWeight.w600,
         ),
-        FButton(
-          variant: .ghost,
-          onPress: _editGraph,
-          prefix: const Icon(FLucideIcons.plus),
-          child: const Text('Add graph'),
-        ),
-      ],
+      ),
     );
     if (settings == null) {
       return Padding(
@@ -127,10 +95,11 @@ class _FeedPageState extends State<FeedPage> {
         ),
       );
     }
+    final data = _analytics;
     // BlocBuilder so a saved graph appears immediately: `context.read`
     // alone never re-renders when the settings state changes.
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
       child: BlocBuilder<SettingsCubit, SettingsState>(
         bloc: settings,
         builder: (context, state) => Column(
@@ -147,24 +116,26 @@ class _FeedPageState extends State<FeedPage> {
                   child: const Text('Retry'),
                 ),
               )
-            else
-              for (var i = 0; i < state.graphs.length; i++)
-                FeedGraphCard(
-                  config: state.graphs[i],
-                  sessions: _allSessions,
-                  multipliers: _multipliers,
-                  exerciseName: state.graphs[i].exerciseId == null
-                      ? 'All exercises'
-                      : _exercises
-                                .where(
-                                  (e) => e.id == state.graphs[i].exerciseId,
-                                )
-                                .map((e) => e.title)
-                                .firstOrNull ??
-                            'Exercise',
-                  onEdit: () => _editGraph(index: i),
-                  onDelete: () => _deleteGraph(i),
+            else if (data != null) ...[
+              if (state.graphs.isNotEmpty) ...[
+                GraphRangeControl(
+                  value: state.graphRange,
+                  onChange: settings.setGraphRange,
                 ),
+                const SizedBox(height: 12),
+              ],
+              GraphGrid(
+                onAdd: _addGraph,
+                tiles: [
+                  for (var i = 0; i < state.graphs.length; i++)
+                    GraphTile(
+                      name: data.exerciseName(state.graphs[i].exerciseId),
+                      series: data.graph(state.graphs[i], state.graphRange),
+                      onPress: () => _openGraph(i, data),
+                    ),
+                ],
+              ),
+            ],
           ],
         ),
       ),
