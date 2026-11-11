@@ -100,9 +100,14 @@ void main() {
 
     // The split's name opens the split sheet; picking one shows its days
     // here without making it the current split.
-    await tester.tap(labelled('Split: PPLUL. Train from another split'));
+    await tester.tap(labelled('Split: PPLUL. Choose what to train from'));
     await pumpUntil(tester, find.text('Train from'));
     expect(find.text('Current split, 5 days'), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.text('Empty workout')).dy,
+      greaterThan(tester.getTopLeft(find.text('Full Body')).dy),
+      reason: 'Empty workout is the last row, under every split',
+    );
     await tester.pump(const Duration(milliseconds: 500));
     await tester.tap(find.text('Full Body'));
     await pumpUntil(tester, find.text('Start Day A'));
