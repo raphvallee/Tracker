@@ -152,6 +152,25 @@ Future<void> waitForRealIo(
   fail('the repository write did not land within 5 seconds');
 }
 
+/// [waitForRealIo] for a session read back: bounded reads of session [id]
+/// until [ready] accepts one, which it returns. Use it instead of a bare read
+/// after the wait, the unbounded read that hangs a 4 vCPU runner.
+Future<WorkoutSession> waitForSession(
+  WidgetTester tester,
+  TrackerRepository repo,
+  int id, [
+  bool Function(WorkoutSession saved)? ready,
+]) async {
+  late WorkoutSession found;
+  await waitForRealIo(tester, () async {
+    final saved = await repo.sessions.getById(id);
+    if (saved == null || !(ready?.call(saved) ?? true)) return false;
+    found = saved;
+    return true;
+  });
+  return found;
+}
+
 /// Advances past route/dialog animations with timed pumps. The shell's feed
 /// page sits on a real Isar watcher that never settles inside the fake-async
 /// zone (its loading spinner animates forever), so pumpAndSettle would time

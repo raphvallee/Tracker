@@ -40,16 +40,16 @@ void main() {
       await settleSessionFlow(tester);
       expect(find.text('1 unsaved change'), findsOneWidget);
       final id = seeded.session.id;
-      final untouched = (await tester.runAsync(
-        () => seeded.repo.sessions.getById(id),
-      ))!;
+      final untouched = await waitForSession(tester, seeded.repo, id);
       expect(untouched.sets.first.weight, 80);
 
       await tapSaveBar(tester);
-      await waitForRealIo(tester, () async {
-        final saved = await seeded.repo.sessions.getById(id);
-        return saved?.sets.any((s) => !s.isWarmup && s.weight == 90) ?? false;
-      });
+      final saved = await waitForSession(
+        tester,
+        seeded.repo,
+        id,
+        (saved) => saved.sets.any((s) => !s.isWarmup && s.weight == 90),
+      );
       await settleSessionFlow(tester);
 
       // Back on the past workout, which shows the saved values.
@@ -57,9 +57,6 @@ void main() {
       expect(find.text('90'), findsOneWidget);
       expect(find.text('RPE 8'), findsOneWidget);
 
-      final saved = (await tester.runAsync(
-        () => seeded.repo.sessions.getById(id),
-      ))!;
       final working = saved.sets.singleWhere((s) => !s.isWarmup);
       expect(working.weight, 90);
       expect(working.reps, 5);

@@ -36,13 +36,12 @@ void main() {
     await tapSaveBar(tester);
 
     final id = seeded.session.id;
-    await waitForRealIo(tester, () async {
-      final saved = await seeded.repo.sessions.getById(id);
-      return saved?.title == 'Pull';
-    });
-    final saved = (await tester.runAsync(
-      () => seeded.repo.sessions.getById(id),
-    ))!;
+    final saved = await waitForSession(
+      tester,
+      seeded.repo,
+      id,
+      (saved) => saved.title == 'Pull',
+    );
     expect(saved.gymId, isNull);
   });
 }

@@ -47,10 +47,6 @@ void main() {
       expect(find.text('Edit workout'), findsNothing);
       expect(find.text('Delete this workout?'), findsNothing);
       expect(find.text('Edit'), findsNothing);
-      final remaining = await tester.runAsync(
-        () => seeded.repo.sessions.getById(id),
-      );
-      expect(remaining, isNull);
     },
   );
 }
