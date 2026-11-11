@@ -102,7 +102,13 @@ Future<SweepFixtures> seedSweepFixtures(TrackerRepository repo) async {
           type: SetType.warmup,
           order: 0,
         ),
-        WorkoutSet(exerciseId: bench.id, weight: 82.5, reps: 8, order: 1),
+        WorkoutSet(
+          exerciseId: bench.id,
+          weight: 82.5,
+          reps: 8,
+          order: 1,
+          rpe: 8,
+        ),
         WorkoutSet(exerciseId: incline.id, weight: 60, reps: 10, order: 2),
       ],
     ),
@@ -123,6 +129,34 @@ Future<SweepFixtures> seedSweepFixtures(TrackerRepository repo) async {
           .add(const Duration(minutes: 45)),
       gymId: primaryGym.id,
       sets: [],
+    ),
+    // Last month: History lists it under a second month heading.
+    WorkoutSession(
+      title: 'Upper Body',
+      startTime: now.subtract(const Duration(days: 40)),
+      endTime: now
+          .subtract(const Duration(days: 40))
+          .add(const Duration(hours: 1, minutes: 12)),
+      gymId: primaryGym.id,
+      sets: [
+        WorkoutSet(
+          exerciseId: bench.id,
+          weight: 50,
+          reps: 10,
+          type: SetType.warmup,
+          order: 0,
+        ),
+        WorkoutSet(exerciseId: bench.id, weight: 80, reps: 8, order: 1, rpe: 8),
+        WorkoutSet(exerciseId: bench.id, weight: 80, reps: 7, order: 2, rpe: 9),
+        WorkoutSet(exerciseId: incline.id, weight: 50, reps: 10, order: 3),
+        WorkoutSet(
+          exerciseId: incline.id,
+          weight: 50,
+          reps: 9,
+          order: 4,
+          rpe: 9.5,
+        ),
+      ],
     ),
   ];
   for (final s in sessions) {

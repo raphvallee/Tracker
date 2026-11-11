@@ -13,6 +13,7 @@ import 'package:tracker/domain/models/graph_config.dart';
 import 'package:tracker/domain/models/gym.dart';
 import 'package:tracker/domain/models/workout_session.dart';
 import 'package:tracker/domain/models/workout_split.dart';
+import 'package:tracker/domain/services/workout_dates.dart';
 import 'package:tracker/main.dart';
 import 'package:tracker/routing/tab_navigation.dart';
 import 'package:tracker/ui/analytics/widgets/graph_editor.dart';
@@ -21,7 +22,6 @@ import 'package:tracker/ui/core/ui/repository_scope.dart';
 import 'package:tracker/ui/exercises/widgets/exercise_detail_page.dart';
 import 'package:tracker/ui/exercises/widgets/new_exercise_page.dart';
 import 'package:tracker/ui/feed/widgets/feed_page.dart';
-import 'package:tracker/ui/history/widgets/calendar/calendar_grid.dart';
 import 'package:tracker/ui/history/widgets/calendar/history_calendar.dart';
 import 'package:tracker/ui/history/widgets/session_detail_page.dart';
 import 'package:tracker/ui/history/widgets/session_edit_page.dart';
@@ -216,11 +216,7 @@ void main() {
           child: SingleChildScrollView(
             child: HistoryCalendar(
               index: WorkoutDateIndex.fromSessions(fixtures.allSessions),
-              sessionsOn: (day) => [
-                for (final s in fixtures.allSessions)
-                  if (DateUtils.isSameDay(s.startTime, day)) s,
-              ],
-              gymNames: fixtures.gymNames,
+              onPickDay: (_) {},
             ),
           ),
         ),

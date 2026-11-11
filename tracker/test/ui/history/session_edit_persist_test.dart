@@ -2,10 +2,8 @@
 // flutter_tester process with a fresh libisar native worker pool (see
 // docs/TESTING_ISAR_CI.md).
 
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hydrated_bloc/hydrated_bloc.dart';
-import 'package:tracker/ui/core/ui/edit_sheet.dart';
 
 import '../../../testing/fakes/in_memory_storage.dart';
 import '../../../testing/session_edit_helpers.dart';
@@ -18,42 +16,55 @@ void main() {
     HydratedBloc.storage = InMemoryStorage();
   });
 
-  testWidgets('saved edit re-renders the detail page and persists the weight', (
-    tester,
-  ) async {
-    final seeded = await pumpPersistenceApp(tester, 'session_edit_persist');
+  testWidgets(
+    'Save writes the draft, keeps what it does not edit and shows it',
+    (tester) async {
+      final seeded = await pumpPersistenceApp(
+        tester,
+        'session_edit_persist',
+        splitId: 5,
+        splitDayIndex: 1,
+        rpe: 8,
+      );
 
-    await tester.tap(find.text('Edit'));
-    await settleSessionFlow(tester);
+      await tester.tap(find.text('Edit'));
+      await settleSessionFlow(tester);
 
-    await tester.tap(find.text('80 kg × 5'));
-    await settleSessionFlow(tester);
-    final fields = find.descendant(
-      of: find.byType(EditSheet),
-      matching: find.byType(EditableText),
-    );
-    await tester.enterText(fields.first, '90');
-    await tester.tap(
-      find.descendant(of: find.byType(EditSheet), matching: find.text('Save')),
-    );
-    await settleSessionFlow(tester);
-    await tester.tap(find.text('Save'));
-    await settleSessionFlow(tester);
+      // Nothing is written while editing: the draft only lives on the page.
+      await tester.tap(find.textContaining('80 kg × 5'));
+      await settleSessionFlow(tester);
+      for (var i = 0; i < 4; i++) {
+        await tester.tap(find.bySemanticsLabel('Increase weight'));
+        await tester.pump();
+      }
+      await settleSessionFlow(tester);
+      expect(find.text('1 unsaved change'), findsOneWidget);
+      final id = seeded.session.id;
+      final untouched = await waitForSession(tester, seeded.repo, id);
+      expect(untouched.sets.first.weight, 80);
 
-    expect(find.text('90 kg × 5'), findsOneWidget);
-    expect(find.text('80 kg × 5'), findsNothing);
+      await tapSaveBar(tester);
+      final saved = await waitForSession(
+        tester,
+        seeded.repo,
+        id,
+        (saved) => saved.sets.any((s) => !s.isWarmup && s.weight == 90),
+      );
+      await settleSessionFlow(tester);
 
-    final id = seeded.session.id;
-    await waitForRealIo(tester, () async {
-      final saved = await seeded.repo.sessions.getById(id);
-      return saved?.sets.any((s) => !s.isWarmup && s.weight == 90) ?? false;
-    });
-    final saved = (await tester.runAsync(
-      () => seeded.repo.sessions.getById(id),
-    ))!;
-    final working = saved.sets.singleWhere((s) => !s.isWarmup);
-    expect(working.weight, 90);
-    expect(working.reps, 5);
-    expect(saved.sets.where((s) => s.isWarmup).single.weight, 60);
-  });
+      // Back on the past workout, which shows the saved values.
+      expect(find.text('Edit workout'), findsNothing);
+      expect(find.text('90'), findsOneWidget);
+      expect(find.text('RPE 8'), findsOneWidget);
+
+      final working = saved.sets.singleWhere((s) => !s.isWarmup);
+      expect(working.weight, 90);
+      expect(working.reps, 5);
+      expect(working.rpe, 8);
+      expect(saved.sets.where((s) => s.isWarmup).single.weight, 60);
+      expect(saved.splitId, 5);
+      expect(saved.splitDayIndex, 1);
+      expect(saved.gymId, seeded.session.gymId);
+    },
+  );
 }

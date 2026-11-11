@@ -25,18 +25,16 @@ void main() {
     await waitForText(tester, 'Home');
     expect(find.text('Home'), findsOneWidget);
 
-    await tester.enterText(sessionTitleField(), 'Pull');
-    await tester.tap(find.text('Save'));
-    await settleSessionFlow(tester);
+    await renameWorkout(tester, 'Pull');
+    await tapSaveBar(tester);
 
     final id = seeded.session.id;
-    await waitForRealIo(tester, () async {
-      final saved = await seeded.repo.sessions.getById(id);
-      return saved?.title == 'Pull';
-    });
-    final saved = (await tester.runAsync(
-      () => seeded.repo.sessions.getById(id),
-    ))!;
+    final saved = await waitForSession(
+      tester,
+      seeded.repo,
+      id,
+      (saved) => saved.title == 'Pull',
+    );
     expect(saved.gymId, seeded.session.gymId);
   });
 }

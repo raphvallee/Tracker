@@ -155,7 +155,10 @@ Never issue an unbounded repository read inside `runAsync` in a widget test.
 Wrap each read in a real-zone timeout and retry in rounds until the expected
 state appears. The ready-made helper is `waitForRealIo` in
 `tracker/testing/session_edit_helpers.dart`; on the 4-vCPU `act` container the
-write lands within 2 to 4 rounds.
+write lands within 2 to 4 rounds. To check the record itself, use
+`waitForSession`, which returns the session it read: a bare read after the
+wait, even once the write has landed, is still unbounded and hung PR 79's
+`session_edit_persist_test.dart` for 10 minutes.
 
 ## Checklist for a new Isar-backed test
 

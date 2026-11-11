@@ -5,7 +5,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tracker/domain/models/workout_session.dart';
-import 'package:tracker/ui/history/widgets/calendar/calendar_grid.dart';
+import 'package:tracker/domain/services/workout_dates.dart';
 
 import '../testing/test_fonts.dart';
 import 'calendar_benchmark_support.dart';
@@ -38,39 +38,38 @@ void main() {
         var previous = monthHeader(tester);
         final micros = <int>[];
         for (var i = 0; i < _warmup + _iterations; i++) {
-          final label = i.isEven ? 'Next month' : 'Previous month';
           final watch = Stopwatch()..start();
-          await tapAndRender(tester, fButtonByTooltip(label));
+          await swipeMonth(tester, next: i.isEven);
           watch.stop();
           final current = monthHeader(tester);
-          expect(current, isNot(previous), reason: 'tap "$label" was dropped');
+          expect(current, isNot(previous), reason: 'swipe was dropped');
           previous = current;
           if (i >= _warmup) micros.add(watch.elapsedMicroseconds);
         }
-        // Drain FTappable's 100ms press timer created by the last tap;
-        // flutter_test fails the test if timers are still pending at the end.
-        await tester.pump(const Duration(milliseconds: 150));
         print(BenchStats(micros).line('month change (next/prev)', count));
       });
 
-      testWidgets('select day', (tester) async {
+      testWidgets('pick workout day', (tester) async {
         await tester.runAsync(loadTestFonts);
         _useTallView(tester);
-        await pumpCalendarHost(tester, initial: buildSessions(count));
+        var picked = 0;
+        await pumpCalendarHost(
+          tester,
+          initial: buildSessions(count),
+          onPickDay: (_) => picked++,
+        );
         final cells = dayCells();
         final cellCount = cells.evaluate().length;
-        var previous = selectionLabel(tester);
+        expect(cellCount, greaterThan(0));
         final micros = <int>[];
         for (var i = 0; i < _warmup + _iterations; i++) {
           final watch = Stopwatch()..start();
           await tapAndRender(tester, cells.at(i % cellCount));
           watch.stop();
-          final current = selectionLabel(tester);
-          expect(current, isNot(previous), reason: 'day tap $i was dropped');
-          previous = current;
+          expect(picked, i + 1, reason: 'day tap $i was dropped');
           if (i >= _warmup) micros.add(watch.elapsedMicroseconds);
         }
-        print(BenchStats(micros).line('select day', count));
+        print(BenchStats(micros).line('pick workout day', count));
       });
 
       testWidgets('sessions update', (tester) async {

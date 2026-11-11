@@ -12,6 +12,7 @@ import 'package:tracker/domain/models/workout_session.dart';
 import 'package:tracker/domain/models/weight_unit.dart';
 import 'package:tracker/domain/models/workout_set.dart';
 import 'package:tracker/main.dart';
+import 'package:tracker/ui/core/ui/edit_sheet.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
 import 'package:tracker/ui/history/widgets/session_detail_page.dart';
 import 'package:tracker/ui/settings/view_models/settings_cubit.dart';
@@ -19,11 +20,19 @@ import 'package:tracker/ui/workout/view_models/workout_cubit.dart';
 
 import 'test_helpers.dart';
 
-WorkoutSession pastSession({int exerciseId = 1, int? gymId}) => WorkoutSession(
+WorkoutSession pastSession({
+  int exerciseId = 1,
+  int? gymId,
+  int? splitId,
+  int? splitDayIndex,
+  double? rpe,
+}) => WorkoutSession(
   title: 'Push',
   startTime: DateTime(2026, 1, 1, 9),
   endTime: DateTime(2026, 1, 1, 10),
   gymId: gymId,
+  splitId: splitId,
+  splitDayIndex: splitDayIndex,
   sets: [
     WorkoutSet(
       exerciseId: exerciseId,
@@ -31,6 +40,7 @@ WorkoutSession pastSession({int exerciseId = 1, int? gymId}) => WorkoutSession(
       reps: 5,
       type: SetType.working,
       order: 0,
+      rpe: rpe,
     ),
     WorkoutSet(
       exerciseId: exerciseId,
@@ -55,6 +65,9 @@ Future<({TrackerRepository repo, WorkoutSession session})> pumpPersistenceApp(
   WidgetTester tester,
   String dbName, {
   WeightUnit unit = WeightUnit.kilograms,
+  int? splitId,
+  int? splitDayIndex,
+  double? rpe,
 }) async {
   late TrackerRepository repo;
   late WorkoutSession session;
@@ -74,7 +87,13 @@ Future<({TrackerRepository repo, WorkoutSession session})> pumpPersistenceApp(
       ),
     );
     final gymId = await repo.gyms.put(Gym(name: 'Home', isPrimary: true));
-    session = pastSession(exerciseId: exerciseId, gymId: gymId);
+    session = pastSession(
+      exerciseId: exerciseId,
+      gymId: gymId,
+      splitId: splitId,
+      splitDayIndex: splitDayIndex,
+      rpe: rpe,
+    );
     await repo.sessions.put(session);
   });
 
@@ -133,6 +152,25 @@ Future<void> waitForRealIo(
   fail('the repository write did not land within 5 seconds');
 }
 
+/// [waitForRealIo] for a session read back: bounded reads of session [id]
+/// until [ready] accepts one, which it returns. Use it instead of a bare read
+/// after the wait, the unbounded read that hangs a 4 vCPU runner.
+Future<WorkoutSession> waitForSession(
+  WidgetTester tester,
+  TrackerRepository repo,
+  int id, [
+  bool Function(WorkoutSession saved)? ready,
+]) async {
+  late WorkoutSession found;
+  await waitForRealIo(tester, () async {
+    final saved = await repo.sessions.getById(id);
+    if (saved == null || !(ready?.call(saved) ?? true)) return false;
+    found = saved;
+    return true;
+  });
+  return found;
+}
+
 /// Advances past route/dialog animations with timed pumps. The shell's feed
 /// page sits on a real Isar watcher that never settles inside the fake-async
 /// zone (its loading spinner animates forever), so pumpAndSettle would time
@@ -142,12 +180,26 @@ Future<void> settleSessionFlow(WidgetTester tester) async {
   await tester.pump(const Duration(milliseconds: 400));
 }
 
-Finder sessionTitleField() => find
-    .descendant(
-      of: find.byType(FTextField),
-      matching: find.byType(EditableText),
-    )
-    .first;
+/// Renames the workout on the edit page through its Name sheet.
+Future<void> renameWorkout(WidgetTester tester, String name) async {
+  await tester.tap(find.text('Name'));
+  await settleSessionFlow(tester);
+  final field = find.descendant(
+    of: find.byType(EditSheet),
+    matching: find.byType(EditableText),
+  );
+  await tester.enterText(field, name);
+  await tester.tap(
+    find.descendant(of: find.byType(EditSheet), matching: find.text('Save')),
+  );
+  await settleSessionFlow(tester);
+}
+
+/// Taps the save bar's Save (not a sheet's).
+Future<void> tapSaveBar(WidgetTester tester) async {
+  await tester.tap(find.widgetWithText(FButton, 'Save').last);
+  await settleSessionFlow(tester);
+}
 
 Future<void> waitForText(WidgetTester tester, String text) =>
     waitForRealIo(tester, () async => find.text(text).evaluate().isNotEmpty);

@@ -21,6 +21,17 @@ String formatWeight(BuildContext context, double kilograms) {
 
 String formatReps(double reps) => formatDecimal(reps);
 
+/// A total lifted, rounded and grouped by thousands: "5,540 kg".
+String formatVolume(BuildContext context, double kilograms) {
+  final digits = displayWeightOf(context, kilograms).round().abs().toString();
+  final grouped = StringBuffer();
+  for (var i = 0; i < digits.length; i++) {
+    if (i > 0 && (digits.length - i) % 3 == 0) grouped.write(',');
+    grouped.write(digits[i]);
+  }
+  return '$grouped ${weightUnitOf(context).symbol}';
+}
+
 String formatDecimal(double value) {
   if (value == value.roundToDouble()) return value.toStringAsFixed(0);
   return value

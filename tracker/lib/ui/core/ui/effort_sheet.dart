@@ -13,12 +13,14 @@ class EffortChoice {
 }
 
 /// Asks how hard a set was on [scale], from 0 to 10: one tap picks and
-/// closes. [rpe] is the set's rating so far. Null when dismissed.
+/// closes. [rpe] is the set's rating so far, marked in the live accent, or
+/// in ink when not [live] (a past workout's set). Null when dismissed.
 Future<EffortChoice?> showEffortSheet(
   BuildContext context, {
   required String title,
   required EffortScale scale,
   double? rpe,
+  bool live = true,
 }) {
   return showFSheet<EffortChoice>(
     context: context,
@@ -26,16 +28,22 @@ Future<EffortChoice?> showEffortSheet(
     useRootNavigator: true,
     mainAxisMaxRatio: 0.85,
     builder: (sheetContext) =>
-        _EffortSheet(title: title, scale: scale, rpe: rpe),
+        _EffortSheet(title: title, scale: scale, rpe: rpe, live: live),
   );
 }
 
 class _EffortSheet extends StatelessWidget {
-  const _EffortSheet({required this.title, required this.scale, this.rpe});
+  const _EffortSheet({
+    required this.title,
+    required this.scale,
+    this.rpe,
+    required this.live,
+  });
 
   final String title;
   final EffortScale scale;
   final double? rpe;
+  final bool live;
 
   @override
   Widget build(BuildContext context) {
@@ -45,6 +53,10 @@ class _EffortSheet extends StatelessWidget {
       color: theme.colors.mutedForeground,
     );
     final current = rpe == null ? null : scale.fromRpe(rpe!);
+    final selectedFill = live ? accents.live : theme.colors.foreground;
+    final selectedText = live
+        ? accents.liveForeground
+        : theme.colors.background;
 
     Widget value(int n) {
       final selected = current == n;
@@ -57,14 +69,14 @@ class _EffortSheet extends StatelessWidget {
           height: 48,
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: selected ? accents.live : theme.colors.muted,
+            color: selected ? selectedFill : theme.colors.muted,
             borderRadius: BorderRadius.circular(10),
           ),
           child: Text(
             '$n',
             style: theme.typography.body.md.copyWith(
               fontWeight: FontWeight.w700,
-              color: selected ? accents.liveForeground : null,
+              color: selected ? selectedText : null,
               fontFeatures: const [FontFeature.tabularFigures()],
             ),
           ),

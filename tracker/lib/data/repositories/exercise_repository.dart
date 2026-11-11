@@ -11,6 +11,17 @@ class ExerciseRepository {
 
   Future<Exercise?> getById(int id) => _isar.exercises.get(id);
 
+  /// Names of the exercises with [ids] that exist, read at once: small
+  /// enough to resolve inside a frame.
+  Map<int, String> getTitlesSync(Iterable<int> ids) {
+    final list = ids.toSet().toList();
+    final found = _isar.exercises.getAllSync(list);
+    return {
+      for (final exercise in found)
+        if (exercise != null) exercise.id: exercise.title,
+    };
+  }
+
   Future<Exercise?> getByTitle(String title, {int? excludeId}) async {
     final matches = await _isar.exercises
         .filter()

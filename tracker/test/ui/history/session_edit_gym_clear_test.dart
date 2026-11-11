@@ -30,19 +30,18 @@ void main() {
     await tester.tap(find.text('Other gym'));
     await settleSessionFlow(tester);
     expect(find.text('Other gym'), findsOneWidget);
+    expect(find.text('1 unsaved change'), findsOneWidget);
 
-    await tester.enterText(sessionTitleField(), 'Pull');
-    await tester.tap(find.text('Save'));
-    await settleSessionFlow(tester);
+    await renameWorkout(tester, 'Pull');
+    await tapSaveBar(tester);
 
     final id = seeded.session.id;
-    await waitForRealIo(tester, () async {
-      final saved = await seeded.repo.sessions.getById(id);
-      return saved?.title == 'Pull';
-    });
-    final saved = (await tester.runAsync(
-      () => seeded.repo.sessions.getById(id),
-    ))!;
+    final saved = await waitForSession(
+      tester,
+      seeded.repo,
+      id,
+      (saved) => saved.title == 'Pull',
+    );
     expect(saved.gymId, isNull);
   });
 }

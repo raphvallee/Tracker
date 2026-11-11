@@ -16,26 +16,27 @@ void main() {
     HydratedBloc.storage = InMemoryStorage();
   });
 
-  testWidgets('saving before the gym loads keeps the session gym', (
+  testWidgets('the gym shows at once, never "Loading...", and is kept', (
     tester,
   ) async {
     final seeded = await pumpPersistenceApp(tester, 'session_edit_gym_early');
     await tester.tap(find.text('Edit'));
+    // The page's first frame, before any real IO could land.
+    await tester.pump();
+    expect(find.text('Loading...'), findsNothing);
     await settleSessionFlow(tester);
-    expect(find.text('Loading...'), findsOneWidget);
+    expect(find.text('Home'), findsOneWidget);
 
-    await tester.enterText(sessionTitleField(), 'Pull');
-    await tester.tap(find.text('Save'));
-    await settleSessionFlow(tester);
+    await renameWorkout(tester, 'Pull');
+    await tapSaveBar(tester);
 
     final id = seeded.session.id;
-    await waitForRealIo(tester, () async {
-      final saved = await seeded.repo.sessions.getById(id);
-      return saved?.title == 'Pull';
-    });
-    final saved = (await tester.runAsync(
-      () => seeded.repo.sessions.getById(id),
-    ))!;
+    final saved = await waitForSession(
+      tester,
+      seeded.repo,
+      id,
+      (saved) => saved.title == 'Pull',
+    );
     expect(saved.gymId, seeded.session.gymId);
     expect(saved.gymId, isNotNull);
   });
