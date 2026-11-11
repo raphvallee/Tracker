@@ -50,6 +50,7 @@ import 'package:tracker/ui/workout/view_models/workout_cubit.dart';
 import 'package:tracker/ui/workout/widgets/exercise_page.dart';
 import 'package:tracker/ui/workout/widgets/exercise_picker_page.dart';
 import 'package:tracker/ui/workout/widgets/gym_picker.dart';
+import 'package:tracker/ui/workout/widgets/start_view.dart';
 import 'package:tracker/ui/workout/widgets/workout_page.dart';
 
 import '../../../testing/fakes/in_memory_storage.dart';
@@ -678,8 +679,7 @@ Future<void> captureScreensAt(
   });
 
   await guarded('Workout tab (idle, long plan)', () async {
-    // A day too long for any of the sizes: the Empty workout row under its
-    // plan is out of sight, so the header offers it.
+    // A day too long for any of the sizes: its plan runs past the fold.
     final library = await tester.runAsync(repo.exercises.getAll);
     final long = WorkoutSplit(
       title: 'Upper Lower',
@@ -730,6 +730,23 @@ Future<void> captureScreensAt(
       switchTab(2);
       await settle();
     }
+  });
+
+  await guarded('Train from sheet', () async {
+    // The split's name opens the sheet, whose last row starts an empty
+    // workout.
+    await tester.tap(
+      find.descendant(
+        of: find.byType(StartView),
+        matching: find.text('Upper Lower'),
+      ),
+    );
+    await settleForData(() => tester.any(find.text('Train from')));
+    await settle();
+    await recorder.capture('Train from sheet');
+    // A tap outside the sheet closes it.
+    await tester.tapAt(const Offset(4, 4));
+    await settle();
   });
 
   await guarded('Workout tab (free workout)', () async {

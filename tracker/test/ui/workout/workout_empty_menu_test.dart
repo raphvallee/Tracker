@@ -11,7 +11,7 @@ import 'package:tracker/domain/models/gym.dart';
 import 'package:tracker/domain/models/muscle.dart';
 import 'package:tracker/domain/models/workout_session.dart';
 import 'package:tracker/domain/models/workout_split.dart';
-import 'package:tracker/ui/core/ui/custom_app_bar.dart';
+import 'package:tracker/ui/core/ui/sheet_surface.dart';
 
 import '../../../testing/fakes/in_memory_storage.dart';
 import '../../../testing/isar_app_helpers.dart';
@@ -22,7 +22,7 @@ void main() {
   setUpAll(initIsarCore);
   setUp(() => HydratedBloc.storage = InMemoryStorage());
 
-  testWidgets('a short plan shows the Empty workout row, which starts a '
+  testWidgets('the split sheet ends with Empty workout, which starts a '
       'workout without a plan', (tester) async {
     useTallWindow(tester);
     late TrackerRepository repo;
@@ -32,7 +32,7 @@ void main() {
         GymSchema,
         WorkoutSessionSchema,
         WorkoutSplitSchema,
-      ], name: 'workout_empty_row');
+      ], name: 'workout_empty_menu');
       repo = TrackerRepository(isar);
       final bench = await repo.exercises.put(
         Exercise(
@@ -72,20 +72,22 @@ void main() {
     await pumpUntil(tester, find.text('Start Push'));
     await pumpRounds(tester);
 
-    // The row sits under the plan, in full view: the header has no copy of
-    // it, so there is one Empty workout to find, hit and read.
-    expect(find.text('Pick exercises as you go'), findsOneWidget);
-    expect(find.text('Empty workout'), findsOneWidget);
-    expect(
-      find.descendant(
-        of: find.byType(CustomAppBar),
-        matching: find.text('Empty workout'),
-      ),
-      findsNothing,
+    // The day's page offers no empty workout of its own: the split's name
+    // opens the sheet that does, even with one split saved.
+    expect(find.text('Empty workout'), findsNothing);
+    await tester.tap(labelled('Split: PPL. Choose what to train from'));
+    await pumpUntil(tester, find.text('Train from'));
+    await tester.pump(const Duration(milliseconds: 500));
+
+    // Last of all, under the split.
+    final sheet = find.byType(SheetSurface);
+    final splitRow = tester.getTopLeft(
+      find.descendant(of: sheet, matching: find.text('PPL')),
     );
-    final semantics = tester.ensureSemantics();
-    expect(find.bySemanticsLabel('Empty workout'), findsNothing);
-    semantics.dispose();
+    final emptyRow = tester.getTopLeft(
+      find.descendant(of: sheet, matching: find.text('Empty workout')),
+    );
+    expect(emptyRow.dy, greaterThan(splitRow.dy));
 
     await tester.tap(find.text('Empty workout'));
     await pumpUntil(tester, find.text('Free workout'));

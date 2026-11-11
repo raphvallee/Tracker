@@ -1,8 +1,6 @@
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:forui/forui.dart';
 import 'package:tracker/domain/models/gym.dart';
@@ -30,12 +28,11 @@ import 'plan_bar.dart';
 import 'start_workout.dart';
 import 'workout_dock.dart';
 
-/// The Workout tab before a workout: the split's days in a row, the one that
-/// is up next opened with its plan (a tap on another day opens that one in
-/// its place), and under it a row for a workout without a plan. While that
-/// row is out of sight, the header offers the same thing. Start is docked at
-/// the bottom, over the gym the workout starts at, and starts the day that
-/// is open.
+/// The Workout tab before a workout: the split's name, whose sheet trains
+/// from another split or from an empty workout, then the split's days in a
+/// row, the one that is up next opened with its plan (a tap on another day
+/// opens that one in its place). Start is docked at the bottom, over the gym
+/// the workout starts at, and starts the day that is open.
 class StartView extends StatefulWidget {
   const StartView({super.key});
 
@@ -44,25 +41,12 @@ class StartView extends StatefulWidget {
 }
 
 class _StartViewState extends State<StartView> {
-  /// How much of the Empty workout row has to show for it to count as in
-  /// sight again, and how little for it to count as gone. The gap keeps a
-  /// row resting on the edge from flipping the header button back and forth.
-  static const _inSightShare = 0.6;
-  static const _outOfSightShare = 0.4;
-
   final List<StreamSubscription<Object?>> _subscriptions = [];
   List<WorkoutSplit>? _splits;
   List<SplitDayVisit> _visits = const [];
   List<Gym> _gyms = const [];
   Map<int, String> _names = const {};
   bool _didLoad = false;
-
-  final _headerKey = GlobalKey();
-  final _emptyRowKey = GlobalKey();
-
-  /// Whether the Empty workout row is out of sight, so the header offers it.
-  final _emptyRowOutOfSight = ValueNotifier(false);
-  bool _emptyRowCheckScheduled = false;
 
   /// The split shown in place of the current one, picked from the split
   /// sheet: for this visit of the tab, the current split stays what it is.
@@ -148,51 +132,7 @@ class _StartViewState extends State<StartView> {
     for (final subscription in _subscriptions) {
       subscription.cancel();
     }
-    _emptyRowOutOfSight.dispose();
     super.dispose();
-  }
-
-  /// How much of the Empty workout row is in sight, from 0 to 1: the part of
-  /// it inside the scroll viewport, below the pinned header. Null with no
-  /// row on the page.
-  double? _emptyRowShare() {
-    final row = _emptyRowKey.currentContext?.findRenderObject();
-    if (row is! RenderBox || !row.attached || !row.hasSize) return null;
-    final RenderObject? viewport = RenderAbstractViewport.maybeOf(row);
-    if (viewport is! RenderBox) return null;
-    final header = _headerKey.currentContext?.findRenderObject();
-    final top = header is RenderSliver
-        ? header.geometry?.paintExtent ?? 0.0
-        : 0.0;
-    final rect = MatrixUtils.transformRect(
-      row.getTransformTo(viewport),
-      Offset.zero & row.size,
-    );
-    if (rect.height <= 0) return null;
-    final shown =
-        math.min(rect.bottom, viewport.size.height) - math.max(rect.top, top);
-    return (shown / rect.height).clamp(0.0, 1.0);
-  }
-
-  /// Weighs whether the Empty workout row is out of sight, from where it
-  /// was laid out last.
-  void _checkEmptyRow() {
-    final share = _emptyRowShare();
-    _emptyRowOutOfSight.value =
-        share != null &&
-        share < (_emptyRowOutOfSight.value ? _inSightShare : _outOfSightShare);
-  }
-
-  /// Checks the row once the frame being built is laid out: a day or split
-  /// switched, the plan filled in. Scrolling and resizing report through
-  /// the scroll metrics instead.
-  void _scheduleEmptyRowCheck() {
-    if (_emptyRowCheckScheduled) return;
-    _emptyRowCheckScheduled = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _emptyRowCheckScheduled = false;
-      if (mounted) _checkEmptyRow();
-    });
   }
 
   Future<void> _pickGym(BuildContext context) async {
@@ -231,11 +171,9 @@ class _StartViewState extends State<StartView> {
   Widget build(BuildContext context) {
     final splits = _splits;
     if (splits == null) {
-      _scheduleEmptyRowCheck();
       return CustomScrollView(slivers: <Widget>[_header(context)]);
     }
     return _withCurrentSplit((currentSplitId) {
-      _scheduleEmptyRowCheck();
       final current = splits.isEmpty
           ? null
           : upNext(splits, _visits, currentSplitId: currentSplitId);
@@ -245,71 +183,54 @@ class _StartViewState extends State<StartView> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           Expanded(
-            child: NotificationListener<ScrollMetricsNotification>(
-              // Sent once a frame is laid out with the page scrolled,
-              // resized or grown, so the row is where it is drawn.
-              onNotification: (notification) {
-                if (notification.depth == 0) _checkEmptyRow();
-                return false;
-              },
-              child: CustomScrollView(
-                slivers: <Widget>[
-                  _header(context),
-                  SliverToBoxAdapter(
-                    child: MaxWidth(
-                      child: Padding(
-                        padding: const EdgeInsets.only(bottom: 24),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: <Widget>[
-                            if (shown == null || current == null)
-                              _inset(const _FirstRun(), top: 4)
-                            else ...[
-                              _inset(
-                                _SplitName(
-                                  title: shown.split.title,
-                                  onPress: splits.length > 1
-                                      ? () => _pickSplit(
-                                          context,
-                                          splits,
-                                          currentId: current.split.id,
-                                          shownId: shown.split.id,
-                                        )
-                                      : null,
+            child: CustomScrollView(
+              slivers: <Widget>[
+                _header(context),
+                SliverToBoxAdapter(
+                  child: MaxWidth(
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: 24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: <Widget>[
+                          if (shown == null || current == null)
+                            _inset(const _FirstRun(), top: 4)
+                          else ...[
+                            _inset(
+                              _SplitName(
+                                title: shown.split.title,
+                                onPress: () => _pickSplit(
+                                  context,
+                                  splits,
+                                  currentId: current.split.id,
+                                  shownId: shown.split.id,
                                 ),
                               ),
-                              if (dayIndex == null)
-                                _inset(_NoDays(split: shown.split), top: 6)
-                              else ...[
-                                _DayRail(
-                                  key: ValueKey('day-rail-${shown.split.id}'),
-                                  split: shown.split,
-                                  due: shown.dayIndex!,
-                                  selected: dayIndex,
-                                  lastDone: shown.lastDone,
-                                  onSelect: (day) =>
-                                      setState(() => _pickedDay = day),
-                                ),
-                                _inset(
-                                  _dayPlan(context, shown.split, dayIndex),
-                                  top: 14,
-                                ),
-                                _inset(
-                                  _EmptyWorkoutRow(
-                                    key: _emptyRowKey,
-                                    onPress: () => startEmptyWorkout(context),
-                                  ),
-                                  top: 20,
-                                ),
-                              ],
+                            ),
+                            if (dayIndex == null)
+                              _inset(_NoDays(split: shown.split), top: 6)
+                            else ...[
+                              _DayRail(
+                                key: ValueKey('day-rail-${shown.split.id}'),
+                                split: shown.split,
+                                due: shown.dayIndex!,
+                                selected: dayIndex,
+                                lastDone: shown.lastDone,
+                                onSelect: (day) =>
+                                    setState(() => _pickedDay = day),
+                              ),
+                              _inset(
+                                _dayPlan(context, shown.split, dayIndex),
+                                top: 14,
+                              ),
                             ],
                           ],
-                        ),
+                        ],
                       ),
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
           _dock(context, shown, dayIndex),
@@ -318,20 +239,9 @@ class _StartViewState extends State<StartView> {
     });
   }
 
-  /// The pinned title, with the way to an empty workout across from it
-  /// while the row under the plan is out of sight.
-  Widget _header(BuildContext context) => CustomAppBar(
-    context,
-    key: _headerKey,
-    title: 'Workout',
-    trailing: ValueListenableBuilder(
-      valueListenable: _emptyRowOutOfSight,
-      builder: (context, outOfSight, _) => _HeaderEmptyWorkout(
-        shown: outOfSight,
-        onPress: () => startEmptyWorkout(context),
-      ),
-    ),
-  );
+  /// The pinned title.
+  Widget _header(BuildContext context) =>
+      CustomAppBar(context, title: 'Workout');
 
   /// The page's side margin: everything keeps it but the row of days, which
   /// runs to the screen edges.
@@ -507,8 +417,8 @@ class _StartViewState extends State<StartView> {
     );
   }
 
-  /// The split sheet: which split's days this tab shows. It moves the tab,
-  /// not the current split.
+  /// The split sheet: which split's days this tab shows, and last of all an
+  /// empty workout. Picking a split moves the tab, not the current split.
   Future<void> _pickSplit(
     BuildContext context,
     List<WorkoutSplit> saved, {
@@ -563,6 +473,15 @@ class _StartViewState extends State<StartView> {
                       selected: split.id == shownId,
                       onPress: () => Navigator.of(sheetContext).pop(split.id),
                     ),
+                  FItem(
+                    key: const ValueKey('train-from-empty'),
+                    title: const Text('Empty workout'),
+                    subtitle: const Text('Pick exercises as you go'),
+                    onPress: () async {
+                      Navigator.of(sheetContext).pop();
+                      await startEmptyWorkout(context);
+                    },
+                  ),
                 ],
               ),
             ],
@@ -591,13 +510,13 @@ String _compactSets(PlanExercise exercise) {
       : plural('set', working.length);
 }
 
-/// The split the days below belong to. With more than one split saved, a
-/// tap picks another one to train from.
+/// The split the days below belong to. A tap opens the sheet to train from
+/// another split, or from an empty workout.
 class _SplitName extends StatelessWidget {
   const _SplitName({required this.title, required this.onPress});
 
   final String title;
-  final VoidCallback? onPress;
+  final VoidCallback onPress;
 
   @override
   Widget build(BuildContext context) {
@@ -608,16 +527,10 @@ class _SplitName extends StatelessWidget {
       overflow: TextOverflow.ellipsis,
       style: theme.typography.body.xs.copyWith(fontWeight: FontWeight.w600),
     );
-    if (onPress == null) {
-      return SizedBox(
-        height: 36,
-        child: Align(alignment: Alignment.centerLeft, child: name),
-      );
-    }
     return Align(
       alignment: Alignment.centerLeft,
       child: FTappable(
-        semanticsLabel: 'Split: $title. Train from another split',
+        semanticsLabel: 'Split: $title. Choose what to train from',
         onPress: onPress,
         child: SizedBox(
           height: 36,
@@ -837,143 +750,6 @@ class _DayChip extends StatelessWidget {
 
   static String _capitalized(String text) =>
       text.isEmpty ? text : '${text[0].toUpperCase()}${text.substring(1)}';
-}
-
-/// Training without a plan, under the open day's plan: one row in the
-/// outlined card the sheets and Settings use.
-class _EmptyWorkoutRow extends StatelessWidget {
-  const _EmptyWorkoutRow({super.key, required this.onPress});
-
-  final VoidCallback onPress;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.theme.colors;
-    return ItemCard(
-      children: <FItem>[
-        FItem(
-          prefix: Container(
-            width: 26,
-            height: 26,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: colors.muted,
-            ),
-            child: Icon(FLucideIcons.plus, size: 14, color: colors.foreground),
-          ),
-          title: const Text('Empty workout'),
-          subtitle: const Text('Pick exercises as you go'),
-          suffix: const Icon(FLucideIcons.chevronRight),
-          onPress: onPress,
-        ),
-      ],
-    );
-  }
-}
-
-/// The header's way to an empty workout, there while the row under the plan
-/// is out of sight. It keeps its room either way, so the title never moves,
-/// and fades and scales in and out. From the moment it starts to leave, it
-/// takes no taps, focus or semantics; gone, it is not on the page at all.
-class _HeaderEmptyWorkout extends StatefulWidget {
-  const _HeaderEmptyWorkout({required this.shown, required this.onPress});
-
-  final bool shown;
-  final VoidCallback onPress;
-
-  @override
-  State<_HeaderEmptyWorkout> createState() => _HeaderEmptyWorkoutState();
-}
-
-class _HeaderEmptyWorkoutState extends State<_HeaderEmptyWorkout>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 180),
-    reverseDuration: const Duration(milliseconds: 150),
-    value: widget.shown ? 1 : 0,
-  )..addStatusListener(_onStatus);
-  late final CurvedAnimation _curve = CurvedAnimation(
-    parent: _controller,
-    curve: Curves.easeOutCubic,
-    reverseCurve: Curves.easeInCubic,
-  );
-  late final Animation<double> _scale = Tween(
-    begin: 0.9,
-    end: 1.0,
-  ).animate(_curve);
-
-  void _onStatus(AnimationStatus status) {
-    // Faded out: off the page, not only see-through.
-    if (status.isDismissed) setState(() {});
-  }
-
-  @override
-  void didUpdateWidget(_HeaderEmptyWorkout oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.shown == oldWidget.shown) return;
-    if (MediaQuery.disableAnimationsOf(context)) {
-      _controller.value = widget.shown ? 1 : 0;
-    } else if (widget.shown) {
-      _controller.forward();
-    } else {
-      _controller.reverse();
-    }
-  }
-
-  @override
-  void dispose() {
-    _curve.dispose();
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final shown = widget.shown;
-    // Laid out even when it is not shown: it takes no paint, taps, focus or
-    // semantics then, and finders skip it.
-    return IndexedStack(
-      index: shown || !_controller.isDismissed ? 0 : null,
-      alignment: AlignmentDirectional.centerEnd,
-      clipBehavior: Clip.none,
-      children: <Widget>[
-        // The header keeps its actions 12 px from the edge: 4 more and the
-        // outline lines up with the page's 16 px margin.
-        Padding(
-          padding: const EdgeInsetsDirectional.only(end: 4),
-          child: IgnorePointer(
-            ignoring: !shown,
-            child: ExcludeFocus(
-              excluding: !shown,
-              child: ExcludeSemantics(
-                excluding: !shown,
-                child: FadeTransition(
-                  opacity: _curve,
-                  child: ScaleTransition(
-                    scale: _scale,
-                    // Large text would outgrow the header's fixed height:
-                    // scaled down to fit, it keeps its whole label.
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: FButton(
-                        variant: .outline,
-                        size: .sm,
-                        mainAxisSize: .min,
-                        prefix: const Icon(FLucideIcons.plus),
-                        onPress: widget.onPress,
-                        child: const Text('Empty workout'),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
 }
 
 /// The gym the workout starts at, as a fact that can be corrected: the name
