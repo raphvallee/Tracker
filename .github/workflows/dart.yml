@@ -29,19 +29,21 @@ jobs:
     - name: Clone repository
       uses: actions/checkout@v6
     - name: Set up Flutter
-      uses: subosito/flutter-action@v2
-      with:
-        channel: stable
-        flutter-version-file: tracker/pubspec.yaml
-        architecture: X64
-        # Also caches pub packages (keyed on pubspec.lock); flutter pub get
-        # still runs every time, so a stale cache can only cost a
-        # re-download, never produce a wrong build.
-        cache: true
+      uses: ./.github/actions/setup-flutter
     - name: Install Dependencies
       run: flutter pub get
     - name: Analyze
       run: flutter analyze
+    - name: Cache compiled builders
+      # build_runner compiles its builders before it generates anything:
+      # 33 of its 45 s. The compiled builders depend only on the packages
+      # and the SDK; build_runner checks their digest and recompiles them
+      # itself if anything changed. Only the builders are cached, never the
+      # asset graph, so the generated files are always written afresh.
+      uses: actions/cache@v5
+      with:
+        path: tracker/.dart_tool/build/entrypoint
+        key: build-runner-${{ hashFiles('tracker/pubspec.lock', 'tracker/pubspec.yaml') }}
     - name: Verify generated code
       run: dart run build_runner build
     - name: Ensure generated code is committed
@@ -59,23 +61,25 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [0, 1, 2, 3]
+        shard: [0, 1, 2, 3, 4, 5]
     env:
-      TOTAL_SHARDS: 4
+      TOTAL_SHARDS: 6
       SHARD: ${{ matrix.shard }}
 
     steps:
     - name: Clone repository
       uses: actions/checkout@v6
     - name: Set up Flutter
-      uses: subosito/flutter-action@v2
+      uses: ./.github/actions/setup-flutter
+    - name: Cache test kernel
+      # flutter test starts its first compile from this kernel (the
+      # framework, the packages and the app, already compiled) instead of
+      # from nothing: about 10 s less per shard. A stale kernel only means
+      # more to recompile, never a wrong build.
+      uses: actions/cache@v5
       with:
-        channel: stable
-        flutter-version-file: tracker/pubspec.yaml
-        architecture: X64
-        cache: true
-    - name: Install Dependencies
-      run: flutter pub get
+        path: tracker/build/test_cache
+        key: flutter-test-kernel-${{ hashFiles('tracker/pubspec.lock', 'tracker/pubspec.yaml') }}
     - name: Pick this shard's test files
       # Longest first onto the least loaded shard. The weights are rough
       # run times: the screenshot and overflow sweeps take most of the
@@ -97,4 +101,5 @@ jobs:
         ' > "$RUNNER_TEMP/shard_files"
         cat "$RUNNER_TEMP/shard_files"
     - name: Run Tests
+      # flutter test gets the dependencies itself.
       run: flutter test $(cat "$RUNNER_TEMP/shard_files")
