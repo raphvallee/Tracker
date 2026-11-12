@@ -4,6 +4,7 @@
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hydrated_bloc/hydrated_bloc.dart';
+import 'package:tracker/ui/history/widgets/session_edit_page.dart';
 
 import '../../../testing/fakes/in_memory_storage.dart';
 import '../../../testing/session_edit_helpers.dart';
@@ -16,14 +17,21 @@ void main() {
     HydratedBloc.storage = InMemoryStorage();
   });
 
-  testWidgets('the gym shows at once, never "Loading...", and is kept', (
+  testWidgets('the stored gym shows on the first frame and is kept on save', (
     tester,
   ) async {
     final seeded = await pumpPersistenceApp(tester, 'session_edit_gym_early');
     await tester.tap(find.text('Edit'));
-    // The page's first frame, before any real IO could land.
+    // The button presses on the next frame; the page builds on the one after,
+    // before any real IO could land.
     await tester.pump();
-    expect(find.text('Loading...'), findsNothing);
+    await tester.pump();
+    final page = find.byType(SessionEditPage);
+    expect(page, findsOneWidget);
+    expect(
+      find.descendant(of: page, matching: find.text('Home')),
+      findsOneWidget,
+    );
     await settleSessionFlow(tester);
     expect(find.text('Home'), findsOneWidget);
 

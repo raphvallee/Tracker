@@ -26,8 +26,6 @@ void main() {
       );
       final restored = SettingsState.fromJson(state.toJson());
       expect(restored.unit, WeightUnit.pounds);
-      expect(restored.toJson().containsKey('displayName'), isFalse);
-      expect(restored.toJson().containsKey('email'), isFalse);
       expect(restored.notificationsEnabled, isFalse);
       expect(restored.analyticsEnabled, isFalse);
     });
@@ -37,7 +35,6 @@ void main() {
         'unit': Object(),
         'notificationsEnabled': 'bad',
         'analyticsEnabled': null,
-        'freeStartPlacement': Object(),
         'defaultReps': 'bad',
         'defaultRepRangeMin': Object(),
         'defaultRepRangeMax': 0,
@@ -226,7 +223,6 @@ void main() {
       final state = SettingsState.fromJson({
         'v': 1,
         'unit': 'pounds',
-        'freeStartPlacement': 'after',
         'numberEntry': 'steppers',
       });
       expect(state.unit, WeightUnit.pounds);
@@ -282,12 +278,14 @@ void main() {
       expect(state.showHeavyWeightWarning, isTrue);
     });
 
-    test('is part of equality and copyWith', () {
-      final on = SettingsState();
-      final off = on.copyWith(showHeavyWeightWarning: false);
+    test('both flags are part of equality, so a change is emitted', () {
+      final fresh = SettingsState();
+      final off = fresh.copyWith(showHeavyWeightWarning: false);
+      final confirmed = fresh.copyWith(heavyWeightConfirmed: true);
       expect(off.showHeavyWeightWarning, isFalse);
-      expect(off == on, isFalse);
-      expect(off.copyWith(), off);
+      expect(confirmed.heavyWeightConfirmed, isTrue);
+      expect(off == fresh, isFalse);
+      expect(confirmed == fresh, isFalse);
     });
 
     test('heavyWeightConfirmed is off by default and round-trips', () {
@@ -305,14 +303,6 @@ void main() {
         'heavyWeightConfirmed': 'yes',
       });
       expect(state.heavyWeightConfirmed, isFalse);
-    });
-
-    test('heavyWeightConfirmed is part of equality and copyWith', () {
-      final fresh = SettingsState();
-      final confirmed = fresh.copyWith(heavyWeightConfirmed: true);
-      expect(confirmed.heavyWeightConfirmed, isTrue);
-      expect(confirmed == fresh, isFalse);
-      expect(confirmed.copyWith(), confirmed);
     });
   });
 

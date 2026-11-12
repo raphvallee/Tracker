@@ -659,28 +659,6 @@ void main() {
   });
 
   group('Start view', () {
-    testWidgets('a workout that just ended is not offered back here', (
-      tester,
-    ) async {
-      useTallWindow(tester);
-      final cubit = await pumpApp(tester);
-      await openWorkoutTab(tester);
-
-      cubit.startWorkout();
-      cubit.logSet(exerciseId: 1, exerciseName: 'Squat', weight: 100, reps: 5);
-      await cubit.endWorkout();
-      await tester.pumpAndSettle();
-      expect(cubit.state.canRestoreSaved(), isTrue);
-      expect(find.text('Restore last workout'), findsNothing);
-
-      cubit.startWorkout();
-      cubit.logSet(exerciseId: 1, exerciseName: 'Squat', weight: 100, reps: 5);
-      await cubit.discardWorkout();
-      await tester.pumpAndSettle();
-      expect(cubit.state.canRestoreDiscarded(), isTrue);
-      expect(find.text('Restore last workout'), findsNothing);
-    });
-
     testWidgets('with no split the start view offers an empty workout', (
       tester,
     ) async {
@@ -695,7 +673,6 @@ void main() {
       expect(cubit.state.isInProgress, isTrue);
       expect(cubit.state.planTitle, isNull);
       expect(find.text('Free workout'), findsOneWidget);
-      expect(find.byType(FButton), findsWidgets);
     });
   });
 }

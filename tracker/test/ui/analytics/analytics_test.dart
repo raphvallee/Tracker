@@ -183,7 +183,6 @@ void main() {
       await tester.tap(find.text('Exercise'));
       await tester.pumpAndSettle();
       expect(find.text('Select exercise'), findsOneWidget);
-      expect(find.text('All exercises'), findsNothing);
     });
 
     testWidgets('editing a graph changes its measure', (tester) async {

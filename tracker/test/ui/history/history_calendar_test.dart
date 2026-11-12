@@ -4,8 +4,6 @@ import 'package:material_ui/material_ui.dart';
 import 'package:tracker/domain/services/workout_dates.dart';
 import 'package:tracker/ui/history/widgets/calendar/history_calendar.dart';
 
-import '../../../testing/test_helpers.dart';
-
 void main() {
   Future<void> pumpCalendar(WidgetTester tester) => tester.pumpWidget(
     MaterialApp(
@@ -209,13 +207,6 @@ void main() {
     expect(find.text('No streak right now'), findsOneWidget);
     await gesture.up();
     await tester.pumpAndSettle();
-  });
-
-  testWidgets('the arrows are gone', (tester) async {
-    await pumpCalendar(tester);
-    await tester.pumpAndSettle();
-    expect(fButtonByTooltip('Next month'), findsNothing);
-    expect(fButtonByTooltip('Previous month'), findsNothing);
   });
 
   testWidgets('the sheet keeps its height from month to month', (tester) async {

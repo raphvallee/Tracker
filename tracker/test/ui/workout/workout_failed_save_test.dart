@@ -56,7 +56,7 @@ void main() {
       isar = await openTestIsar([
         WorkoutSessionSchema,
         GymSchema,
-      ], name: 'workout_test_flow');
+      ], name: 'workout_failed_save_reopened');
     },
   );
 }
