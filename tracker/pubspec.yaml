@@ -12,13 +12,13 @@ dependencies:
     sdk: flutter
   flutter_localizations:
     sdk: flutter
-  isar_community: ^3.3.2
-  isar_community_flutter_libs: ^3.3.2
+  isar_community: ^3.4.1
+  isar_community_flutter_libs: ^3.4.1
   path_provider: ^2.1.6
   hydrated_bloc: ^11.0.0
   flutter_bloc: ^9.1.1
   window_size: ^0.2.0
-  forui: ^0.27.6
+  forui: ^0.27.7
   forui_lucide: ^0.27.0
   material_ui: ^1.11.0
   cupertino_ui: ^1.1.6
@@ -29,7 +29,7 @@ dev_dependencies:
   integration_test:
     sdk: flutter
   flutter_lints: ^6.0.0
-  isar_community_generator: ^3.3.2
+  isar_community_generator: ^3.4.1
   build_runner: any
   dependency_validator: any
   husky: ^0.1.7
