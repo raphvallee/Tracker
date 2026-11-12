@@ -5,10 +5,14 @@ on:
     branches: [ "main" ]
     paths:
       - 'tracker/**'
+      - '.github/workflows/dart.yml'
+      - '.github/actions/setup-flutter/**'
   pull_request:
     branches: [ "main" ]
     paths:
       - 'tracker/**'
+      - '.github/workflows/dart.yml'
+      - '.github/actions/setup-flutter/**'
 
 # A new push to a pull request cancels its older run. A push to main gets a
 # group of its own, so it never waits for or cancels another run.
