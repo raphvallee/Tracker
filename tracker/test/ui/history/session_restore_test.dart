@@ -91,11 +91,15 @@ void main() {
       await tester.tap(fButtonByTooltip('Workout options'));
       await settleSessionFlow(tester);
       await tester.tap(find.text('Restore workout'));
+      // The page leaves once the cubit has deleted the saved session and runs
+      // the workout again, which can be a frame after the delete lands: wait
+      // for that, then for the page's exit transition.
+      await waitForRealIo(tester, () async => cubit.state.isInProgress);
+      await settleSessionFlow(tester);
       await waitForRealIo(
         tester,
         () async => (await repo.sessions.getById(id)) == null,
       );
-      await settleSessionFlow(tester);
 
       expect(cubit.state.isInProgress, isTrue);
       expect(cubit.state.sets.single.weight, 80);
