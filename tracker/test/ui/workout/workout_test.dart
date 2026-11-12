@@ -1,17 +1,17 @@
 // No Isar here: the cubit's persistence and the repository-backed flows live
 // one per file in workout_*_test.dart (docs/TESTING_ISAR_CI.md).
 
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forui/forui.dart';
 import 'package:hydrated_bloc/hydrated_bloc.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:tracker/domain/models/effort_scale.dart';
 import 'package:tracker/domain/models/number_entry.dart';
 import 'package:tracker/domain/models/workout_set.dart';
 import 'package:tracker/domain/models/workout_split.dart';
+import 'package:tracker/ui/core/ui/number_keypad.dart';
 import 'package:tracker/ui/workout/view_models/workout_cubit.dart';
 import 'package:tracker/ui/workout/widgets/elapsed_clock.dart';
-import 'package:tracker/ui/core/ui/number_keypad.dart';
 import 'package:tracker/ui/workout/widgets/workout_overview.dart';
 
 import '../../../testing/fakes/in_memory_storage.dart';

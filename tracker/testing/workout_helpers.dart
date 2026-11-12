@@ -1,7 +1,7 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forui/forui.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:tracker/domain/models/number_entry.dart';
 import 'package:tracker/main.dart';
 import 'package:tracker/ui/settings/view_models/settings_cubit.dart';

@@ -5,12 +5,12 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forui/forui.dart';
 import 'package:hydrated_bloc/hydrated_bloc.dart';
 import 'package:isar_community/isar.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:tracker/data/repositories/tracker_repository.dart';
 import 'package:tracker/data/services/seed.dart';
 import 'package:tracker/domain/models/effort_scale.dart';
@@ -28,10 +28,10 @@ import 'package:tracker/ui/analytics/view_models/analytics_data.dart';
 import 'package:tracker/ui/analytics/widgets/graph_editor.dart';
 import 'package:tracker/ui/analytics/widgets/graph_page.dart';
 import 'package:tracker/ui/analytics/widgets/graph_tile.dart';
-import 'package:tracker/ui/core/ui/graph_chart.dart';
 import 'package:tracker/ui/analytics/widgets/progression_page.dart';
 import 'package:tracker/ui/core/ui/custom_route.dart';
 import 'package:tracker/ui/core/ui/effort_sheet.dart';
+import 'package:tracker/ui/core/ui/graph_chart.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
 import 'package:tracker/ui/exercises/widgets/exercise_detail_page.dart';
 import 'package:tracker/ui/exercises/widgets/new_exercise_page.dart';

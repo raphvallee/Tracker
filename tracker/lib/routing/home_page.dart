@@ -1,12 +1,12 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart' show SystemNavigator;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:forui/forui.dart';
-import 'package:tracker/ui/workout/view_models/workout_cubit.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:tracker/routing/tab_navigation.dart';
+import 'package:tracker/ui/workout/view_models/workout_cubit.dart';
 
 import 'package:tracker/ui/exercises/widgets/exercises_page.dart';
 import 'package:tracker/ui/feed/widgets/feed_page.dart';

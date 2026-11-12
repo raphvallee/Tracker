@@ -1,11 +1,11 @@
 import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart' show HitTestResult;
-import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show RenderMetaData;
 import 'package:flutter/semantics.dart' show CustomSemanticsAction;
 import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:forui/forui.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Deletes a row in two swipes, so a stray flick never loses anything: the
 /// first swipe left slides the row open on a red Delete action, the second

@@ -1,5 +1,5 @@
-import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:tracker/domain/models/exercise.dart';
 import 'package:tracker/domain/models/graph_config.dart';
 import 'package:tracker/ui/analytics/widgets/graph_exercise_picker_page.dart';
