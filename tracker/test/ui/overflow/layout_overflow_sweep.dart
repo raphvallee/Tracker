@@ -139,11 +139,13 @@ Future<void> sweepSize(WidgetTester tester, String label, Size size) async {
 
   // Real delays outside the fake-async zone let Isar's real watcher events
   // reach the StreamBuilders; a plain pump then renders. (No pumpAndSettle:
-  // loading spinners animate forever under fake time.)
+  // loading spinners animate forever under fake time.) The real delay is most
+  // of the sweep's run time; 50 ms is enough for the seeded database, as in
+  // the visual sweep.
   Future<void> settle() async {
     for (var i = 0; i < 2; i++) {
       await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 150)),
+        () => Future<void>.delayed(const Duration(milliseconds: 50)),
       );
       await tester.pump();
     }

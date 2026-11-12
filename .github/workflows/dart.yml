@@ -10,15 +10,20 @@ on:
     paths:
       - 'tracker/**'
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    env:
-      APP_DIR: 'tracker'
+# A new push to a pull request cancels its older run. A push to main gets a
+# group of its own, so it never waits for or cancels another run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
 
-    defaults:
-      run:
-        working-directory: ${{ env.APP_DIR }}
+defaults:
+  run:
+    working-directory: tracker
+
+jobs:
+  # Everything except the tests, in parallel with the test shards.
+  checks:
+    runs-on: ubuntu-latest
 
     steps:
     - name: Clone repository
@@ -42,7 +47,54 @@ jobs:
     - name: Ensure generated code is committed
       working-directory: .
       run: git diff --exit-code -- tracker/**/*.g.dart
-    - name: Run Tests
-      run: flutter test
     - name: Validate dependencies
       run: dart run dependency_validator
+
+  # The test files split across parallel runners. Each file still runs in
+  # its own process (docs/TESTING_ISAR_CI.md), so splitting by file changes
+  # nothing for a test. flutter test --total-shards is not used: it splits
+  # by test case, so every shard would compile every file.
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+    env:
+      TOTAL_SHARDS: 4
+      SHARD: ${{ matrix.shard }}
+
+    steps:
+    - name: Clone repository
+      uses: actions/checkout@v6
+    - name: Set up Flutter
+      uses: subosito/flutter-action@v2
+      with:
+        channel: stable
+        flutter-version-file: tracker/pubspec.yaml
+        architecture: X64
+        cache: true
+    - name: Install Dependencies
+      run: flutter pub get
+    - name: Pick this shard's test files
+      # Longest first onto the least loaded shard. The weights are rough
+      # run times: the screenshot and overflow sweeps take most of the
+      # suite, every other file a few seconds. Each shard lists its files
+      # longest first, so a sweep starts while the small files compile.
+      run: |
+        find test -name '*_test.dart' | sort | awk '
+          { w = 4 }
+          /\/visual_screenshots\// { w = 20 }
+          /\/overflow\// { w = 12 }
+          { print w, $0 }
+        ' | sort -s -k1,1nr | awk -v n="$TOTAL_SHARDS" -v me="$SHARD" '
+          {
+            best = 0
+            for (i = 1; i < n; i++) if (load[i] < load[best]) best = i
+            load[best] += $1
+            if (best == me) print $2
+          }
+        ' > "$RUNNER_TEMP/shard_files"
+        cat "$RUNNER_TEMP/shard_files"
+    - name: Run Tests
+      run: flutter test $(cat "$RUNNER_TEMP/shard_files")

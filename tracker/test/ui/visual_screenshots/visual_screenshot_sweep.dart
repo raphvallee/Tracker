@@ -167,10 +167,14 @@ Future<void> captureScreensAt(
   // they land in the binding's pending slot. takeException() retrieves
   // and clears it, tagging the failure with the current screen and
   // capturing it before the sweep moves on.
+  //
+  // The sweep settles about 120 times, so the real delay is most of its run
+  // time: 50 ms lands every read of the seeded database (0 ms does not:
+  // "Last 80 kg x 8" goes missing) and keeps the sweep near 15 s.
   Future<void> settle() async {
     for (var i = 0; i < 2; i++) {
       await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 150)),
+        () => Future<void>.delayed(const Duration(milliseconds: 50)),
       );
       await tester.pump(const Duration(milliseconds: 250));
     }
