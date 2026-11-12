@@ -2,10 +2,10 @@
 // static lock that cannot complete across the test's fake-async zone once a
 // cubit has been pumped, so it can't survive repeated pumps in one file.
 
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forui/forui.dart';
 import 'package:hydrated_bloc/hydrated_bloc.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:tracker/ui/history/widgets/history_page.dart';
 
 import '../testing/fakes/in_memory_storage.dart';

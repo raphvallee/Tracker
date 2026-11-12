@@ -2,8 +2,8 @@
 // code.
 // ignore_for_file: avoid_print
 
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:tracker/domain/models/workout_session.dart';
 import 'package:tracker/domain/services/workout_dates.dart';
 

@@ -2,9 +2,9 @@
 // flutter_tester process with a fresh libisar native worker pool (see
 // docs/TESTING_ISAR_CI.md).
 
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forui/forui.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:tracker/data/repositories/tracker_repository.dart';
 import 'package:tracker/domain/models/exercise.dart';
 import 'package:tracker/domain/models/gym.dart';
@@ -96,7 +96,19 @@ void main() {
       );
       expect(find.text('1 workout'), findsNWidgets(2));
       // The date gutter, what was done, how long and how many sets.
-      expect(find.text(weekdayLabel(today)), findsOneWidget);
+      Finder inRow(String title, String text) => find.descendant(
+        of: find
+            .ancestor(
+              of: find.text(title),
+              matching: find.byType(GestureDetector),
+            )
+            .first,
+        matching: find.text(text),
+      );
+      expect(inRow('Today session', weekdayLabel(today)), findsOneWidget);
+      expect(inRow('Today session', '${today.day}'), findsOneWidget);
+      expect(inRow('Older session', weekdayLabel(lastMonth)), findsOneWidget);
+      expect(inRow('Older session', '15'), findsOneWidget);
       expect(
         find.text('Bench Press, Overhead Press and 1 more'),
         findsOneWidget,

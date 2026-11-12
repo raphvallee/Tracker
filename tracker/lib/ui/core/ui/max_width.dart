@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 class MaxWidth extends StatelessWidget {
   const MaxWidth({super.key, this.max = defaultMaxWidth, required this.child});

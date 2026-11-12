@@ -2,10 +2,10 @@
 // flutter_tester process with a fresh libisar native worker pool (see
 // docs/TESTING_ISAR_CI.md).
 
-import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hydrated_bloc/hydrated_bloc.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:tracker/data/repositories/tracker_repository.dart';
 import 'package:tracker/domain/models/exercise.dart';
 import 'package:tracker/domain/models/gym.dart';
@@ -91,11 +91,15 @@ void main() {
       await tester.tap(fButtonByTooltip('Workout options'));
       await settleSessionFlow(tester);
       await tester.tap(find.text('Restore workout'));
+      // The page leaves once the cubit has deleted the saved session and runs
+      // the workout again, which can be a frame after the delete lands: wait
+      // for that, then for the page's exit transition.
+      await waitForRealIo(tester, () async => cubit.state.isInProgress);
+      await settleSessionFlow(tester);
       await waitForRealIo(
         tester,
         () async => (await repo.sessions.getById(id)) == null,
       );
-      await settleSessionFlow(tester);
 
       expect(cubit.state.isInProgress, isTrue);
       expect(cubit.state.sets.single.weight, 80);

@@ -4,10 +4,10 @@
 // native worker pool is sized to the CPU count, so one process per Isar-heavy
 // case keeps CI's 4-vCPU runners from wedging. See docs/TESTING_ISAR_CI.md.
 
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forui/forui.dart';
 import 'package:hydrated_bloc/hydrated_bloc.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:tracker/domain/models/workout_session.dart';
 import 'package:tracker/ui/core/ui/edit_sheet.dart';
 import 'package:tracker/ui/core/ui/number_keypad.dart';

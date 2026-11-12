@@ -1,5 +1,5 @@
-import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:tracker/ui/core/ui/max_width.dart';
 
 /// The bar docked at the bottom of every workout screen. It holds the one

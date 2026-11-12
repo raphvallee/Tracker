@@ -1,14 +1,14 @@
-import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:tracker/data/services/app_log.dart';
-import 'package:tracker/ui/core/ui/repository_scope.dart';
 import 'package:tracker/domain/models/exercise.dart';
 import 'package:tracker/domain/models/muscle.dart';
 import 'package:tracker/ui/core/ui/app_dialog.dart';
 import 'package:tracker/ui/core/ui/custom_app_bar.dart';
 import 'package:tracker/ui/core/ui/keyboard_inset.dart';
-import 'package:tracker/utils/form_validators.dart';
 import 'package:tracker/ui/core/ui/max_width.dart';
+import 'package:tracker/ui/core/ui/repository_scope.dart';
+import 'package:tracker/utils/form_validators.dart';
 
 class NewExercisePage extends StatefulWidget {
   const NewExercisePage({super.key, this.exercise});

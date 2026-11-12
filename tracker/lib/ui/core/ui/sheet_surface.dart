@@ -1,5 +1,5 @@
-import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// The opaque, top-rounded surface a bottom sheet's content sits on, with a
 /// grab handle: showFSheet paints no surface of its own. [scrollable] lets
