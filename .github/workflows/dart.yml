@@ -65,9 +65,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [0, 1, 2, 3, 4, 5]
+        shard: [0, 1, 2, 3, 4, 5, 6]
     env:
-      TOTAL_SHARDS: 6
+      TOTAL_SHARDS: 7
       SHARD: ${{ matrix.shard }}
 
     steps:
@@ -85,15 +85,20 @@ jobs:
         path: tracker/build/test_cache
         key: flutter-test-kernel-${{ hashFiles('tracker/pubspec.lock', 'tracker/pubspec.yaml') }}
     - name: Pick this shard's test files
-      # Longest first onto the least loaded shard. The weights are rough
-      # run times: the screenshot and overflow sweeps take most of the
-      # suite, every other file a few seconds. Each shard lists its files
-      # longest first, so a sweep starts while the small files compile.
+      # Longest first onto the least loaded shard. The weights are the
+      # seconds a file holds one of flutter test's two run slots on the
+      # runner (start-up and compile included), measured per folder: a
+      # screenshot sweep 24, an overflow sweep 14, a History or Splits flow
+      # 5.5, other UI tests 3.5, everything else 2.2. Each shard lists its
+      # files longest first, so a sweep starts while the small files compile
+      # and runs beside them in the other slot.
       run: |
         find test -name '*_test.dart' | sort | awk '
-          { w = 4 }
-          /\/visual_screenshots\// { w = 20 }
-          /\/overflow\// { w = 12 }
+          { w = 2.2 }
+          /^test\/ui\// { w = 3.5 }
+          /^test\/ui\/(history|splits)\// { w = 5.5 }
+          /\/visual_screenshots\// { w = 24 }
+          /\/overflow\// { w = 14 }
           { print w, $0 }
         ' | sort -s -k1,1nr | awk -v n="$TOTAL_SHARDS" -v me="$SHARD" '
           {
