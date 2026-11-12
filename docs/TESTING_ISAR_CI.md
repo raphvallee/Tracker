@@ -101,7 +101,7 @@ act pull_request -W .github/workflows/dart.yml -j test --matrix shard:0 `
   `flutter test` runs as many files at once as on GitHub.
 - The tests run in seven `test` shards; `--matrix shard:N` picks one (0 to 6).
   Run the shards one at a time: `act` starts matrix jobs together, and on the
-  same 4 CPUs they slow each other down. `-j checks` runs everything else.
+  same 4 CPUs they slow each other down. `-j analyze` and `-j codegen` run everything else.
 - `--bind` mounts the host folder directly. Without it, `act` copies the
   workspace without a usable `.git`, and the step "Ensure generated code is
   committed" fails with `fatal: not a git repository`. That is an `act`
