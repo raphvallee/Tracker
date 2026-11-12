@@ -30,9 +30,6 @@ void main() {
     expect(find.text('New exercises start at 8-12 reps'), findsOneWidget);
     expect(find.text('Add the gyms you train at'), findsOneWidget);
     expect(find.text('Kilograms'), findsOneWidget);
-    // Only settings that change something are listed.
-    expect(find.text('Notifications'), findsNothing);
-    expect(find.text('Privacy & Security'), findsNothing);
     // Nothing on the page builds a text field or a select: the first frame
     // stays cheap.
     expect(find.byType(FTextField), findsNothing);

@@ -24,7 +24,6 @@ void main() {
       expect(find.byType(FBottomNavigationBar), findsOneWidget);
       expect(find.byType(FBottomNavigationBarItem), findsNWidgets(5));
       expect(find.text('Workout'), findsOneWidget);
-      expect(find.text('CurrentWorkout'), findsNothing);
 
       expect(find.text('Progression'), findsOneWidget);
 

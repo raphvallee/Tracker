@@ -36,6 +36,21 @@ void main() {
       expect(normalizedWeight(110, multipliers, null), 110);
       expect(normalizedWeight(110, multipliers, 99), 110);
     });
+
+    test('supports per-exercise override before gym fallback', () {
+      expect(
+        normalizedWeight(
+          100,
+          const {2: 0.9},
+          2,
+          7,
+          const {
+            2: {7: 0.8},
+          },
+        ),
+        closeTo(80, 0.001),
+      );
+    });
   });
 
   group('per-exercise series excludes warmups + normalizes', () {
@@ -263,21 +278,6 @@ void main() {
         _session(DateTime(2026, 1, 2), 2, [_set(3, 40, 8, SetType.working)]),
       ];
       expect(estimateGymMultiplier(sessions, 1, 2), isNull);
-    });
-
-    test('supports per-exercise override before gym fallback', () {
-      expect(
-        normalizedWeight(
-          100,
-          const {2: 0.9},
-          2,
-          7,
-          const {
-            2: {7: 0.8},
-          },
-        ),
-        closeTo(80, 0.001),
-      );
     });
 
     test('recent observations dominate time-weighted estimate', () {

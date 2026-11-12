@@ -62,16 +62,13 @@ void main() {
     await pumpUntil(tester, find.text('Pull'));
     expect(find.text('2 days, not trained yet'), findsOneWidget);
 
-    // Renaming edits the name in place and lands in the draft, not in the
-    // database.
+    // A rename lands in the draft, not in the database (the field itself is
+    // covered by split_rename_inline_test.dart).
     await tester.tap(fButtonByTooltip('Split options').first);
     await pumpRounds(tester, 3);
     await tester.tap(find.text('Rename'));
     await pumpRounds(tester, 4);
-    final field = find.byType(TextField);
-    expect(field, findsOneWidget);
-    expect(tester.testTextInput.isVisible, isTrue, reason: 'keyboard up');
-    await tester.enterText(field, 'Push Pull Legs');
+    await tester.enterText(find.byType(TextField), 'Push Pull Legs');
     await tester.tap(fButtonByTooltip('Done renaming'));
     await pumpUntil(tester, find.text('1 unsaved change'));
     await pumpRounds(tester, 4);
@@ -96,7 +93,7 @@ void main() {
     await pumpRounds(tester, 4);
     expect(find.text('Pull'), findsOneWidget);
 
-    // The other split becomes the current one.
+    // The first split is current: its menu has no Make current.
     expect(find.text('Current'), findsOneWidget);
     await tester.tap(fButtonByTooltip('Split options').first);
     await pumpRounds(tester, 3);

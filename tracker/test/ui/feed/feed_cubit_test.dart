@@ -52,13 +52,13 @@ void main() {
       addTearDown(isar.close);
 
       cubit.load();
-      await Future<void>.delayed(const Duration(milliseconds: 50));
+      await waitFor(() => cubit.state.status == FeedStatus.error);
       expect(cubit.state.status, FeedStatus.error);
       expect(cubit.state.sessions, isEmpty);
       expect(sessionRepo.calls, 1);
 
       cubit.retry();
-      await Future<void>.delayed(const Duration(milliseconds: 50));
+      await waitFor(() => cubit.state.status == FeedStatus.ready);
       expect(cubit.state.status, FeedStatus.ready);
       expect(cubit.state.sessions, hasLength(1));
       expect(cubit.state.sessions.first.title, 'Push day');
