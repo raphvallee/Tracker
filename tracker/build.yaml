@@ -1,0 +1,10 @@
+# The Isar models, and so every generated file, live in lib/domain/models.
+# Without this the generator resolves every library in the package (tests and
+# benchmarks too) only to find nothing to generate: most of build_runner's
+# run time.
+targets:
+  $default:
+    builders:
+      isar_community_generator:
+        generate_for:
+          - lib/domain/models/**
