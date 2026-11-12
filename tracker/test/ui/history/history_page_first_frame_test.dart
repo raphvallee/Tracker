@@ -26,7 +26,11 @@ void main() {
     (tester) async {
       final now = DateTime.now();
       final today = DateTime(now.year, now.month, now.day, 0, 1);
-      final lastMonth = DateTime(now.year, now.month - 1, 15, 9);
+      // Mid last month, on another weekday than today, so today's
+      // weekday label is shown once.
+      final lastMonth = [15, 16]
+          .map((day) => DateTime(now.year, now.month - 1, day, 9))
+          .firstWhere((date) => date.weekday != today.weekday);
       late TrackerRepository repo;
       await tester.runAsync(() async {
         final isar = await openTestIsar([
