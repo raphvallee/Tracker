@@ -99,7 +99,7 @@ act pull_request -W .github/workflows/dart.yml -j test --matrix shard:0 `
   container sees the host's CPU count and passes. `--cpuset-cpus 0-3` also
   makes the container report 4 CPUs (`--cpus` alone only caps the time), so
   `flutter test` runs as many files at once as on GitHub.
-- The tests run in four `test` shards; `--matrix shard:N` picks one (0 to 3).
+- The tests run in six `test` shards; `--matrix shard:N` picks one (0 to 5).
   Run the shards one at a time: `act` starts matrix jobs together, and on the
   same 4 CPUs they slow each other down. `-j checks` runs everything else.
 - `--bind` mounts the host folder directly. Without it, `act` copies the

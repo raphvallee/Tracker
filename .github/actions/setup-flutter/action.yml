@@ -1,0 +1,46 @@
+name: Set up Flutter
+description: >
+  Flutter from tracker/pubspec.yaml, restored from a slimmed SDK cache, with
+  the pub cache.
+
+runs:
+  using: composite
+  steps:
+  - name: Set up Flutter
+    id: flutter
+    uses: subosito/flutter-action@v2
+    with:
+      channel: stable
+      flutter-version-file: tracker/pubspec.yaml
+      architecture: X64
+      # Also caches pub packages (keyed on pubspec.lock); flutter pub get
+      # still runs every time, so a stale cache can only cost a
+      # re-download, never produce a wrong build.
+      cache: true
+      # The SDK is cached slimmed (see the next step), under a key of its own
+      # so the full SDK cache is never restored instead.
+      cache-key: 'flutter-slim-:os:-:channel:-:version:-:arch:-:hash:'
+  - name: Slim the Flutter SDK before it is cached
+    # Only on a cache miss: the SDK was just downloaded in full (1.7 GB
+    # compressed). CI only analyzes and runs Linux host tests, so the Android
+    # and web artifacts go, and the git history is cut to the one commit
+    # (Flutter needs the repository, its branch, upstream and tag, not the
+    # history). The cache drops to about 0.66 GB, restored in a third of the
+    # time. Flutter skips its weekly upstream fetch on CI, so the short
+    # history is never fetched back.
+    if: steps.flutter.outputs.CACHE-HIT != 'true'
+    shell: bash
+    run: |
+      cd "$FLUTTER_ROOT"
+      rm -rf bin/cache/artifacts/engine/android-* \
+        bin/cache/artifacts/engine/linux-x64-profile \
+        bin/cache/artifacts/engine/linux-x64-release \
+        bin/cache/flutter_web_sdk
+      upstream=$(git rev-parse --symbolic-full-name '@{upstream}')
+      git for-each-ref --format='%(refname)' refs/remotes | grep -vxF "$upstream" \
+        | sed 's/^/delete /' | git update-ref --no-deref --stdin
+      git tag --no-contains HEAD | sed 's|^|delete refs/tags/|' | git update-ref --stdin
+      git rev-parse HEAD > .git/shallow
+      git reflog expire --expire=now --all
+      git gc --quiet --prune=now
+      du -sh .
