@@ -7,7 +7,7 @@ so it is easy to misdiagnose. Debugging it from the CI log alone took hours.
 
 ## Symptoms
 
-- `flutter test` passes locally (Windows or macOS) but the `Dart / build` job
+- `flutter test` passes locally (Windows or macOS) but a `Dart / test` shard
   fails on GitHub.
 - The failing tests report `TimeoutException after 0:10:00.000000: Test timed
   out after 10 minutes` or `TimeoutException after 0:00:30.000000`.
@@ -87,16 +87,21 @@ Docker and `act`. The `act` options below are what reproduce the GitHub
 runner:
 
 ```powershell
-act pull_request -W .github/workflows/dart.yml -j build `
+act pull_request -W .github/workflows/dart.yml -j test --matrix shard:0 `
   -P ubuntu-latest=catthehacker/ubuntu:act-latest `
   --container-architecture linux/amd64 `
-  --container-options "--cpus 4" `
+  --container-options "--cpus 4 --cpuset-cpus 0-3" `
   --bind
 ```
 
 - `--container-options "--cpus 4"` matches the GitHub runner's CPU count. This
   is what makes the pool-wedge reproduce locally. Without it, the Linux
-  container sees the host's CPU count and passes.
+  container sees the host's CPU count and passes. `--cpuset-cpus 0-3` also
+  makes the container report 4 CPUs (`--cpus` alone only caps the time), so
+  `flutter test` runs as many files at once as on GitHub.
+- The tests run in four `test` shards; `--matrix shard:N` picks one (0 to 3).
+  Run the shards one at a time: `act` starts matrix jobs together, and on the
+  same 4 CPUs they slow each other down. `-j checks` runs everything else.
 - `--bind` mounts the host folder directly. Without it, `act` copies the
   workspace without a usable `.git`, and the step "Ensure generated code is
   committed" fails with `fatal: not a git repository`. That is an `act`
