@@ -26,11 +26,7 @@ void main() {
     (tester) async {
       final now = DateTime.now();
       final today = DateTime(now.year, now.month, now.day, 0, 1);
-      // Mid last month, on another weekday than today, so today's
-      // weekday label is shown once.
-      final lastMonth = [15, 16]
-          .map((day) => DateTime(now.year, now.month - 1, day, 9))
-          .firstWhere((date) => date.weekday != today.weekday);
+      final lastMonth = DateTime(now.year, now.month - 1, 15, 9);
       late TrackerRepository repo;
       await tester.runAsync(() async {
         final isar = await openTestIsar([
@@ -100,7 +96,19 @@ void main() {
       );
       expect(find.text('1 workout'), findsNWidgets(2));
       // The date gutter, what was done, how long and how many sets.
-      expect(find.text(weekdayLabel(today)), findsOneWidget);
+      Finder inRow(String title, String text) => find.descendant(
+        of: find
+            .ancestor(
+              of: find.text(title),
+              matching: find.byType(GestureDetector),
+            )
+            .first,
+        matching: find.text(text),
+      );
+      expect(inRow('Today session', weekdayLabel(today)), findsOneWidget);
+      expect(inRow('Today session', '${today.day}'), findsOneWidget);
+      expect(inRow('Older session', weekdayLabel(lastMonth)), findsOneWidget);
+      expect(inRow('Older session', '15'), findsOneWidget);
       expect(
         find.text('Bench Press, Overhead Press and 1 more'),
         findsOneWidget,
