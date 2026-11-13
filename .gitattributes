@@ -1,0 +1,15 @@
+# Exclude langages from stats
+*.cc linguist-vendored
+*.h linguist-vendored
+*.cpp linguist-vendored
+**/CMakeLists.txt linguist-vendored
+*.cmake linguist-vendored
+**/Podfile linguist-vendored
+
+* text=auto eol=lf
+# Husky git hooks must always be checked out with LF endings so they run on
+# Windows (avoid CRLF breaking `sh`), macOS, and Linux alike.
+.husky/** text eol=lf
+tracker/test/assets/*.dll binary
+tracker/test/assets/*.so binary
+tracker/test/assets/*.dylib binary

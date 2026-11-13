@@ -1,0 +1,36 @@
+#!/usr/bin/env sh
+# Husky pre-commit hook: format committed Dart code with `dart fix --apply`.
+#
+# Project-specific: this script lives in the repo (`.husky/pre-commit`) so the
+# hook is version-controlled and identical on every machine that clones it.
+# Git runs it because `core.hooksPath` points at this `.husky` directory.
+#
+# Layout: the git repo root is also this dir's parent; the Flutter/Dart package
+# lives in `tracker/`. Hooks execute with the worktree top as cwd, so we `cd`
+# into the package before running Dart tooling.
+
+set -e
+
+# Always resolve from the repository root, wherever the hook is invoked.
+cd "$(git rev-parse --show-toplevel)" || exit 1
+
+TRACKER_PKG="tracker"
+
+if [ ! -d "$TRACKER_PKG" ]; then
+  echo "husky: ${TRACKER_PKG}/ not found; skipping Dart format."
+  exit 0
+fi
+
+cd "$TRACKER_PKG"
+
+# Apply quick fixes (formatting / lint markers that Dart can fix on its own).
+dart fix --apply
+
+# Reflow source to the canonical Dart style.
+dart format .
+
+# Re-stage whatever the formatter touched so the commit includes it.
+cd ..
+git add "$TRACKER_PKG"
+
+exit 0

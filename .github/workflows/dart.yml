@@ -1,0 +1,126 @@
+name: Dart
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - 'tracker/**'
+      - '.github/workflows/dart.yml'
+      - '.github/actions/setup-flutter/**'
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - 'tracker/**'
+      - '.github/workflows/dart.yml'
+      - '.github/actions/setup-flutter/**'
+
+# A new push to a pull request cancels its older run. A push to main gets a
+# group of its own, so it never waits for or cancels another run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: tracker
+
+jobs:
+  # Everything except the tests runs in two jobs beside the test shards:
+  # in one job, analysis and code generation took longer than any shard.
+  analyze:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Clone repository
+      uses: actions/checkout@v6
+    - name: Set up Flutter
+      uses: ./.github/actions/setup-flutter
+    - name: Install Dependencies
+      run: flutter pub get
+    - name: Analyze
+      run: flutter analyze
+
+  codegen:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Clone repository
+      uses: actions/checkout@v6
+    - name: Set up Flutter
+      uses: ./.github/actions/setup-flutter
+    - name: Install Dependencies
+      run: flutter pub get
+    - name: Cache compiled builders
+      # build_runner compiles its builders before it generates anything:
+      # 33 of its 45 s. The compiled builders depend only on the packages
+      # and the SDK; build_runner checks their digest and recompiles them
+      # itself if anything changed. Only the builders are cached, never the
+      # asset graph, so the generated files are always written afresh.
+      uses: actions/cache@v5
+      with:
+        path: tracker/.dart_tool/build/entrypoint
+        key: build-runner-${{ hashFiles('tracker/pubspec.lock', 'tracker/pubspec.yaml') }}
+    - name: Verify generated code
+      run: dart run build_runner build
+    - name: Ensure generated code is committed
+      working-directory: .
+      run: git diff --exit-code -- tracker/**/*.g.dart
+    - name: Validate dependencies
+      run: dart run dependency_validator
+
+  # The test files split across parallel runners. Each file still runs in
+  # its own process (docs/TESTING_ISAR_CI.md), so splitting by file changes
+  # nothing for a test. flutter test --total-shards is not used: it splits
+  # by test case, so every shard would compile every file.
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6]
+    env:
+      TOTAL_SHARDS: 7
+      SHARD: ${{ matrix.shard }}
+
+    steps:
+    - name: Clone repository
+      uses: actions/checkout@v6
+    - name: Set up Flutter
+      uses: ./.github/actions/setup-flutter
+    - name: Cache test kernel
+      # flutter test starts its first compile from this kernel (the
+      # framework, the packages and the app, already compiled) instead of
+      # from nothing: about 10 s less per shard. A stale kernel only means
+      # more to recompile, never a wrong build.
+      uses: actions/cache@v5
+      with:
+        path: tracker/build/test_cache
+        key: flutter-test-kernel-${{ hashFiles('tracker/pubspec.lock', 'tracker/pubspec.yaml') }}
+    - name: Pick this shard's test files
+      # Longest first onto the least loaded shard. The weights are the
+      # seconds a file holds one of flutter test's two run slots on the
+      # runner (start-up and compile included), measured per folder: a
+      # screenshot sweep 24, an overflow sweep 14, a History or Splits flow
+      # 5.5, other UI tests 3.5, everything else 2.2. Each shard lists its
+      # files longest first, so a sweep starts while the small files compile
+      # and runs beside them in the other slot.
+      run: |
+        find test -name '*_test.dart' | sort | awk '
+          { w = 2.2 }
+          /^test\/ui\// { w = 3.5 }
+          /^test\/ui\/(history|splits)\// { w = 5.5 }
+          /\/visual_screenshots\// { w = 24 }
+          /\/overflow\// { w = 14 }
+          { print w, $0 }
+        ' | sort -s -k1,1nr | awk -v n="$TOTAL_SHARDS" -v me="$SHARD" '
+          {
+            best = 0
+            for (i = 1; i < n; i++) if (load[i] < load[best]) best = i
+            load[best] += $1
+            if (best == me) print $2
+          }
+        ' > "$RUNNER_TEMP/shard_files"
+        cat "$RUNNER_TEMP/shard_files"
+    - name: Run Tests
+      # flutter test gets the dependencies itself.
+      run: flutter test $(cat "$RUNNER_TEMP/shard_files")
