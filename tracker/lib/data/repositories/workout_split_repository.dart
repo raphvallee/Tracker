@@ -10,6 +10,10 @@ class WorkoutSplitRepository {
   Future<List<WorkoutSplit>> getAll() =>
       _isar.workoutSplits.where().sortByOrder().findAll();
 
+  /// Every split, read at once: few enough to read inside a frame.
+  List<WorkoutSplit> getAllSync() =>
+      _isar.workoutSplits.where().sortByOrder().findAllSync();
+
   Future<WorkoutSplit?> getById(int id) => _isar.workoutSplits.get(id);
 
   Future<int> put(WorkoutSplit split) =>
