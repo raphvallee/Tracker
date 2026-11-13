@@ -104,7 +104,6 @@ class _SetTargetSheetState extends State<_SetTargetSheet> {
   final _maxFocus = FocusNode();
   late bool _warmup = widget.target.warmup;
   bool _applyToAll = false;
-  _Bound? _typing;
   String? _error;
   Timer? _repeat;
 
@@ -135,7 +134,6 @@ class _SetTargetSheetState extends State<_SetTargetSheet> {
   }
 
   void _onFocus() {
-    if (_typing != null && !_focusOf(_typing!).hasFocus) _typing = null;
     for (final bound in _Bound.values) {
       if (_focusOf(bound).hasFocus) {
         final controller = _controllerOf(bound);
@@ -209,6 +207,28 @@ class _SetTargetSheetState extends State<_SetTargetSheet> {
         _max.text = '${(max + direction).clamp(min + 1, 999)}';
       }
     });
+    final controller = _controllerOf(bound);
+    if (widget.entry.usesKeypad && _focusOf(bound).hasFocus) {
+      // The next key typed starts the value over, as after focusing.
+      controller.selection = TextSelection(
+        baseOffset: 0,
+        extentOffset: controller.text.length,
+      );
+    }
+  }
+
+  /// The keypad's steppers for [bound], in the number entries that have
+  /// them.
+  KeypadSteps? _keypadSteps(_Bound bound) {
+    if (!widget.entry.usesKeypad) return null;
+    final min = _valueOf(_Bound.min) ?? 1;
+    final value = bound == _Bound.min ? min : _valueOf(_Bound.max) ?? min + 1;
+    return KeypadSteps.reps(
+      ruler: widget.entry == NumberEntry.keypadRuler,
+      value: value.toDouble(),
+      what: bound == _Bound.min ? (_range ? 'min reps' : 'reps') : 'max reps',
+      onStep: (direction) => _step(bound, direction),
+    );
   }
 
   void _onKey(_Bound bound, KeypadKey key, String digit) {
@@ -272,7 +292,7 @@ class _SetTargetSheetState extends State<_SetTargetSheet> {
         : _maxFocus.hasFocus
         ? _Bound.max
         : null;
-    final keypadOpen = widget.entry == NumberEntry.keypad && focused != null;
+    final keypadOpen = widget.entry.usesKeypad && focused != null;
     final sheet = SheetSurface(
       scrollable: true,
       child: Column(
@@ -392,6 +412,7 @@ class _SetTargetSheetState extends State<_SetTargetSheet> {
               logLabel: 'Done',
               onLog: _done,
               onKey: (key, digit) => _onKey(focused, key, digit),
+              steps: _keypadSteps(focused),
             )
           else ...[
             FButton(onPress: _done, child: const Text('Done')),
@@ -430,37 +451,24 @@ class _SetTargetSheetState extends State<_SetTargetSheet> {
       fontFeatures: const [FontFeature.tabularFigures()],
     );
     final label = bound == _Bound.min ? (_range ? 'min' : 'reps') : 'max';
-    final steppersOnly =
-        widget.entry == NumberEntry.steppers && _typing != bound;
-    final Widget value = steppersOnly
-        ? GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onLongPress: () {
-              setState(() => _typing = bound);
-              WidgetsBinding.instance.addPostFrameCallback(
-                (_) => _focusOf(bound).requestFocus(),
-              );
-            },
-            child: Center(child: Text(controller.text, style: style)),
-          )
-        : TextField(
-            controller: controller,
-            focusNode: _focusOf(bound),
-            keyboardType: widget.entry == NumberEntry.keypad
-                ? TextInputType.none
-                : TextInputType.number,
-            inputFormatters: [
-              FilteringTextInputFormatter.digitsOnly,
-              LengthLimitingTextInputFormatter(3),
-            ],
-            textAlign: TextAlign.center,
-            style: style,
-            cursorColor: accents.live,
-            showCursor: true,
-            enableInteractiveSelection: false,
-            onChanged: (_) => setState(() => _error = null),
-            decoration: const InputDecoration.collapsed(hintText: ''),
-          );
+    final value = TextField(
+      controller: controller,
+      focusNode: _focusOf(bound),
+      keyboardType: widget.entry.usesKeypad
+          ? TextInputType.none
+          : TextInputType.number,
+      inputFormatters: [
+        FilteringTextInputFormatter.digitsOnly,
+        LengthLimitingTextInputFormatter(3),
+      ],
+      textAlign: TextAlign.center,
+      style: style,
+      cursorColor: accents.live,
+      showCursor: true,
+      enableInteractiveSelection: false,
+      onChanged: (_) => setState(() => _error = null),
+      decoration: const InputDecoration.collapsed(hintText: ''),
+    );
     Widget stepper(int direction) => GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () => _step(bound, direction),
@@ -490,7 +498,9 @@ class _SetTargetSheetState extends State<_SetTargetSheet> {
         ),
       ),
     );
-    return Container(
+    // With the steppers in the keypad the box is the number alone.
+    final bare = widget.entry.usesKeypad;
+    final group = Container(
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(10),
@@ -500,7 +510,7 @@ class _SetTargetSheetState extends State<_SetTargetSheet> {
       ),
       child: Row(
         children: <Widget>[
-          stepper(-1),
+          if (!bare) stepper(-1),
           Expanded(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -515,9 +525,15 @@ class _SetTargetSheetState extends State<_SetTargetSheet> {
               ],
             ),
           ),
-          stepper(1),
+          if (!bare) stepper(1),
         ],
       ),
+    );
+    if (!bare) return group;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => _focusOf(bound).requestFocus(),
+      child: group,
     );
   }
 }

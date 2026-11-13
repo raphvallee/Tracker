@@ -251,7 +251,16 @@ Future<void> sweepSize(WidgetTester tester, String label, Size size) async {
   await settleMotion();
   await tester.tap(find.textContaining('82.5 kg × 8').last);
   await settleMotion();
+  // The keypad's steppers edit the set; closing it leaves the edited row.
+  await tester.tap(
+    find.byWidgetPredicate(
+      (w) => w is TextField && w.focusNode?.debugLabel == 'edit set weight',
+    ),
+  );
+  await settleMotion();
   await tester.tap(find.bySemanticsLabel('Increase weight').last);
+  await settleMotion();
+  FocusManager.instance.primaryFocus?.unfocus();
   await settleMotion();
   _mark('SessionEditPage menu @ $label');
   await tester.tap(fButtonByTooltip('Workout options').last);

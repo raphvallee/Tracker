@@ -9,20 +9,21 @@ import 'package:tracker/ui/settings/widgets/settings_list.dart';
 
 const numberEntryOptions = <SettingOption<NumberEntry>>[
   SettingOption(
-    NumberEntry.keypad,
-    'Keypad',
-    'A big keypad opens inside the app, with Next and Log keys.',
+    NumberEntry.keypadSteppers,
+    'Keypad and steppers',
+    'The keypad, with - and + beside the digits. Hold one to repeat, or '
+        'drag along them.',
+  ),
+  SettingOption(
+    NumberEntry.keypadRuler,
+    'Keypad and ruler',
+    'The keypad, with a ruler on top: drag it to slide the number, or tap '
+        '- and + at its ends.',
   ),
   SettingOption(
     NumberEntry.phoneKeyboard,
     'Phone keyboard',
     "Your phone's number keyboard, with Next and Log above it.",
-  ),
-  SettingOption(
-    NumberEntry.steppers,
-    'Steppers',
-    'Change a number with - and +, or drag it up or down. Hold it to '
-        'type.',
   ),
 ];
 

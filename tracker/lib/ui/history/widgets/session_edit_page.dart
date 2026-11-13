@@ -105,10 +105,10 @@ class _SessionEditPageState extends State<SessionEditPage> {
   String? _weightError;
   String? _repsError;
 
-  /// The field held to type into, in Steppers mode.
-  _Field? _typing;
   Timer? _repeat;
-  double _scrubbed = 0;
+
+  /// A step is asking to confirm its value.
+  bool _asking = false;
 
   OverlayEntry? _overlay;
 
@@ -160,7 +160,8 @@ class _SessionEditPageState extends State<SessionEditPage> {
   List<int> _freshRowIds() => [for (final _ in _draft.sets) _nextRowId++];
 
   NumberEntry get _entry =>
-      SettingsCubit.maybeOf(context)?.state.numberEntry ?? NumberEntry.keypad;
+      SettingsCubit.maybeOf(context)?.state.numberEntry ??
+      NumberEntry.keypadSteppers;
 
   int get _changes => sessionChangeCount(widget.session, _draft);
 
@@ -286,7 +287,6 @@ class _SessionEditPageState extends State<SessionEditPage> {
       _reps.text = formatReps(set.reps);
       _weightError = null;
       _repsError = null;
-      _typing = null;
     });
   }
 
@@ -296,10 +296,7 @@ class _SessionEditPageState extends State<SessionEditPage> {
     unawaited(_commitField(_Field.weight, rowId: open, text: _weight.text));
     unawaited(_commitField(_Field.reps, rowId: open, text: _reps.text));
     FocusManager.instance.primaryFocus?.unfocus();
-    setState(() {
-      _openId = null;
-      _typing = null;
-    });
+    setState(() => _openId = null);
   }
 
   void _toggleWarmup(int rowId) {
@@ -337,7 +334,6 @@ class _SessionEditPageState extends State<SessionEditPage> {
     if (_openId == rowId) {
       FocusManager.instance.primaryFocus?.unfocus();
       _openId = null;
-      _typing = null;
     }
     setState(() {
       _draft = _draft.removeSet(index);
@@ -500,17 +496,45 @@ class _SessionEditPageState extends State<SessionEditPage> {
     return weightOk && repsOk;
   }
 
+  /// The value a step of [field] starts from: what is typed, else the
+  /// set's.
+  double _stepBase(_Field field) {
+    final set = _draft.sets[_openIndex!];
+    return field == _Field.weight
+        ? parseDecimal(_weight.text, allowNegative: true) ??
+              displayWeightOf(context, set.weight)
+        : parseDecimal(_reps.text) ?? set.reps;
+  }
+
+  /// Asks [ask] for a step, keeping the steps after it (a hold, a drag on
+  /// the ruler) from asking again meanwhile.
+  Future<bool> _confirmStep(Future<bool> Function() ask) async {
+    _asking = true;
+    try {
+      return await ask() && mounted;
+    } finally {
+      _asking = false;
+    }
+  }
+
+  /// After a step from the keypad, the next key typed starts over.
+  void _selectForKeypad(_Field field) {
+    if (!_entry.usesKeypad || !_focusOf(field).hasFocus) return;
+    final controller = _controllerOf(field);
+    controller.selection = TextSelection(
+      baseOffset: 0,
+      extentOffset: controller.text.length,
+    );
+  }
+
   Future<void> _step(_Field field, int direction) async {
     final rowId = _openId;
     final index = _openIndex;
-    if (rowId == null || index == null) return;
-    final set = _draft.sets[index];
+    if (rowId == null || index == null || _asking) return;
+    final current = _stepBase(field);
     if (field == _Field.weight) {
       final unit = weightUnitOf(context);
       final step = unit == WeightUnit.kilograms ? 2.5 : 5.0;
-      final current =
-          parseDecimal(_weight.text, allowNegative: true) ??
-          displayWeightOf(context, set.weight);
       final next = (current + step * direction)
           .clamp(minimumWeight, maximumWeight)
           .toDouble();
@@ -519,27 +543,30 @@ class _SessionEditPageState extends State<SessionEditPage> {
       if ((current >= 0 && next < 0) ||
           (current <= threshold && next > threshold)) {
         _stopRepeat();
-        if (!await confirmWeightEntry(context, next) || !mounted) return;
+        if (!await _confirmStep(() => confirmWeightEntry(context, next))) {
+          return;
+        }
       }
       setState(() {
         _weight.text = formatDecimal(next);
         _weightError = null;
       });
+      _selectForKeypad(field);
       _setWeight(rowId, next);
     } else {
-      final current = parseDecimal(_reps.text) ?? set.reps;
       // Stepping never goes below one rep, or below a partial rep typed in.
       final next = (current + direction)
           .clamp(math.min(1.0, math.max(current, minimumReps)), maximumReps)
           .toDouble();
       if (current <= highRepsThreshold && next > highRepsThreshold) {
         _stopRepeat();
-        if (!await confirmRepsEntry(context, next) || !mounted) return;
+        if (!await _confirmStep(() => confirmRepsEntry(context, next))) return;
       }
       setState(() {
         _reps.text = formatReps(next);
         _repsError = null;
       });
+      _selectForKeypad(field);
       _setReps(rowId, next);
     }
   }
@@ -555,26 +582,6 @@ class _SessionEditPageState extends State<SessionEditPage> {
   void _stopRepeat() {
     _repeat?.cancel();
     _repeat = null;
-  }
-
-  void _scrub(_Field field, double dy) {
-    // Dragging up adds, dragging down subtracts, one step per 14 pixels.
-    _scrubbed += dy;
-    while (_scrubbed <= -14) {
-      _scrubbed += 14;
-      _step(field, 1);
-    }
-    while (_scrubbed >= 14) {
-      _scrubbed -= 14;
-      _step(field, -1);
-    }
-  }
-
-  void _startTyping(_Field field) {
-    setState(() => _typing = field);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _focusOf(field).requestFocus();
-    });
   }
 
   // Focus and number entry ------------------------------------------------
@@ -607,7 +614,7 @@ class _SessionEditPageState extends State<SessionEditPage> {
             extentOffset: controller.text.length,
           );
         });
-        if (_entry == NumberEntry.keypad) _pendingReveal = true;
+        if (_entry.usesKeypad) _pendingReveal = true;
       } else if (!focused && had && _openId != null) {
         unawaited(
           _commitField(field, rowId: _openId!, text: _controllerOf(field).text),
@@ -619,19 +626,12 @@ class _SessionEditPageState extends State<SessionEditPage> {
         _hadRepsFocus = focused;
       }
     }
-    if (_typing != null && !_focusOf(_typing!).hasFocus) _typing = null;
     setState(() {});
     _syncOverlay();
   }
 
-  bool get _usesToolbar =>
-      _entry == NumberEntry.phoneKeyboard ||
-      (_entry == NumberEntry.steppers && _typing != null);
-
   void _syncOverlay() {
-    final wanted =
-        _focused != null && (_entry == NumberEntry.keypad || _usesToolbar);
-    if (!wanted) {
+    if (_focused == null) {
       _hideOverlay();
       return;
     }
@@ -683,7 +683,7 @@ class _SessionEditPageState extends State<SessionEditPage> {
       left: 0,
       right: 0,
       // The keyboard bar rides on the phone's keyboard.
-      bottom: _entry == NumberEntry.keypad
+      bottom: _entry.usesKeypad
           ? 0
           : MediaQuery.viewInsetsOf(overlayContext).bottom,
       child: IgnorePointer(
@@ -698,7 +698,7 @@ class _SessionEditPageState extends State<SessionEditPage> {
     final index = _openIndex;
     final label = index == null ? '' : _labelOf(index);
     final who = label == 'W' ? 'Warm-up' : 'Set $label';
-    if (_entry == NumberEntry.keypad) {
+    if (_entry.usesKeypad) {
       return NumberKeypad(
         caption: isWeight
             ? '$who weight, in ${weightUnitOf(context).symbol}'
@@ -708,6 +708,7 @@ class _SessionEditPageState extends State<SessionEditPage> {
         live: false,
         onLog: _unfocus,
         onKey: (key, digit) => _onKey(field, key, digit),
+        steps: _keypadSteps(field),
       );
     }
     return KeyboardToolbar(
@@ -717,6 +718,24 @@ class _SessionEditPageState extends State<SessionEditPage> {
       live: false,
       onLog: _unfocus,
     );
+  }
+
+  /// The keypad's steppers for [field], in the number entries that have
+  /// them.
+  KeypadSteps? _keypadSteps(_Field field) {
+    final entry = _entry;
+    if (!entry.usesKeypad || _openIndex == null) return null;
+    final ruler = entry == NumberEntry.keypadRuler;
+    final value = _stepBase(field);
+    void onStep(int direction) => _step(field, direction);
+    return field == _Field.weight
+        ? KeypadSteps.weight(
+            ruler: ruler,
+            value: value,
+            unit: weightUnitOf(context),
+            onStep: onStep,
+          )
+        : KeypadSteps.reps(ruler: ruler, value: value, onStep: onStep);
   }
 
   void _onKey(_Field field, KeypadKey key, String digit) {
@@ -755,7 +774,9 @@ class _SessionEditPageState extends State<SessionEditPage> {
     if (scrollable == null) return;
     final media = MediaQuery.of(rowContext);
     final keypadTop =
-        media.size.height - NumberKeypad.height - media.padding.bottom;
+        media.size.height -
+        NumberKeypad.heightOf(_entry) -
+        media.padding.bottom;
     final rowBottom = box.localToGlobal(Offset(0, box.size.height)).dy + 12;
     final overlap = rowBottom - keypadTop;
     if (overlap <= 0) return;
@@ -778,7 +799,6 @@ class _SessionEditPageState extends State<SessionEditPage> {
       _draft = SessionDraft.of(widget.session);
       _rowIds = _freshRowIds();
       _openId = null;
-      _typing = null;
       _weightError = null;
       _repsError = null;
     });
@@ -865,13 +885,13 @@ class _SessionEditPageState extends State<SessionEditPage> {
       WidgetsBinding.instance.addPostFrameCallback((_) => _unfocus());
     }
     final changes = _changes;
-    final keypadOpen = _entry == NumberEntry.keypad && _focused != null;
+    final keypadOpen = _entry.usesKeypad && _focused != null;
     if (keypadOpen && _pendingReveal) {
       _pendingReveal = false;
       WidgetsBinding.instance.addPostFrameCallback((_) => _revealAboveKeypad());
     }
     final bottomRoom = keypadOpen
-        ? NumberKeypad.height + 24
+        ? NumberKeypad.heightOf(_entry) + 24
         : keyboardClearanceOf(context);
     return PopScope(
       canPop: changes == 0,
@@ -1408,7 +1428,9 @@ class _SessionEditPageState extends State<SessionEditPage> {
     final theme = context.theme;
     final error = field == _Field.weight ? _weightError : _repsError;
     final focused = _focusOf(field).hasFocus;
-    return Container(
+    // With the steppers in the keypad the box is the number alone.
+    final bare = _entry.usesKeypad;
+    final group = Container(
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
         color: theme.colors.background,
@@ -1423,7 +1445,7 @@ class _SessionEditPageState extends State<SessionEditPage> {
       ),
       child: Row(
         children: <Widget>[
-          _stepButton(context, field, -1),
+          if (!bare) _stepButton(context, field, -1),
           Expanded(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -1440,9 +1462,15 @@ class _SessionEditPageState extends State<SessionEditPage> {
               ],
             ),
           ),
-          _stepButton(context, field, 1),
+          if (!bare) _stepButton(context, field, 1),
         ],
       ),
+    );
+    if (!bare) return group;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => _focusOf(field).requestFocus(),
+      child: group,
     );
   }
 
@@ -1488,21 +1516,7 @@ class _SessionEditPageState extends State<SessionEditPage> {
       fontFeatures: const [FontFeature.tabularFigures()],
     );
     final entry = _entry;
-    if (entry == NumberEntry.steppers && _typing != field) {
-      return Semantics(
-        hint: 'Hold to type, drag to change',
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onLongPress: () => _startTyping(field),
-          onVerticalDragStart: (_) => _scrubbed = 0,
-          onVerticalDragUpdate: (details) => _scrub(field, details.delta.dy),
-          child: Center(
-            child: Text(controller.text, style: style, maxLines: 1),
-          ),
-        ),
-      );
-    }
-    final keypad = entry == NumberEntry.keypad;
+    final keypad = entry.usesKeypad;
     final keyboard = MediaQuery.viewInsetsOf(context).bottom;
     return TextField(
       controller: controller,
@@ -1532,7 +1546,7 @@ class _SessionEditPageState extends State<SessionEditPage> {
         _overlay?.markNeedsBuild();
       },
       scrollPadding: EdgeInsets.only(
-        bottom: keypad ? NumberKeypad.height + 40 : keyboard + 120,
+        bottom: keypad ? NumberKeypad.heightOf(entry) + 40 : keyboard + 120,
       ),
       decoration: const InputDecoration.collapsed(hintText: ''),
     );

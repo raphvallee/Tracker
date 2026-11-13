@@ -171,12 +171,12 @@ void main() {
     test('v2 carries prefill, number entry and the current split', () {
       final state = SettingsState(
         prefillSets: false,
-        numberEntry: NumberEntry.steppers,
+        numberEntry: NumberEntry.phoneKeyboard,
         currentSplitId: 4,
       );
       final restored = SettingsState.fromJson(state.toJson());
       expect(restored.prefillSets, isFalse);
-      expect(restored.numberEntry, NumberEntry.steppers);
+      expect(restored.numberEntry, NumberEntry.phoneKeyboard);
       expect(restored.currentSplitId, 4);
       expect(restored, state);
       expect(restored.copyWith(currentSplitId: null).currentSplitId, isNull);
@@ -227,8 +227,17 @@ void main() {
       });
       expect(state.unit, WeightUnit.pounds);
       expect(state.prefillSets, isTrue);
-      expect(state.numberEntry, NumberEntry.keypad);
+      expect(state.numberEntry, NumberEntry.keypadSteppers);
       expect(state.currentSplitId, isNull);
+    });
+
+    test('the removed plain keypad and steppers read as the default', () {
+      for (final name in ['keypad', 'steppers']) {
+        expect(
+          SettingsState.fromJson({'v': 3, 'numberEntry': name}).numberEntry,
+          NumberEntry.keypadSteppers,
+        );
+      }
     });
 
     test('malformed v2 logging settings use safe defaults', () {
@@ -239,7 +248,7 @@ void main() {
         'currentSplitId': 'one',
       });
       expect(state.prefillSets, isTrue);
-      expect(state.numberEntry, NumberEntry.keypad);
+      expect(state.numberEntry, NumberEntry.keypadSteppers);
       expect(state.currentSplitId, isNull);
     });
 
