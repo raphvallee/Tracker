@@ -373,12 +373,20 @@ Future<void> captureScreensAt(
   });
   await guarded('Session edit page (edited set)', () async {
     await pushSettled(SessionEditPage(session: fixtures.session));
-    // Open the working set and step its weight up: the row shows its
-    // steppers and rating, the Edited tag and the Was line, and the save
-    // bar slides up.
+    // Open the working set and step its weight up with the keypad, then
+    // close it: the row shows its rating, the Edited tag and the Was line,
+    // and the save bar slides up.
     await tester.tap(find.textContaining('82.5 kg × 8').last);
     await settle();
+    await tester.tap(
+      find.byWidgetPredicate(
+        (w) => w is TextField && w.focusNode?.debugLabel == 'edit set weight',
+      ),
+    );
+    await settle();
     await tester.tap(find.bySemanticsLabel('Increase weight').last);
+    await settle();
+    FocusManager.instance.primaryFocus?.unfocus();
     await settle();
     try {
       await recorder.capture('Session edit page (edited set)');
@@ -423,38 +431,46 @@ Future<void> captureScreensAt(
     // Last session loaded: its values sit small under the logged ones.
     dataReady: () => tester.any(find.text('82.5')),
   );
-  await guarded('Exercise page (keypad)', () async {
-    unawaited(
-      pushTo<void>(
-        navigator.context,
-        ExercisePage(exerciseId: fixtures.benchId),
-      ),
-    );
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 350));
-    await settleForData(() => tester.any(find.text('82.5')));
-    await tester.tap(
-      find
-          .byWidgetPredicate(
-            (w) => w is TextField && (w.controller?.text.isEmpty ?? false),
-          )
-          .first,
-    );
-    // One settle opens the keypad and starts lifting the row above it, the
-    // second lets that scroll finish.
-    await settle();
-    await settle();
-    try {
-      await recorder.capture('Exercise page (keypad)');
-    } finally {
-      FocusManager.instance.primaryFocus?.unfocus();
-      await settle();
-      navigator.pop();
+  for (final (entry, label) in [
+    (NumberEntry.keypadSteppers, 'Exercise page (keypad and steppers)'),
+    (NumberEntry.keypadRuler, 'Exercise page (keypad and ruler)'),
+  ]) {
+    await guarded(label, () async {
+      final settings = SettingsCubit.maybeOf(navigator.context)!
+        ..setNumberEntry(entry);
+      unawaited(
+        pushTo<void>(
+          navigator.context,
+          ExercisePage(exerciseId: fixtures.benchId),
+        ),
+      );
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 350));
+      await settleForData(() => tester.any(find.text('82.5')));
+      await tester.tap(
+        find
+            .byWidgetPredicate(
+              (w) => w is TextField && (w.controller?.text.isEmpty ?? false),
+            )
+            .first,
+      );
+      // One settle opens the keypad and starts lifting the row above it, the
+      // second lets that scroll finish.
       await settle();
-    }
-  });
+      await settle();
+      try {
+        await recorder.capture(label);
+      } finally {
+        FocusManager.instance.primaryFocus?.unfocus();
+        await settle();
+        navigator.pop();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 350));
+        await settle();
+        settings.setNumberEntry(NumberEntry.keypadSteppers);
+      }
+    });
+  }
   await guarded('Exercise page (errors)', () async {
     unawaited(
       pushTo<void>(
@@ -595,7 +611,7 @@ Future<void> captureScreensAt(
       title: 'Number entry',
       description: 'What opens when you tap a weight or reps',
       options: numberEntryOptions,
-      value: NumberEntry.keypad,
+      value: NumberEntry.keypadSteppers,
       note: 'Also used for planned sets in Splits.',
     ),
     root: true,

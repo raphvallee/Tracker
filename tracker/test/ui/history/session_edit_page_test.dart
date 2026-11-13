@@ -8,11 +8,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:forui/forui.dart';
 import 'package:hydrated_bloc/hydrated_bloc.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:tracker/domain/models/number_entry.dart';
 import 'package:tracker/domain/models/workout_session.dart';
 import 'package:tracker/ui/core/ui/edit_sheet.dart';
 import 'package:tracker/ui/core/ui/number_keypad.dart';
 import 'package:tracker/ui/core/ui/relative_dates.dart';
 import 'package:tracker/ui/history/widgets/session_edit_page.dart';
+import 'package:tracker/ui/settings/view_models/settings_cubit.dart';
 
 import '../../../testing/fakes/in_memory_storage.dart';
 import '../../../testing/session_edit_helpers.dart';
@@ -46,6 +48,11 @@ void main() {
     await tester.tap(find.textContaining('80 kg × 5'));
     await tester.pumpAndSettle();
   }
+
+  /// The phone keyboard keeps the -/+ beside the open set's values.
+  void useRowSteppers(WidgetTester tester) =>
+      SettingsCubit.maybeOf(tester.element(find.byType(SessionEditPage)))!
+          .setNumberEntry(NumberEntry.phoneKeyboard);
 
   Finder field(String label) => find.byWidgetPredicate(
     (w) => w is TextField && w.focusNode?.debugLabel == label,
@@ -89,6 +96,7 @@ void main() {
       tester,
     ) async {
       await pumpAppPage(tester, SessionEditPage(session: pastSession()));
+      useRowSteppers(tester);
       await openWorkingSet(tester);
 
       expect(find.text('Set 1'), findsOneWidget);
@@ -124,8 +132,35 @@ void main() {
       expect(find.text('Edited'), findsNothing);
     });
 
+    testWidgets('with the steppers in the keypad, the keypad steps the set', (
+      tester,
+    ) async {
+      await pumpAppPage(tester, SessionEditPage(session: pastSession()));
+      SettingsCubit.maybeOf(tester.element(find.byType(SessionEditPage)))!
+          .setNumberEntry(NumberEntry.keypadSteppers);
+      await openWorkingSet(tester);
+      expect(find.bySemanticsLabel('Increase weight'), findsNothing);
+
+      await tester.tap(field('edit set weight'));
+      await tester.pumpAndSettle();
+      expect(find.byType(NumberKeypad), findsOneWidget);
+      await tester.tap(find.bySemanticsLabel('Increase weight'));
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<TextField>(field('edit set weight')).controller!.text,
+        '82.5',
+      );
+      expect(find.textContaining('Was 80 kg × 5'), findsOneWidget);
+
+      await tester.tap(find.text('Done'));
+      await tester.pumpAndSettle();
+      expect(find.byType(NumberKeypad), findsNothing);
+      expect(find.text('1 unsaved change'), findsOneWidget);
+    });
+
     testWidgets('Discard drops every change', (tester) async {
       await pumpAppPage(tester, SessionEditPage(session: pastSession()));
+      useRowSteppers(tester);
       await openWorkingSet(tester);
       await tester.tap(find.bySemanticsLabel('Increase weight'));
       await tester.tap(find.bySemanticsLabel('Set 1, tap for a warm-up'));
@@ -257,6 +292,7 @@ void main() {
 
     testWidgets('leaving with unsaved changes asks first', (tester) async {
       await pumpAppPage(tester, SessionEditPage(session: pastSession()));
+      useRowSteppers(tester);
       await openWorkingSet(tester);
       await tester.tap(find.bySemanticsLabel('Increase reps'));
       await tester.pumpAndSettle();

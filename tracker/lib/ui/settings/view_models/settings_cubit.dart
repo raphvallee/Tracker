@@ -33,7 +33,7 @@ class SettingsState {
     this.notificationsEnabled = true,
     this.analyticsEnabled = true,
     this.prefillSets = true,
-    this.numberEntry = NumberEntry.keypad,
+    this.numberEntry = NumberEntry.keypadSteppers,
     this.effortScale = EffortScale.rpe,
     this.currentSplitId,
     Map<int, DateTime> splitsUsedAt = const {},
@@ -112,9 +112,10 @@ class SettingsState {
         prefillSets: json['prefillSets'] is bool
             ? json['prefillSets'] as bool
             : true,
+        // The old plain keypad and steppers entries read as this default.
         numberEntry:
             NumberEntry.values.asNameMap()[json['numberEntry']] ??
-            NumberEntry.keypad,
+            NumberEntry.keypadSteppers,
         effortScale:
             EffortScale.values.asNameMap()[json['effortScale']] ??
             EffortScale.rpe,

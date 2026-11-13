@@ -12,6 +12,7 @@ import 'package:tracker/ui/settings/widgets/splits_settings_page.dart';
 import 'package:tracker/ui/settings/widgets/workout_settings_page.dart';
 
 import '../../../testing/test_helpers.dart';
+import '../../../testing/workout_helpers.dart';
 
 void main() {
   SettingsCubit settingsOf(WidgetTester tester, Type page) =>
@@ -26,7 +27,10 @@ void main() {
     await pumpAppPage(tester, const SettingsPage());
     final cubit = settingsOf(tester, SettingsPage);
 
-    expect(find.text('Keypad entry, prefilled sets, RPE'), findsOneWidget);
+    expect(
+      find.text('Keypad and steppers entry, prefilled sets, RPE'),
+      findsOneWidget,
+    );
     expect(find.text('New exercises start at 8-12 reps'), findsOneWidget);
     expect(find.text('Add the gyms you train at'), findsOneWidget);
     expect(find.text('Kilograms'), findsOneWidget);
@@ -55,12 +59,16 @@ void main() {
     expect(cubit.state.prefillSets, isFalse);
 
     await tapText(tester, 'Number entry');
-    await tapText(tester, 'Steppers');
-    expect(cubit.state.numberEntry, NumberEntry.steppers);
-    await tapText(tester, 'Number entry');
     await tapText(tester, 'Phone keyboard');
     expect(cubit.state.numberEntry, NumberEntry.phoneKeyboard);
     expect(find.text('Phone keyboard'), findsOneWidget);
+    await tapText(tester, 'Number entry');
+    await tapText(tester, 'Keypad and ruler');
+    expect(cubit.state.numberEntry, NumberEntry.keypadRuler);
+    await tapText(tester, 'Number entry');
+    await tapText(tester, 'Keypad and steppers');
+    expect(cubit.state.numberEntry, NumberEntry.keypadSteppers);
+    expect(find.text('Keypad and steppers'), findsOneWidget);
 
     await tapText(tester, 'Effort rating');
     await tapText(tester, 'RIR');
@@ -80,7 +88,9 @@ void main() {
     tester,
   ) async {
     await pumpAppPage(tester, const SplitsSettingsPage());
-    final cubit = settingsOf(tester, SplitsSettingsPage);
+    // The phone keyboard keeps the -/+ beside each value.
+    final cubit = settingsOf(tester, SplitsSettingsPage)
+      ..setNumberEntry(NumberEntry.phoneKeyboard);
     expect(find.text('8-12 reps'), findsOneWidget);
 
     await tapText(tester, 'Rep target');
@@ -119,5 +129,25 @@ void main() {
     await tester.pumpAndSettle();
     expect(cubit.state.defaultRepRangeMin, 9);
     expect(cubit.state.defaultRepRangeMax, 13);
+  });
+  testWidgets('with the steppers in the keypad, a rep target value opens it', (
+    tester,
+  ) async {
+    // Tall enough for the sheet with the keypad and its ruler.
+    useTallWindow(tester);
+    await pumpAppPage(tester, const SplitsSettingsPage());
+    final cubit = settingsOf(tester, SplitsSettingsPage)
+      ..setNumberEntry(NumberEntry.keypadRuler);
+
+    await tapText(tester, 'Rep target');
+    // The steppers are in the keypad, not around the values.
+    expect(find.bySemanticsLabel('More min'), findsNothing);
+    await tester.tap(find.text('8'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsLabel('Increase min reps'));
+    await tester.pumpAndSettle();
+    await tapText(tester, 'Done');
+    expect(cubit.state.defaultRepRangeMin, 9);
+    expect(find.text('9-12 reps'), findsOneWidget);
   });
 }

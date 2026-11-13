@@ -238,11 +238,8 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
   /// Base rows swiped away before they were logged.
   int _removedBaseRows = 0;
 
-  /// The row tapped in Steppers mode, which has no focus to follow.
+  /// The row tapped, which has no focus to follow.
   _Row? _selected;
-
-  /// The field held to type into, in Steppers mode.
-  ({_Row row, _Kind kind})? _typing;
 
   OverlayEntry? _overlay;
 
@@ -256,7 +253,6 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
 
   /// The field to lift above the keypad once the page has made room.
   GlobalKey? _pendingReveal;
-  double _scrubbed = 0;
 
   int get _exerciseId => widget.entry.exercise.exerciseId;
 
@@ -298,7 +294,6 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
   void didUpdateWidget(covariant _ExerciseBody oldWidget) {
     super.didUpdateWidget(oldWidget);
     _reconcile();
-    if (oldWidget.entryMode != widget.entryMode) _typing = null;
   }
 
   @override
@@ -441,7 +436,7 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
               extentOffset: controller.text.length,
             );
           });
-          if (widget.entryMode == NumberEntry.keypad) _pendingReveal = field;
+          if (widget.entryMode.usesKeypad) _pendingReveal = field;
         }
         if (kind == _Kind.weight) {
           row.hadWeightFocus = focused;
@@ -449,10 +444,6 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
           row.hadRepsFocus = focused;
         }
       }
-    }
-    final typing = _typing;
-    if (typing != null && !typing.row.focusOf(typing.kind).hasFocus) {
-      _typing = null;
     }
     setState(() {});
     _syncOverlay();
@@ -468,7 +459,9 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
     if (scrollable == null) return;
     final media = MediaQuery.of(fieldContext);
     final keypadTop =
-        media.size.height - NumberKeypad.height - media.padding.bottom;
+        media.size.height -
+        NumberKeypad.heightOf(widget.entryMode) -
+        media.padding.bottom;
     // Leave the rest of the opened row (unit labels, its padding) in view.
     final rowBottom = box.localToGlobal(Offset(0, box.size.height)).dy + 40;
     final overlap = rowBottom - keypadTop;
@@ -484,15 +477,8 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
     );
   }
 
-  bool get _usesPhoneKeyboard =>
-      widget.entryMode == NumberEntry.phoneKeyboard ||
-      (widget.entryMode == NumberEntry.steppers && _typing != null);
-
   void _syncOverlay() {
-    final wanted =
-        _focused != null &&
-        (widget.entryMode == NumberEntry.keypad || _usesPhoneKeyboard);
-    if (!wanted) {
+    if (_focused == null) {
       _hideOverlay();
       return;
     }
@@ -544,7 +530,7 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
       left: 0,
       right: 0,
       // The keyboard bar rides on the phone's keyboard.
-      bottom: widget.entryMode == NumberEntry.keypad
+      bottom: widget.entryMode.usesKeypad
           ? 0
           : MediaQuery.viewInsetsOf(overlayContext).bottom,
       child: IgnorePointer(
@@ -567,7 +553,7 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
         : effortLabel(widget.effort, rating);
     final onLog = logged ? _unfocus : () => _logRow(focused.row);
     final isWeight = focused.kind == _Kind.weight;
-    if (widget.entryMode == NumberEntry.keypad) {
+    if (widget.entryMode.usesKeypad) {
       final unit = weightUnitOf(context).symbol;
       return NumberKeypad(
         caption: isWeight
@@ -578,6 +564,7 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
         logTrailing: logTrailing,
         onLog: onLog,
         onKey: (key, digit) => _onKey(focused, key, digit),
+        steps: _keypadSteps(focused, index, ghosts[index]),
       );
     }
     return KeyboardToolbar(
@@ -587,6 +574,38 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
       logTrailing: logTrailing,
       onLog: onLog,
     );
+  }
+
+  /// The keypad's steppers for [field] at row [index], in the number
+  /// entries that have them.
+  KeypadSteps? _keypadSteps(
+    ({_Row row, _Kind kind}) field,
+    int index,
+    SetGhost ghost,
+  ) {
+    final entry = widget.entryMode;
+    if (!entry.usesKeypad) return null;
+    final ruler = entry == NumberEntry.keypadRuler;
+    final value = _stepBase(field.row, field.kind, ghost);
+    void onStep(int direction) => _step(field.row, field.kind, direction);
+    final previous = widget.previous?.sets;
+    final last = previous == null || index >= previous.length
+        ? null
+        : previous[index];
+    return field.kind == _Kind.weight
+        ? KeypadSteps.weight(
+            ruler: ruler,
+            value: value,
+            unit: weightUnitOf(context),
+            last: last == null ? null : displayWeightOf(context, last.weight),
+            onStep: onStep,
+          )
+        : KeypadSteps.reps(
+            ruler: ruler,
+            value: value,
+            last: last?.reps,
+            onStep: onStep,
+          );
   }
 
   void _onKey(({_Row row, _Kind kind}) field, KeypadKey key, String digit) {
@@ -866,30 +885,40 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
     });
   }
 
+  /// The value a step starts from: what is typed, else the placeholder.
+  double _stepBase(_Row row, _Kind kind, SetGhost ghost) => kind == _Kind.weight
+      ? parseDecimal(row.weight.text, allowNegative: true) ??
+            (ghost.weight == null
+                ? 0.0
+                : displayWeightOf(context, ghost.weight!))
+      : parseDecimal(row.reps.text) ?? ghost.reps ?? 0;
+
   void _step(_Row row, _Kind kind, int direction) {
     final index = _rows.indexOf(row);
     if (index < 0) return;
-    final ghost = _ghostAt(index);
+    final current = _stepBase(row, kind, _ghostAt(index));
     if (kind == _Kind.weight) {
       final step = weightUnitOf(context) == WeightUnit.kilograms ? 2.5 : 5.0;
-      final current =
-          parseDecimal(row.weight.text, allowNegative: true) ??
-          (ghost.weight == null
-              ? 0.0
-              : displayWeightOf(context, ghost.weight!));
       final next = (current + step * direction).clamp(
         minimumWeight,
         maximumWeight,
       );
       row.weight.text = formatDecimal(next.toDouble());
     } else {
-      final current = parseDecimal(row.reps.text) ?? ghost.reps ?? 0;
       // Stepping never goes below one rep, or below a partial rep typed in.
       final next = (current + direction).clamp(
         math.min(1.0, math.max(current, minimumReps)),
         maximumReps,
       );
       row.reps.text = formatDecimal(next.toDouble());
+    }
+    final controller = row.controllerOf(kind);
+    if (widget.entryMode.usesKeypad && row.focusOf(kind).hasFocus) {
+      // The next key typed starts the value over, as after focusing.
+      controller.selection = TextSelection(
+        baseOffset: 0,
+        extentOffset: controller.text.length,
+      );
     }
     setState(() {});
     _overlay?.markNeedsBuild();
@@ -909,26 +938,6 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
   void _stopRepeat() {
     _repeat?.cancel();
     _repeat = null;
-  }
-
-  void _scrub(_Row row, _Kind kind, double dy) {
-    // Dragging up adds, dragging down subtracts, one step per 14 pixels.
-    _scrubbed += dy;
-    while (_scrubbed <= -14) {
-      _scrubbed += 14;
-      _step(row, kind, 1);
-    }
-    while (_scrubbed >= 14) {
-      _scrubbed -= 14;
-      _step(row, kind, -1);
-    }
-  }
-
-  void _startTyping(_Row row, _Kind kind) {
-    setState(() => _typing = (row: row, kind: kind));
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) row.focusOf(kind).requestFocus();
-    });
   }
 
   void _select(_Row row) {
@@ -975,8 +984,7 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
     final ghosts = _ghosts(sets);
     final badges = _badges(sets, ghosts);
     final current = _currentIndex(sets);
-    final keypadOpen =
-        widget.entryMode == NumberEntry.keypad && _focused != null;
+    final keypadOpen = widget.entryMode.usesKeypad && _focused != null;
     final reveal = _pendingReveal;
     if (keypadOpen && reveal != null) {
       _pendingReveal = null;
@@ -986,7 +994,7 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
     }
     final keyboard = MediaQuery.viewInsetsOf(context).bottom;
     final bottomRoom = keypadOpen
-        ? NumberKeypad.height + 24
+        ? NumberKeypad.heightOf(widget.entryMode) + 24
         : keyboard > 0
         ? keyboard + 80
         : 96.0;
@@ -1481,7 +1489,6 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
     final accents = TrackerAccents.of(context);
     final theme = context.theme;
     final ghost = ghosts[index];
-    final steppers = widget.entryMode == NumberEntry.steppers;
     final unit = weightUnitOf(context).symbol;
     final badge = badges[index];
     final warmup = _isWarmup(index, sets, ghosts);
@@ -1491,8 +1498,6 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
         ? 'Logged'
         : target != null
         ? 'Aim for ${target.label} ${target.unit}'
-        : steppers
-        ? 'Hold a number to type it'
         : null;
     String caption(_Kind kind, String fallback) {
       final last = _lastValue(index, kind);
@@ -1501,71 +1506,38 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
 
     final comparison = _comparison(index, ghost, warmup: warmup);
 
-    final values = steppers
-        ? Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Expanded(
-                child: _withError(
-                  context,
-                  _verticalStepper(
-                    context,
-                    row,
-                    _Kind.weight,
-                    ghost,
-                    caption(_Kind.weight, unit),
-                  ),
-                  row.weightError,
-                ),
-              ),
-              SizedBox(height: 144, child: _times(context)),
-              Expanded(
-                child: _withError(
-                  context,
-                  _verticalStepper(
-                    context,
-                    row,
-                    _Kind.reps,
-                    ghost,
-                    caption(_Kind.reps, 'reps'),
-                  ),
-                  row.repsError,
-                ),
-              ),
-            ],
-          )
-        : Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Expanded(
-                child: _withError(
-                  context,
-                  _stepperGroup(
-                    context,
-                    row,
-                    _Kind.weight,
-                    ghost,
-                    caption(_Kind.weight, unit),
-                  ),
-                  row.weightError,
-                ),
-              ),
-              SizedBox(height: 52, child: _times(context)),
-              Expanded(
-                child: _withError(
-                  context,
-                  _stepperGroup(
-                    context,
-                    row,
-                    _Kind.reps,
-                    ghost,
-                    caption(_Kind.reps, 'reps'),
-                  ),
-                  row.repsError,
-                ),
-              ),
-            ],
-          );
+    final values = Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Expanded(
+          child: _withError(
+            context,
+            _stepperGroup(
+              context,
+              row,
+              _Kind.weight,
+              ghost,
+              caption(_Kind.weight, unit),
+            ),
+            row.weightError,
+          ),
+        ),
+        SizedBox(height: 52, child: _times(context)),
+        Expanded(
+          child: _withError(
+            context,
+            _stepperGroup(
+              context,
+              row,
+              _Kind.reps,
+              ghost,
+              caption(_Kind.reps, 'reps'),
+            ),
+            row.repsError,
+          ),
+        ),
+      ],
+    );
     final label = theme.typography.body.xs.copyWith(
       fontWeight: FontWeight.w700,
       color: accents.live,
@@ -1691,21 +1663,26 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
     String caption,
   ) {
     final theme = context.theme;
-    return Container(
+    // With the steppers in the keypad the box is the number alone, outlined
+    // while the keypad types into it.
+    final bare = widget.entryMode.usesKeypad;
+    final error = kind == _Kind.weight ? row.weightError : row.repsError;
+    final group = Container(
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
         color: theme.colors.background,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
-          color:
-              (kind == _Kind.weight ? row.weightError : row.repsError) == null
-              ? theme.colors.border
-              : theme.colors.error,
+          color: error != null
+              ? theme.colors.error
+              : bare && row.focusOf(kind).hasFocus
+              ? TrackerAccents.of(context).live
+              : theme.colors.border,
         ),
       ),
       child: Row(
         children: <Widget>[
-          _stepButton(context, row, kind, -1),
+          if (!bare) _stepButton(context, row, kind, -1),
           Expanded(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -1718,44 +1695,15 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
               ],
             ),
           ),
-          _stepButton(context, row, kind, 1),
+          if (!bare) _stepButton(context, row, kind, 1),
         ],
       ),
     );
-  }
-
-  Widget _verticalStepper(
-    BuildContext context,
-    _Row row,
-    _Kind kind,
-    SetGhost ghost,
-    String caption,
-  ) {
-    final theme = context.theme;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        _stepButton(context, row, kind, 1, wide: true),
-        const SizedBox(height: 4),
-        SizedBox(
-          height: 40,
-          child: _valueField(context, row, kind, ghost, big: true, huge: true),
-        ),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            Icon(
-              FLucideIcons.chevronsUpDown,
-              size: 12,
-              color: theme.colors.mutedForeground,
-            ),
-            const SizedBox(width: 2),
-            Text(caption, maxLines: 1, style: _lastStyle(context)),
-          ],
-        ),
-        const SizedBox(height: 4),
-        _stepButton(context, row, kind, -1, wide: true),
-      ],
+    if (!bare) return group;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => row.focusOf(kind).requestFocus(),
+      child: group,
     );
   }
 
@@ -1763,9 +1711,8 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
     BuildContext context,
     _Row row,
     _Kind kind,
-    int direction, {
-    bool wide = false,
-  }) {
+    int direction,
+  ) {
     final theme = context.theme;
     final what = kind == _Kind.weight ? 'weight' : 'reps';
     return Semantics(
@@ -1778,8 +1725,8 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
         onLongPressEnd: (_) => _stopRepeat(),
         onLongPressCancel: _stopRepeat,
         child: Container(
-          width: wide ? null : 34,
-          height: wide ? 42 : 40,
+          width: 34,
+          height: 40,
           alignment: Alignment.center,
           decoration: BoxDecoration(
             color: theme.colors.muted,
@@ -1801,7 +1748,6 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
     _Kind kind,
     SetGhost ghost, {
     required bool big,
-    bool huge = false,
   }) {
     final theme = context.theme;
     final accents = TrackerAccents.of(context);
@@ -1814,7 +1760,7 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
         : (ghost.reps == null ? 'Reps' : formatDecimal(ghost.reps!));
     final textStyle =
         (big ? theme.typography.body.xl : theme.typography.body.sm).copyWith(
-          fontSize: huge ? 28 : (big ? 22 : null),
+          fontSize: big ? 22 : null,
           fontWeight: big ? FontWeight.w700 : FontWeight.w600,
           height: 1.15,
           color: theme.colors.foreground,
@@ -1822,32 +1768,7 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
         );
     final hintStyle = textStyle.copyWith(color: theme.colors.mutedForeground);
 
-    final typing = _typing;
-    final steppersOnly =
-        widget.entryMode == NumberEntry.steppers &&
-        !(typing != null && identical(typing.row, row) && typing.kind == kind);
-    if (steppersOnly) {
-      final text = controller.text.trim();
-      return GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () => _select(row),
-        onLongPress: () => _startTyping(row, kind),
-        onVerticalDragStart: (_) {
-          _select(row);
-          _scrubbed = 0;
-        },
-        onVerticalDragUpdate: (details) => _scrub(row, kind, details.delta.dy),
-        child: Center(
-          child: Text(
-            text.isEmpty ? hint : text,
-            style: text.isEmpty ? hintStyle : textStyle,
-            maxLines: 1,
-          ),
-        ),
-      );
-    }
-
-    final keypad = widget.entryMode == NumberEntry.keypad;
+    final keypad = widget.entryMode.usesKeypad;
     final keyboard = MediaQuery.viewInsetsOf(context).bottom;
     return TextField(
       key: isWeight ? row.weightKey : row.repsKey,
@@ -1874,7 +1795,9 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
         _overlay?.markNeedsBuild();
       },
       scrollPadding: EdgeInsets.only(
-        bottom: keypad ? NumberKeypad.height + 40 : keyboard + 120,
+        bottom: keypad
+            ? NumberKeypad.heightOf(widget.entryMode) + 40
+            : keyboard + 120,
       ),
       decoration: InputDecoration.collapsed(
         hintText: hint,

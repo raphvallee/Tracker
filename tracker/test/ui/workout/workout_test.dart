@@ -583,7 +583,7 @@ void main() {
       tester,
     ) async {
       final cubit = await pumpPush(tester);
-      await openExercise(tester, 'Bench Press', entry: NumberEntry.keypad);
+      await openExercise(tester, 'Bench Press', entry: NumberEntry.keypadRuler);
 
       await tester.tap(weightField(0));
       await tester.pumpAndSettle();
@@ -616,7 +616,11 @@ void main() {
 
     testWidgets('the keypad sign key logs an assisted weight', (tester) async {
       final cubit = await pumpPush(tester);
-      await openExercise(tester, 'Bench Press', entry: NumberEntry.keypad);
+      await openExercise(
+        tester,
+        'Bench Press',
+        entry: NumberEntry.keypadSteppers,
+      );
       await tester.tap(weightField(0));
       await tester.pumpAndSettle();
       await tester.tap(labelled('2'));
@@ -632,29 +636,79 @@ void main() {
       expect(cubit.state.sets.single.weight, -20);
     });
 
-    testWidgets('steppers nudge the values without a keyboard', (tester) async {
-      final cubit = await pumpPush(tester);
-      await openExercise(tester, 'Bench Press', entry: NumberEntry.steppers);
-      expect(find.byType(TextField), findsNothing);
-      expect(find.text('Aim for 8-12 reps'), findsOneWidget);
+    Finder steppers(String what) => find.byWidgetPredicate(
+      (w) => w is Semantics && w.properties.label == 'Increase $what',
+    );
 
+    testWidgets('the keypad and steppers step the value it types into', (
+      tester,
+    ) async {
+      final cubit = await pumpPush(tester);
+      await openExercise(
+        tester,
+        'Bench Press',
+        entry: NumberEntry.keypadSteppers,
+      );
+      // The steppers are in the keypad, not around the open row's values.
+      expect(steppers('weight'), findsNothing);
+
+      await tester.tap(weightField(0));
+      await tester.pumpAndSettle();
+      expect(find.text('Set 1 weight, in kg'), findsOneWidget);
       for (var i = 0; i < 3; i++) {
         await tester.tap(labelled('Increase weight'));
       }
+      await tester.pump();
+      expect(textIn(tester, weightField(0)), '7.5');
+      // A key typed after a step starts the value over.
+      await tester.tap(labelled('5'));
+      await tester.pump();
+      expect(textIn(tester, weightField(0)), '5');
+
+      await tester.tap(labelled('Next'));
+      await tester.pumpAndSettle();
       await tester.tap(labelled('Increase reps'));
       await tester.pump();
-      expect(find.text('Log 7.5 kg × 9'), findsOneWidget);
-      await tester.tap(find.text('Log 7.5 kg × 9'));
+      expect(textIn(tester, repsField(0)), '9');
+      await tester.tap(find.text('Log 5 kg × 9').last);
       await tester.pumpAndSettle();
-      expect(cubit.state.sets.single.weight, 7.5);
+      expect(cubit.state.sets.single.weight, 5);
       expect(cubit.state.sets.single.reps, 9);
+    });
 
-      // A logged set saves each nudge right away.
-      await tester.tap(find.text('7.5').first);
+    testWidgets('the keypad and ruler slide the value it types into', (
+      tester,
+    ) async {
+      final cubit = await pumpPush(tester);
+      await openExercise(tester, 'Bench Press', entry: NumberEntry.keypadRuler);
+      expect(steppers('weight'), findsNothing);
+
+      await tester.tap(weightField(0));
       await tester.pumpAndSettle();
+      await tester.tap(labelled('Increase weight'));
+      await tester.pump();
+      expect(textIn(tester, weightField(0)), '2.5');
+
+      await tester.timedDrag(
+        labelled('Drag to change the weight'),
+        const Offset(-100, 0),
+        const Duration(milliseconds: 500),
+      );
+      await tester.pumpAndSettle();
+      final weight = double.parse(textIn(tester, weightField(0)));
+      expect(weight, greaterThan(2.5));
+      expect(weight % 2.5, 0, reason: 'from tick to tick');
+
+      await tester.tap(labelled('Next'));
+      await tester.pumpAndSettle();
+      expect(find.text('8 reps'), findsOneWidget, reason: 'from the plan');
       await tester.tap(labelled('Decrease reps'));
+      await tester.pump();
+      expect(textIn(tester, repsField(0)), '7');
+      await tester.tap(find.textContaining('× 7').last);
       await tester.pumpAndSettle();
-      expect(cubit.state.sets.single.reps, 8);
+      expect(cubit.state.sets.single.weight, weight);
+      expect(cubit.state.sets.single.reps, 7);
     });
   });
 

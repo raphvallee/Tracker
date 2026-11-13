@@ -8,6 +8,7 @@ import 'package:tracker/data/repositories/tracker_repository.dart';
 import 'package:tracker/domain/models/exercise.dart';
 import 'package:tracker/domain/models/gym.dart';
 import 'package:tracker/domain/models/muscle.dart';
+import 'package:tracker/domain/models/number_entry.dart';
 import 'package:tracker/domain/models/weight_unit.dart';
 import 'package:tracker/domain/models/workout_session.dart';
 import 'package:tracker/domain/models/workout_set.dart';
@@ -105,8 +106,11 @@ Future<({TrackerRepository repo, WorkoutSession session})> pumpPersistenceApp(
       child: MultiBlocProvider(
         providers: [
           BlocProvider<WorkoutCubit>.value(value: cubit),
+          // The phone keyboard keeps the -/+ beside the open set's values.
           BlocProvider<SettingsCubit>(
-            create: (_) => SettingsCubit()..setUnit(unit),
+            create: (_) => SettingsCubit()
+              ..setUnit(unit)
+              ..setNumberEntry(NumberEntry.phoneKeyboard),
           ),
         ],
         child: const MyApp(),
