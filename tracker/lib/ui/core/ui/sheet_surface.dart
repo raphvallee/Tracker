@@ -3,12 +3,23 @@ import 'package:material_ui/material_ui.dart';
 
 /// The opaque, top-rounded surface a bottom sheet's content sits on, with a
 /// grab handle: showFSheet paints no surface of its own. [scrollable] lets
-/// tall content scroll inside the sheet's height cap.
+/// tall content scroll inside the sheet's height cap; [footer] stays docked
+/// under it, over a line.
 class SheetSurface extends StatelessWidget {
-  const SheetSurface({super.key, required this.child, this.scrollable = false});
+  const SheetSurface({
+    super.key,
+    required this.child,
+    this.scrollable = false,
+    this.footer,
+    this.controller,
+  });
 
   final Widget child;
   final bool scrollable;
+  final Widget? footer;
+
+  /// Scrolls [child] when [scrollable].
+  final ScrollController? controller;
 
   @override
   Widget build(BuildContext context) {
@@ -41,9 +52,24 @@ class SheetSurface extends StatelessWidget {
               ),
             ),
             if (scrollable)
-              Flexible(child: SingleChildScrollView(child: padded))
+              Flexible(
+                child: SingleChildScrollView(
+                  controller: controller,
+                  child: padded,
+                ),
+              )
             else
               padded,
+            if (footer case final footer?)
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  border: Border(top: BorderSide(color: colors.border)),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                  child: footer,
+                ),
+              ),
           ],
         ),
       ),

@@ -1,12 +1,15 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:forui/forui.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:tracker/data/repositories/tracker_repository.dart';
 import 'package:tracker/data/services/app_log.dart';
 import 'package:tracker/domain/models/workout_session.dart';
+import 'package:tracker/domain/services/fuzzy_search.dart';
+import 'package:tracker/domain/services/history_filter.dart';
 import 'package:tracker/domain/services/session_summary.dart';
 import 'package:tracker/domain/services/workout_dates.dart';
 import 'package:tracker/routing/tab_navigation.dart';
@@ -17,17 +20,24 @@ import 'package:tracker/ui/core/ui/icon_button.dart';
 import 'package:tracker/ui/core/ui/max_width.dart';
 import 'package:tracker/ui/core/ui/relative_dates.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
+import 'package:tracker/ui/core/ui/keyboard_inset.dart';
 import 'package:tracker/ui/core/ui/weight_format.dart';
+import 'package:tracker/ui/history/view_models/history_search.dart';
 import 'package:tracker/ui/workout/view_models/workout_cubit.dart';
 
 import 'calendar/history_calendar.dart';
 import 'restore_strip.dart';
+import 'search/filter_summary.dart';
+import 'search/history_filter_sheet.dart';
 import 'session_detail_page.dart';
 
 /// Every finished workout, newest first, under its month. Rows are built
 /// and read lazily: the first frame reads the ids and start times only, and
 /// a page of sessions is read when its first row is built, so a long
 /// history costs no more to open than a short one.
+///
+/// The search button turns the page into a search: a field that forgives
+/// typos, and filters in one sheet. Only then is every workout read.
 class HistoryPage extends StatefulWidget {
   const HistoryPage({super.key});
 
@@ -61,6 +71,20 @@ class _HistoryPageState extends State<HistoryPage> {
   int? _marked;
   Timer? _unmark;
 
+  // Search: off until the search button is tapped.
+  bool _searching = false;
+  HistorySearchData _search = HistorySearchData.empty;
+  final TextEditingController _queryText = TextEditingController();
+  FuzzyQuery _query = FuzzyQuery('');
+  HistoryFilter _filter = HistoryFilter.none;
+
+  /// The workouts search shows, newest first, and their dates.
+  List<HistoryEntry> _results = const [];
+  WorkoutDateIndex _resultDates = WorkoutDateIndex(const []);
+
+  /// The name the search reads as ("Squat" for "sqaut"), when it is one.
+  String? _readsAs;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -80,6 +104,7 @@ class _HistoryPageState extends State<HistoryPage> {
       // Shown again: catch up on saves made meanwhile, or retry a failed
       // read.
       _load();
+      if (_searching) _readSearch();
     }
   }
 
@@ -88,6 +113,7 @@ class _HistoryPageState extends State<HistoryPage> {
     _changes?.cancel();
     _unmark?.cancel();
     _scroll.dispose();
+    _queryText.dispose();
     super.dispose();
   }
 
@@ -98,7 +124,10 @@ class _HistoryPageState extends State<HistoryPage> {
       _stale = true;
       return;
     }
-    setState(_load);
+    setState(() {
+      _load();
+      if (_searching) _readSearch();
+    });
   }
 
   void _onLoadError(Object error, StackTrace stackTrace) {
@@ -125,6 +154,99 @@ class _HistoryPageState extends State<HistoryPage> {
       AppLog.error('history', error, stackTrace);
       _error = error;
     }
+  }
+
+  // Search reads every workout once, when it opens, and again after a
+  // save; each keystroke and filter change only runs over what was read.
+
+  void _openSearch() {
+    setState(() {
+      _searching = true;
+      _readSearch();
+    });
+    if (_scroll.hasClients) _scroll.jumpTo(0);
+  }
+
+  void _closeSearch() {
+    setState(() {
+      _searching = false;
+      _search = HistorySearchData.empty;
+      _queryText.clear();
+      _query = FuzzyQuery('');
+      _filter = HistoryFilter.none;
+      _results = const [];
+      _resultDates = WorkoutDateIndex(const []);
+      _readsAs = null;
+    });
+    if (_scroll.hasClients) _scroll.jumpTo(0);
+  }
+
+  void _readSearch() {
+    final repo = _repo;
+    if (repo == null) return;
+    try {
+      _search = HistorySearchData.read(repo);
+    } on Object catch (error, stackTrace) {
+      AppLog.error('history', error, stackTrace);
+      _search = HistorySearchData.empty;
+      _error = error;
+    }
+    _refilter();
+  }
+
+  void _refilter() {
+    _results = searchHistory(
+      _search.entries,
+      query: _query,
+      filter: _filter,
+      now: DateTime.now(),
+    );
+    _resultDates = WorkoutDateIndex([
+      for (final entry in _results) entry.start,
+    ]);
+    _readsAs = nameQueryReadsAs(_query, _search.names);
+  }
+
+  void _onQueryChanged(String text) {
+    setState(() {
+      _query = FuzzyQuery(text);
+      _refilter();
+    });
+    if (_scroll.hasClients) _scroll.jumpTo(0);
+  }
+
+  void _setFilter(HistoryFilter filter) {
+    setState(() {
+      _filter = filter;
+      _refilter();
+    });
+    if (_scroll.hasClients) _scroll.jumpTo(0);
+  }
+
+  Future<void> _openFilters({FilterPart? focus}) async {
+    final picked = await showHistoryFilterSheet(
+      context,
+      data: _search,
+      filter: _filter,
+      focus: focus,
+      countOf: (filter) => searchHistory(
+        _search.entries,
+        query: _query,
+        filter: filter,
+        now: DateTime.now(),
+      ).length,
+    );
+    if (picked == null || !mounted) return;
+    _setFilter(picked);
+  }
+
+  void _clearSearch() {
+    _queryText.clear();
+    setState(() {
+      _query = FuzzyQuery('');
+      _filter = HistoryFilter.none;
+      _refilter();
+    });
   }
 
   WorkoutSession? _sessionAt(int index) {
@@ -168,8 +290,9 @@ class _HistoryPageState extends State<HistoryPage> {
 
   _Metrics _metrics(BuildContext context) => _Metrics.of(context);
 
-  double _extentAt(int index, _Metrics metrics) =>
-      metrics.row + (_index.startsMonth(index) ? metrics.heading : 0);
+  double _extentAt(int index, _Metrics metrics, [WorkoutDateIndex? dates]) =>
+      metrics.row +
+      ((dates ?? _index).startsMonth(index) ? metrics.heading : 0);
 
   Future<void> _openCalendar() async {
     final day = await showHistoryCalendar(context, index: _index);
@@ -199,6 +322,7 @@ class _HistoryPageState extends State<HistoryPage> {
   @override
   Widget build(BuildContext context) {
     final metrics = _metrics(context);
+    if (_searching) return _buildSearch(context, metrics);
     final hasWorkouts = _error == null && !_index.isEmpty;
     return CustomScrollView(
       controller: _scroll,
@@ -207,10 +331,20 @@ class _HistoryPageState extends State<HistoryPage> {
           context,
           title: 'History',
           trailing: hasWorkouts
-              ? AppIconButton(
-                  icon: FLucideIcons.calendarDays,
-                  tooltip: 'Calendar',
-                  onPress: _openCalendar,
+              ? Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    AppIconButton(
+                      icon: FLucideIcons.search,
+                      tooltip: 'Search',
+                      onPress: _openSearch,
+                    ),
+                    AppIconButton(
+                      icon: FLucideIcons.calendarDays,
+                      tooltip: 'Calendar',
+                      onPress: _openCalendar,
+                    ),
+                  ],
                 )
               : null,
         ),
@@ -253,26 +387,133 @@ class _HistoryPageState extends State<HistoryPage> {
     );
   }
 
-  Widget _row(BuildContext context, int index, _Metrics metrics) {
-    final session = _sessionAt(index);
-    final start = _index.startAt(index);
-    final heading = _index.startsMonth(index)
+  Widget _buildSearch(BuildContext context, _Metrics metrics) {
+    final searched = !_query.isEmpty || !_filter.isEmpty;
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _closeSearch();
+      },
+      child: CustomScrollView(
+        controller: _scroll,
+        slivers: <Widget>[
+          _SearchBar(
+            controller: _queryText,
+            filters: _filter.activeCount,
+            onChanged: _onQueryChanged,
+            onClose: _closeSearch,
+            onFilters: _error == null ? () => _openFilters() : null,
+          ),
+          if (searched && _error == null && _results.isNotEmpty)
+            SliverToBoxAdapter(
+              child: MaxWidth(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+                  child: _FilterSentence(
+                    pieces: filterSummary(
+                      _filter,
+                      _search,
+                      count: _results.length,
+                      matching: _query.isEmpty
+                          ? null
+                          : _readsAs ?? _queryText.text.trim(),
+                    ),
+                    boxed: !_filter.isEmpty,
+                    onPart: (part) => _openFilters(focus: part),
+                    onClear: _filter.isEmpty
+                        ? null
+                        : () => _setFilter(HistoryFilter.none),
+                  ),
+                ),
+              ),
+            ),
+          if (_error != null)
+            const SliverFillRemaining(
+              hasScrollBody: false,
+              child: _HistoryMessage(
+                icon: FLucideIcons.circleAlert,
+                title: 'History could not be searched',
+                message:
+                    'Your workouts are still saved. Leave this tab and come '
+                    'back to try again.',
+              ),
+            )
+          else if (_results.isEmpty)
+            SliverFillRemaining(
+              hasScrollBody: false,
+              child: _HistoryMessage(
+                icon: FLucideIcons.searchX,
+                title: 'No workouts match',
+                message: _filter.isEmpty
+                    ? 'Try another name: a split, a day, an exercise or a gym.'
+                    : 'Try fewer filters, or another search.',
+                action: (
+                  label: _filter.isEmpty
+                      ? 'Clear search'
+                      : 'Clear search and filters',
+                  onPress: _clearSearch,
+                ),
+              ),
+            )
+          else
+            SliverPadding(
+              padding: EdgeInsets.only(
+                top: searched ? 0 : 4,
+                bottom: 32 + keyboardClearanceOf(context),
+              ),
+              sliver: SliverVariedExtentList.builder(
+                itemCount: _results.length,
+                itemExtentBuilder: (index, _) => index < _results.length
+                    ? _extentAt(index, metrics, _resultDates)
+                    : null,
+                itemBuilder: (context, index) => _row(
+                  context,
+                  index,
+                  metrics,
+                  dates: _resultDates,
+                  session: _search.sessions[_results[index].id],
+                  names: _search.exerciseNames,
+                  query: _query,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// Row [index] of the list: of the whole history, or of [dates], the
+  /// dates of what search shows, with its [session].
+  Widget _row(
+    BuildContext context,
+    int index,
+    _Metrics metrics, {
+    WorkoutDateIndex? dates,
+    WorkoutSession? session,
+    Map<int, String>? names,
+    FuzzyQuery? query,
+  }) {
+    final list = dates ?? _index;
+    final shown = dates == null ? _sessionAt(index) : session;
+    final start = list.startAt(index);
+    final heading = list.startsMonth(index)
         ? _MonthHeading(
             label: monthLabel(start.year, start.month),
-            count: _index.countInMonth(start.year, start.month),
+            count: list.countInMonth(start.year, start.month),
             height: metrics.heading,
           )
         : null;
-    final Widget row = session == null
+    final Widget row = shown == null
         ? SizedBox(height: metrics.row)
         : _SessionRow(
-            session: session,
-            names: _names,
+            session: shown,
+            names: names ?? _names,
+            query: query,
             height: metrics.row,
-            marked: _marked == index,
+            marked: dates == null && _marked == index,
             onOpen: () => pushTo(
               context,
-              SessionDetailPage(session: session, gymName: _gymNameOf(session)),
+              SessionDetailPage(session: shown, gymName: _gymNameOf(shown)),
             ),
           );
     return MaxWidth(
@@ -367,6 +608,7 @@ class _SessionRow extends StatelessWidget {
   const _SessionRow({
     required this.session,
     required this.names,
+    this.query,
     required this.height,
     required this.marked,
     required this.onOpen,
@@ -374,6 +616,9 @@ class _SessionRow extends StatelessWidget {
 
   final WorkoutSession session;
   final Map<int, String> names;
+
+  /// The search shown: the exercises it finds come first, in bold.
+  final FuzzyQuery? query;
   final double height;
 
   /// Just jumped to from the calendar.
@@ -391,6 +636,18 @@ class _SessionRow extends StatelessWidget {
       for (final group in groupByExercise(session.sets))
         names[group.exerciseId] ?? 'Exercise ${group.exerciseId}',
     ];
+    final query = this.query;
+    final found = query == null || query.isEmpty
+        ? const <String>{}
+        : {
+            for (final name in exercises)
+              if (query.findsAny(searchWords(name))) name,
+          };
+    if (found.isNotEmpty) {
+      exercises.sort(
+        (a, b) => (found.contains(a) ? 0 : 1) - (found.contains(b) ? 0 : 1),
+      );
+    }
     const tabular = [FontFeature.tabularFigures()];
     return Semantics(
       button: true,
@@ -448,8 +705,8 @@ class _SessionRow extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 2),
-                    Text(
-                      exercisePreview(exercises),
+                    Text.rich(
+                      _previewSpan(exercises, found, theme.colors.foreground),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: type.xs.copyWith(color: muted, height: _rowLine),
@@ -573,11 +830,13 @@ class _HistoryMessage extends StatelessWidget {
     required this.icon,
     required this.title,
     required this.message,
+    this.action,
   });
 
   final IconData icon;
   final String title;
   final String message;
+  final ({String label, VoidCallback onPress})? action;
 
   @override
   Widget build(BuildContext context) {
@@ -608,6 +867,289 @@ class _HistoryMessage extends StatelessWidget {
               ),
             ),
           ),
+          if (action case final action?) ...[
+            const SizedBox(height: 16),
+            FButton(
+              variant: .outline,
+              mainAxisSize: .min,
+              onPress: action.onPress,
+              child: Text(action.label),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// [exercisePreview] with the [found] names in bold [ink].
+TextSpan _previewSpan(List<String> names, Set<String> found, Color ink) {
+  if (found.isEmpty) return TextSpan(text: exercisePreview(names));
+  const shown = 2;
+  final listed = names.length <= shown ? names : names.take(shown).toList();
+  return TextSpan(
+    children: <InlineSpan>[
+      for (final (i, name) in listed.indexed) ...[
+        if (i > 0) const TextSpan(text: ', '),
+        TextSpan(
+          text: name,
+          style: found.contains(name)
+              ? TextStyle(color: ink, fontWeight: FontWeight.w600)
+              : null,
+        ),
+      ],
+      if (names.length > shown)
+        TextSpan(text: ' and ${names.length - shown} more'),
+    ],
+  );
+}
+
+/// Search's header, pinned: back out of search, the field, and the filter
+/// button, filled in ink with the count of parts set while any is.
+class _SearchBar extends StatelessWidget {
+  const _SearchBar({
+    required this.controller,
+    required this.filters,
+    required this.onChanged,
+    required this.onClose,
+    required this.onFilters,
+  });
+
+  final TextEditingController controller;
+  final int filters;
+  final ValueChanged<String> onChanged;
+  final VoidCallback onClose;
+  final VoidCallback? onFilters;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = context.theme;
+    final colors = theme.colors;
+    return PinnedHeaderSliver(
+      child: ColoredBox(
+        color: colors.background,
+        child: Padding(
+          padding: EdgeInsets.only(top: MediaQuery.paddingOf(context).top),
+          child: MaxWidth(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(4, 8, 12, 8),
+              child: Row(
+                children: <Widget>[
+                  AppIconButton(
+                    icon: FLucideIcons.chevronLeft,
+                    tooltip: 'Close search',
+                    onPress: onClose,
+                  ),
+                  Expanded(
+                    child: FTextField(
+                      control: FTextFieldControl.managed(
+                        controller: controller,
+                        onChange: (value) => onChanged(value.text),
+                      ),
+                      autofocus: true,
+                      hint: 'Name, split, day, exercise or gym',
+                      textInputAction: TextInputAction.search,
+                      prefixBuilder: (context, style, variants) =>
+                          FTextField.prefixIconBuilder(
+                            context,
+                            style,
+                            variants,
+                            const Icon(FLucideIcons.search),
+                          ),
+                      clearable: (value) => value.text.isNotEmpty,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  _FilterButton(count: filters, onPress: onFilters),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FilterButton extends StatelessWidget {
+  const _FilterButton({required this.count, required this.onPress});
+
+  final int count;
+  final VoidCallback? onPress;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.theme.colors;
+    final active = count > 0;
+    return FTooltip(
+      tipBuilder: (_, _) => const Text('Filters'),
+      child: FTappable(
+        semanticsLabel: active
+            ? 'Filters, ${count == 1 ? '1 set' : '$count set'}'
+            : 'Filters',
+        onPress: onPress,
+        child: SizedBox(
+          width: 44,
+          height: 44,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: <Widget>[
+              Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: active ? colors.foreground : colors.background,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: active ? colors.foreground : colors.border,
+                    ),
+                  ),
+                  child: Icon(
+                    FLucideIcons.slidersHorizontal,
+                    size: 18,
+                    color: active ? colors.background : colors.foreground,
+                  ),
+                ),
+              ),
+              if (active)
+                Positioned(
+                  top: -6,
+                  right: -6,
+                  child: Container(
+                    constraints: const BoxConstraints(minWidth: 18),
+                    height: 18,
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: colors.background,
+                      borderRadius: BorderRadius.circular(9),
+                      border: Border.all(color: colors.foreground, width: 1.5),
+                    ),
+                    child: Text(
+                      '$count',
+                      style: context.theme.typography.body.xs.copyWith(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w700,
+                        height: 1,
+                        color: colors.foreground,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// What search shows, read back as a sentence: "9 workouts from Push Pull
+/// Legs, on Push days." Each filter part in it is underlined and opens the
+/// filter sheet at that part. [boxed] outlines it while filters are set,
+/// with Clear to drop them.
+class _FilterSentence extends StatefulWidget {
+  const _FilterSentence({
+    required this.pieces,
+    required this.boxed,
+    required this.onPart,
+    required this.onClear,
+  });
+
+  final List<SummaryPiece> pieces;
+  final bool boxed;
+  final ValueChanged<FilterPart> onPart;
+  final VoidCallback? onClear;
+
+  @override
+  State<_FilterSentence> createState() => _FilterSentenceState();
+}
+
+class _FilterSentenceState extends State<_FilterSentence> {
+  final List<TapGestureRecognizer> _taps = [];
+
+  void _dropTaps() {
+    for (final tap in _taps) {
+      tap.dispose();
+    }
+    _taps.clear();
+  }
+
+  TapGestureRecognizer _tap(VoidCallback onTap) {
+    final tap = TapGestureRecognizer()..onTap = onTap;
+    _taps.add(tap);
+    return tap;
+  }
+
+  @override
+  void dispose() {
+    _dropTaps();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = context.theme;
+    final colors = theme.colors;
+    _dropTaps();
+    final spans = <InlineSpan>[
+      for (final (i, piece) in widget.pieces.indexed)
+        if (i == 0)
+          TextSpan(
+            text: piece.text,
+            style: TextStyle(
+              color: colors.foreground,
+              fontWeight: FontWeight.w600,
+            ),
+          )
+        else if (piece.part case final part?)
+          TextSpan(
+            text: piece.text,
+            recognizer: _tap(() => widget.onPart(part)),
+            style: TextStyle(
+              color: colors.foreground,
+              fontWeight: FontWeight.w500,
+              decoration: TextDecoration.underline,
+              decorationColor: colors.border,
+              decorationThickness: 1.5,
+            ),
+          )
+        else
+          TextSpan(text: piece.text),
+    ];
+    final text = Text.rich(
+      TextSpan(children: spans),
+      style: theme.typography.body.xs.copyWith(
+        color: colors.mutedForeground,
+        height: 1.5,
+      ),
+    );
+    if (!widget.boxed) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(2, 2, 2, 6),
+        child: SizedBox(width: double.infinity, child: text),
+      );
+    }
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: colors.border),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Expanded(
+            child: Padding(padding: const EdgeInsets.only(top: 2), child: text),
+          ),
+          if (widget.onClear case final onClear?)
+            FButton(
+              variant: .ghost,
+              size: .sm,
+              mainAxisSize: .min,
+              onPress: onClear,
+              child: const Text('Clear'),
+            ),
         ],
       ),
     );
