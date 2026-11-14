@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tracker/domain/models/exercise.dart';
 import 'package:tracker/domain/models/muscle.dart';
-import 'package:tracker/ui/exercises/widgets/exercises_page.dart';
+import 'package:tracker/domain/services/exercise_library.dart';
 import 'package:tracker/ui/exercises/widgets/new_exercise_page.dart';
 
 import '../../../testing/test_helpers.dart';

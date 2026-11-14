@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hydrated_bloc/hydrated_bloc.dart';
 import 'package:tracker/domain/models/effort_scale.dart';
+import 'package:tracker/domain/models/exercises_layout.dart';
 import 'package:tracker/domain/models/graph_config.dart';
 import 'package:tracker/domain/models/number_entry.dart';
 import 'package:tracker/domain/models/rep_mode.dart';
@@ -163,7 +164,7 @@ void main() {
         notificationsEnabled: false,
       );
       final json = state.toJson();
-      expect(json['v'], 3);
+      expect(json['v'], 4);
       final restored = SettingsState.fromJson(json);
       expect(restored, state);
     });
@@ -250,6 +251,34 @@ void main() {
       expect(state.prefillSets, isTrue);
       expect(state.numberEntry, NumberEntry.keypadSteppers);
       expect(state.currentSplitId, isNull);
+    });
+
+    test('v4 carries the Exercises tab layout', () {
+      final state = SettingsState(exercisesLayout: ExercisesLayout.tiles);
+      final restored = SettingsState.fromJson(state.toJson());
+      expect(restored.exercisesLayout, ExercisesLayout.tiles);
+      expect(restored, state);
+      expect(state, isNot(SettingsState()));
+    });
+
+    test('older payloads and unknown layouts read as a list of groups', () {
+      expect(
+        SettingsState.fromJson({'v': 3, 'unit': 'pounds'}).exercisesLayout,
+        ExercisesLayout.rows,
+      );
+      expect(
+        SettingsState.fromJson({'v': 4, 'exercisesLayout': 'carousel'})
+            .exercisesLayout,
+        ExercisesLayout.rows,
+      );
+    });
+
+    test('setExercisesLayout changes the layout', () {
+      HydratedBloc.storage = InMemoryStorage();
+      final cubit = SettingsCubit();
+      addTearDown(cubit.close);
+      cubit.setExercisesLayout(ExercisesLayout.openTiles);
+      expect(cubit.state.exercisesLayout, ExercisesLayout.openTiles);
     });
 
     test('unknown schema version falls back to defaults', () {

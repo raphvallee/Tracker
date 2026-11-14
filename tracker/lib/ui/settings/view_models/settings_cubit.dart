@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:hydrated_bloc/hydrated_bloc.dart';
 import 'package:tracker/domain/models/effort_scale.dart';
+import 'package:tracker/domain/models/exercises_layout.dart';
 import 'package:tracker/domain/models/graph_config.dart';
 import 'package:tracker/domain/models/number_entry.dart';
 import 'package:tracker/domain/models/rep_mode.dart';
@@ -14,8 +15,9 @@ class SettingsState {
     // v1 = the original shape; v2 adds set prefill, number entry, the
     // effort scale, the current split and when splits were last picked. Payloads written before versioning have no 'v' key and
     // read as v1. v3 adds the range every graph shows; its graphs each name
-    // an exercise (older ones without one are dropped). Unknown future
-    // versions fall back to defaults instead of crashing.
+    // an exercise (older ones without one are dropped). v4 adds how the
+    // Exercises tab is laid out. Unknown future versions fall back to
+    // defaults instead of crashing.
     switch (json['v'] as int? ?? 1) {
       case 1:
         return _fromV1(json);
@@ -23,6 +25,8 @@ class SettingsState {
         return _fromV2(json);
       case 3:
         return _fromV3(json);
+      case 4:
+        return _fromV4(json);
       default:
         return SettingsState();
     }
@@ -45,6 +49,7 @@ class SettingsState {
     this.heavyWeightConfirmed = false,
     List<GraphConfig> graphs = const [],
     this.graphRange = GraphTimeframe.last90Days,
+    this.exercisesLayout = ExercisesLayout.rows,
   }) : splitsUsedAt = Map.unmodifiable(splitsUsedAt),
        graphs = List.unmodifiable(graphs);
 
@@ -132,6 +137,13 @@ class SettingsState {
             GraphTimeframe.last90Days,
       );
 
+  static SettingsState _fromV4(Map<String, dynamic> json) =>
+      _fromV3(json).copyWith(
+        exercisesLayout:
+            ExercisesLayout.values.asNameMap()[json['exercisesLayout']] ??
+            ExercisesLayout.rows,
+      );
+
   static Map<int, DateTime> _splitsUsedAt(Object? json) {
     if (json is! Map) return const {};
     return {
@@ -175,6 +187,9 @@ class SettingsState {
   /// How far back every graph looks.
   final GraphTimeframe graphRange;
 
+  /// How the Exercises tab lays out the library.
+  final ExercisesLayout exercisesLayout;
+
   SettingsState copyWith({
     WeightUnit? unit,
     bool? notificationsEnabled,
@@ -192,6 +207,7 @@ class SettingsState {
     bool? heavyWeightConfirmed,
     List<GraphConfig>? graphs,
     GraphTimeframe? graphRange,
+    ExercisesLayout? exercisesLayout,
   }) {
     return SettingsState(
       unit: unit ?? this.unit,
@@ -213,6 +229,7 @@ class SettingsState {
       heavyWeightConfirmed: heavyWeightConfirmed ?? this.heavyWeightConfirmed,
       graphs: graphs ?? this.graphs,
       graphRange: graphRange ?? this.graphRange,
+      exercisesLayout: exercisesLayout ?? this.exercisesLayout,
     );
   }
 
@@ -234,7 +251,8 @@ class SettingsState {
       showHeavyWeightWarning == other.showHeavyWeightWarning &&
       heavyWeightConfirmed == other.heavyWeightConfirmed &&
       _listEquals(graphs, other.graphs) &&
-      graphRange == other.graphRange;
+      graphRange == other.graphRange &&
+      exercisesLayout == other.exercisesLayout;
 
   @override
   int get hashCode => Object.hash(
@@ -256,6 +274,7 @@ class SettingsState {
     heavyWeightConfirmed,
     Object.hashAll(graphs),
     graphRange,
+    exercisesLayout,
   );
 
   static const _unset = Object();
@@ -277,7 +296,7 @@ class SettingsState {
   }
 
   Map<String, dynamic> toJson() => {
-    'v': 3,
+    'v': 4,
     'unit': unit.name,
     'notificationsEnabled': notificationsEnabled,
     'analyticsEnabled': analyticsEnabled,
@@ -297,6 +316,7 @@ class SettingsState {
     'heavyWeightConfirmed': heavyWeightConfirmed,
     'graphs': graphs.map((graph) => graph.toJson()).toList(),
     'graphRange': graphRange.name,
+    'exercisesLayout': exercisesLayout.name,
   };
 }
 
@@ -393,6 +413,9 @@ class SettingsCubit extends HydratedCubit<SettingsState> {
 
   void setGraphRange(GraphTimeframe range) =>
       emit(state.copyWith(graphRange: range));
+
+  void setExercisesLayout(ExercisesLayout layout) =>
+      emit(state.copyWith(exercisesLayout: layout));
 
   void removeGraph(int index) {
     if (index < 0 || index >= state.graphs.length) return;
