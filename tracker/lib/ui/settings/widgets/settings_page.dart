@@ -10,6 +10,7 @@ import 'package:tracker/ui/core/ui/custom_route.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
 import 'package:tracker/ui/core/ui/test_mode_scope.dart';
 import 'package:tracker/ui/settings/view_models/settings_cubit.dart';
+import 'package:tracker/ui/settings/widgets/exercises_settings_page.dart';
 import 'package:tracker/ui/settings/widgets/gyms_page.dart';
 import 'package:tracker/ui/settings/widgets/settings_list.dart';
 import 'package:tracker/ui/settings/widgets/splits_settings_page.dart';
@@ -83,6 +84,12 @@ class _SettingsPageState extends State<SettingsPage> {
                 title: 'Splits',
                 summary: splitsSummary(state),
                 onPress: () => pushTo(context, const SplitsSettingsPage()),
+              ),
+              SettingsLinkItem(
+                icon: FLucideIcons.personStanding,
+                title: 'Exercises',
+                summary: exercisesSummary(state),
+                onPress: () => pushTo(context, const ExercisesSettingsPage()),
               ),
               SettingsLinkItem(
                 icon: FLucideIcons.mapPin,

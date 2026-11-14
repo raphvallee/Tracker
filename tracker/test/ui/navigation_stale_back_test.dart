@@ -33,7 +33,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Name'), findsNothing);
       expect(
-        find.text('No exercises in the library yet.'),
+        find.text('No exercises in the library yet'),
         findsOneWidget,
         reason: 'the app must not exit; the tab root remains',
       );
@@ -95,7 +95,7 @@ void main() {
       );
 
       expect(
-        find.text('No exercises in the library yet.'),
+        find.text('No exercises in the library yet'),
         findsOneWidget,
         reason: 'popping must never remove the tab root page',
       );

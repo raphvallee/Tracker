@@ -50,6 +50,8 @@ void main() {
       200,
       scrollable: _scroll,
     );
+    await tester.ensureVisible(find.text('Reset sample data'));
+    await tester.pumpAndSettle();
 
     await tester.tap(find.text('Reset sample data'));
     await tester.pumpAndSettle();
