@@ -4,6 +4,7 @@ import 'package:tracker/domain/models/graph_config.dart';
 import 'package:tracker/domain/models/workout_session.dart';
 import 'package:tracker/domain/services/analytics.dart';
 import 'package:tracker/domain/services/graph_series.dart';
+import 'package:tracker/domain/services/gym_equivalence.dart';
 import 'package:tracker/ui/analytics/widgets/graph_panel.dart';
 import 'package:tracker/ui/core/ui/custom_app_bar.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
@@ -18,7 +19,6 @@ class ProgressionPage extends StatefulWidget {
 
 class _ProgressionPageState extends State<ProgressionPage> {
   List<WorkoutSession> _sessions = const [];
-  Map<int, double> _multipliers = const {};
   bool _didLoad = false;
   bool _loading = false;
   Object? _loadError;
@@ -60,20 +60,14 @@ class _ProgressionPageState extends State<ProgressionPage> {
       final sessions =
           await repo?.sessions.getAll() ?? const <WorkoutSession>[];
       final gyms = await repo?.gyms.getAll() ?? const [];
+      final exercises = await repo?.exercises.getAll() ?? const [];
       if (!mounted) return;
       setState(() {
         _sessions = sessions;
-        _multipliers = {for (final gym in gyms) gym.id: gym.multiplier};
-        final exerciseMultipliers = <int, Map<int, double>>{
-          for (final gym in gyms)
-            gym.id: {
-              for (final value in gym.perExerciseMultipliers)
-                value.exerciseId: value.multiplier,
-            },
-        };
+        final exerciseMultipliers = machineFactors(gyms, exercises);
         _snapshot = _analytics.snapshot(
           sessions: sessions,
-          multipliers: _multipliers,
+          multipliers: const {},
           exerciseMultipliers: exerciseMultipliers,
           exerciseId: null,
           revision: sessions.length,
@@ -84,7 +78,6 @@ class _ProgressionPageState extends State<ProgressionPage> {
           metric: metric,
           range: GraphTimeframe.all,
           now: DateTime.now(),
-          multipliers: _multipliers,
           exerciseMultipliers: exerciseMultipliers,
         );
         _volume = series(GraphMetric.volume);
@@ -179,8 +172,8 @@ class _ProgressionPageState extends State<ProgressionPage> {
         if (best1rm != null) GraphPanel(series: best1rm),
         const SizedBox(height: 16),
         Text(
-          'Warm-up sets are excluded; weights are normalized by each '
-          'gym\'s multiplier.',
+          'Warm-up sets are excluded. Machine and cable weights from other '
+          'gyms count as at your primary gym.',
           style: theme.typography.body.xs.copyWith(
             color: theme.colors.mutedForeground,
           ),

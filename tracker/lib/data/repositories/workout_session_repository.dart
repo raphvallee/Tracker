@@ -121,7 +121,11 @@ class WorkoutSessionRepository {
       for (final set in session.sets)
         if (set.exerciseId == exerciseId) set,
     ]..sort((a, b) => a.order.compareTo(b.order));
-    return PreviousPerformance(date: session.startTime, sets: sets);
+    return PreviousPerformance(
+      date: session.startTime,
+      sets: sets,
+      gymId: session.gymId,
+    );
   }
 
   /// [getPreviousPerformance] for each of [exerciseIds]; exercises never

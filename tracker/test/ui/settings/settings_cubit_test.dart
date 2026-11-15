@@ -164,7 +164,7 @@ void main() {
         notificationsEnabled: false,
       );
       final json = state.toJson();
-      expect(json['v'], 4);
+      expect(json['v'], 5);
       final restored = SettingsState.fromJson(json);
       expect(restored, state);
     });
@@ -271,6 +271,28 @@ void main() {
             .exercisesLayout,
         ExercisesLayout.rows,
       );
+    });
+
+    test('v5 carries effective reps; older payloads read it as off', () {
+      final state = SettingsState(effectiveReps: true);
+      final restored = SettingsState.fromJson(state.toJson());
+      expect(restored.effectiveReps, isTrue);
+      expect(restored, state);
+      expect(state, isNot(SettingsState()));
+      expect(SettingsState.fromJson({'v': 4}).effectiveReps, isFalse);
+      expect(
+        SettingsState.fromJson({'v': 5, 'effectiveReps': 'yes'}).effectiveReps,
+        isFalse,
+      );
+    });
+
+    test('setEffectiveReps turns effective reps on and off', () {
+      HydratedBloc.storage = InMemoryStorage();
+      final cubit = SettingsCubit();
+      addTearDown(cubit.close);
+      expect(cubit.state.effectiveReps, isFalse);
+      cubit.setEffectiveReps(true);
+      expect(cubit.state.effectiveReps, isTrue);
     });
 
     test('setExercisesLayout changes the layout', () {

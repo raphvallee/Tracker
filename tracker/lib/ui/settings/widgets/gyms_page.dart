@@ -2,12 +2,15 @@ import 'package:forui/forui.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:tracker/domain/models/gym.dart';
 import 'package:tracker/domain/models/workout_session.dart';
-import 'package:tracker/domain/services/analytics.dart';
+import 'package:tracker/data/services/gym_factors.dart';
+import 'package:tracker/domain/services/gym_equivalence.dart';
 import 'package:tracker/ui/core/ui/app_dialog.dart';
 import 'package:tracker/ui/core/ui/custom_app_bar.dart';
 import 'package:tracker/ui/core/ui/icon_button.dart';
 import 'package:tracker/ui/core/ui/max_width.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
+import 'package:tracker/ui/core/ui/weight_format.dart';
+import 'package:tracker/ui/settings/view_models/settings_cubit.dart';
 import 'package:tracker/ui/workout/widgets/gym_picker.dart';
 
 class GymsPage extends StatefulWidget {
@@ -71,62 +74,36 @@ class _GymsPageState extends State<GymsPage> {
     }
   }
 
+  /// Makes [gym] the baseline: every factor is measured against it from
+  /// now on, then worked out again.
   Future<void> _setPrimary(Gym gym) async {
     final repo = RepositoryScope.maybeOf(context);
     if (repo == null) return;
-    final all = await repo.gyms.getAll();
-    final updated = [
-      for (final g in all)
-        g
-          ..isPrimary = g.id == gym.id
-          ..multiplier = g.id == gym.id ? 1.0 : g.multiplier,
-    ];
-    await repo.gyms.putAll(updated);
+    final effectiveReps = countsEffectiveReps(context);
+    await repo.gyms.updateAll((gyms) => rebasedOn(gyms, gym.id));
+    await refreshGymFactors(repo, effectiveReps: effectiveReps);
   }
 
-  Future<void> _estimateMultiplier(Gym gym) async {
+  Future<void> _estimate(Gym gym) async {
     final repo = RepositoryScope.maybeOf(context);
     if (repo == null) return;
-    final all = await repo.gyms.getAll();
-    Gym? primary;
-    for (final g in all) {
-      if (g.isPrimary) {
-        primary = g;
-        break;
-      }
-    }
-    if (primary == null) {
+    final effectiveReps = countsEffectiveReps(context);
+    if (await repo.gyms.getPrimary() == null) {
       _snack('Mark a gym as primary first.');
       return;
     }
-    final estimates = estimateGymExerciseMultipliers(
-      _sessions,
-      primary.id,
-      gym.id,
-      halfLife: const Duration(days: 180),
+    await refreshGymFactors(repo, effectiveReps: effectiveReps);
+    final fresh = await repo.gyms.getById(gym.id);
+    final count =
+        fresh?.perExerciseMultipliers
+            .where((row) => row.estimate != null)
+            .length ??
+        0;
+    _snack(
+      count == 0
+          ? 'No machine or cable workouts here to compare yet.'
+          : 'Estimated ${plural('machine', count)}.',
     );
-    final estimate = estimateGymMultiplier(
-      _sessions,
-      primary.id,
-      gym.id,
-      halfLife: const Duration(days: 180),
-    );
-    if (estimate == null) {
-      _snack('No shared exercise logs to estimate from.');
-      return;
-    }
-    await repo.gyms.put(
-      gym
-        ..multiplier = estimate
-        ..perExerciseMultipliers = [
-          for (final entry in estimates.entries)
-            GymExerciseMultiplier(
-              exerciseId: entry.key,
-              multiplier: entry.value,
-            ),
-        ],
-    );
-    _snack('Estimated ${estimates.length} movement multipliers.');
   }
 
   Future<void> _deleteGym(Gym gym) async {
@@ -190,8 +167,10 @@ class _GymsPageState extends State<GymsPage> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: <Widget>[
                   Text(
-                    'The primary gym is the baseline (multiplier ×1.0). '
-                    'Secondary multipliers align their weights to it.',
+                    'The primary gym is the baseline (×1.0). Machine and '
+                    'cable weights at other gyms are converted to it, each '
+                    'machine on its own; plates and dumbbells weigh the same '
+                    'everywhere.',
                     style: context.theme.typography.body.xs.copyWith(
                       color: context.theme.colors.mutedForeground,
                     ),
@@ -217,7 +196,7 @@ class _GymsPageState extends State<GymsPage> {
                               canEstimate: _sessions.isNotEmpty,
                               onPrimary: () => _setPrimary(gym),
                               onEdit: () => _editGym(gym),
-                              onEstimate: () => _estimateMultiplier(gym),
+                              onEstimate: () => _estimate(gym),
                               onDelete: () => _deleteGym(gym),
                             ),
                         ],
@@ -268,8 +247,9 @@ class _GymTile extends StatelessWidget {
           subtitle: Text(
             primary
                 ? 'Primary · baseline ×1.0'
-                : 'Multiplier ×${fmtGym(gym.multiplier)} · '
-                      '${gym.perExerciseMultipliers.length} movement overrides',
+                : 'Machines ×${fmtGym(gym.multiplier)} overall · '
+                      '${plural('machine', gym.perExerciseMultipliers.length)} '
+                      'measured',
           ),
           suffix: FPopoverMenu.tiles(
             menuAnchor: .topRight,
@@ -284,7 +264,7 @@ class _GymTile extends StatelessWidget {
                   ),
                   if (!primary && canEstimate)
                     .tile(
-                      title: const Text('Auto-estimate multiplier'),
+                      title: const Text('Estimate machine factors'),
                       onPress: onEstimate,
                     ),
                   .tile(title: const Text('Delete'), onPress: onDelete),

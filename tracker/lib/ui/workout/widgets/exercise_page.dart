@@ -25,7 +25,6 @@ import 'package:tracker/ui/core/ui/effort_strip.dart';
 import 'package:tracker/ui/core/ui/icon_button.dart';
 import 'package:tracker/ui/core/ui/max_width.dart';
 import 'package:tracker/ui/core/ui/number_keypad.dart';
-import 'package:tracker/ui/core/ui/repository_scope.dart';
 import 'package:tracker/ui/core/ui/row_motion.dart';
 import 'package:tracker/ui/core/ui/motion.dart';
 import 'package:tracker/ui/core/ui/slide_up_panel.dart';
@@ -38,7 +37,10 @@ import 'package:tracker/utils/decimal_input.dart';
 import 'package:tracker/utils/form_validators.dart';
 
 import 'elapsed_clock.dart';
+import 'exercise_at_gym.dart';
 import 'finish_workout.dart';
+import 'gym_conversion_card.dart';
+import 'machine_setup.dart';
 import 'plan_bar.dart';
 import 'set_comparison.dart';
 import 'workout_dock.dart';
@@ -59,21 +61,7 @@ class ExercisePage extends StatefulWidget {
 }
 
 class _ExercisePageState extends State<ExercisePage> {
-  PreviousPerformance? _previous;
-  bool _didLoad = false;
   bool _closing = false;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (_didLoad) return;
-    _didLoad = true;
-    RepositoryScope.maybeOf(context)?.sessions
-        .getPreviousPerformance(widget.exerciseId)
-        .then((previous) {
-          if (mounted && previous != null) setState(() => _previous = previous);
-        });
-  }
 
   /// The exercise left the workout, or the workout ended: leave its page.
   void _close() {
@@ -98,19 +86,25 @@ class _ExercisePageState extends State<ExercisePage> {
           _close();
           return const SizedBox.shrink();
         }
-        Widget body(SettingsState settings) => _ExerciseBody(
-          entry: entries[index],
-          index: index,
-          entries: entries,
-          next: nextEntryAfter(entries, index),
-          title: state.planTitle ?? 'Free workout',
-          isPlan: state.planTitle != null,
-          startTime: state.startTime ?? DateTime.now(),
-          lastSetAt: state.lastSetAt,
-          previous: _previous,
-          prefill: settings.prefillSets,
-          entryMode: settings.numberEntry,
-          effort: settings.effortScale,
+        // Last time's sets come as they read at this workout's gym.
+        Widget body(SettingsState settings) => WithExerciseAtGym(
+          exerciseId: widget.exerciseId,
+          gymId: state.gymId,
+          builder: (context, atGym) => _ExerciseBody(
+            entry: entries[index],
+            index: index,
+            entries: entries,
+            next: nextEntryAfter(entries, index),
+            title: state.planTitle ?? 'Free workout',
+            isPlan: state.planTitle != null,
+            startTime: state.startTime ?? DateTime.now(),
+            lastSetAt: state.lastSetAt,
+            previous: atGym?.previous,
+            atGym: atGym,
+            prefill: settings.prefillSets,
+            entryMode: settings.numberEntry,
+            effort: settings.effortScale,
+          ),
         );
         if (SettingsCubit.maybeOf(context) == null) {
           return body(SettingsState());
@@ -200,6 +194,7 @@ class _ExerciseBody extends StatefulWidget {
     required this.startTime,
     required this.lastSetAt,
     required this.previous,
+    required this.atGym,
     required this.prefill,
     required this.entryMode,
     required this.effort,
@@ -222,7 +217,12 @@ class _ExerciseBody extends StatefulWidget {
   /// When the workout's last set was logged: the rest clock counts from it.
   final DateTime? lastSetAt;
 
+  /// Last time's sets as they read at this workout's gym.
   final PreviousPerformance? previous;
+
+  /// The gym's side of things: how [previous] was converted, the machine's
+  /// setup there.
+  final ExerciseAtGym? atGym;
   final bool prefill;
   final NumberEntry entryMode;
   final EffortScale effort;
@@ -367,13 +367,19 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
       }
       final row = _rows[i];
       final ghost = widget.prefill
-          ? ghostForRow(
+          ? correctedGhost(
+              ghostForRow(
+                index: i,
+                previous: widget.previous,
+                planned: _plan,
+                lead: lead,
+                previousWeight: previousWeight,
+                previousReps: previousReps,
+              ),
               index: i,
-              previous: widget.previous,
-              planned: _plan,
-              lead: lead,
-              previousWeight: previousWeight,
-              previousReps: previousReps,
+              logged: sets,
+              atGym: widget.atGym,
+              unit: weightUnitOf(context),
             )
           : SetGhost.none;
       ghosts.add(ghost);
@@ -1090,6 +1096,7 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: <Widget>[
                         _position(context),
+                        ..._atGym(context),
                         _columnHeader(context),
                         for (var i = 0; i < _rows.length; i++)
                           KeyedSubtree(
@@ -1173,6 +1180,42 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
         onPress: controller.toggle,
       ),
     );
+  }
+
+  /// What this gym changes: last time's weights converted from another
+  /// gym's machine, and how the machine is set up here.
+  List<Widget> _atGym(BuildContext context) {
+    final atGym = widget.atGym;
+    final gym = atGym?.gym;
+    if (atGym == null || gym == null || !atGym.isMachine) return const [];
+    final conversion = atGym.conversion;
+    final logged = atGym.logged;
+    final top = logged?.topSet;
+    final name = widget.entry.exercise.name;
+    return <Widget>[
+      if (conversion != null && logged != null && top != null)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+          child: GymConversionCard(
+            exerciseId: _exerciseId,
+            exerciseName: name,
+            top: top,
+            date: logged.date,
+            conversion: conversion,
+            homeName: atGym.home?.name,
+          ),
+        ),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+        child: MachineSetupLine(
+          gymId: gym.id,
+          gymName: gym.name,
+          exerciseId: _exerciseId,
+          exerciseName: name,
+          note: atGym.setupNote,
+        ),
+      ),
+    ];
   }
 
   /// Where this exercise sits in the workout: the day, its place, the

@@ -3,11 +3,11 @@ import 'dart:collection';
 import 'package:hydrated_bloc/hydrated_bloc.dart';
 import 'package:tracker/data/repositories/tracker_repository.dart';
 import 'package:tracker/data/services/app_log.dart';
+import 'package:tracker/data/services/gym_factors.dart';
 import 'package:tracker/domain/models/gym.dart';
 import 'package:tracker/domain/models/workout_session.dart';
 import 'package:tracker/domain/models/workout_set.dart';
 import 'package:tracker/domain/models/workout_split.dart';
-import 'package:tracker/domain/services/analytics.dart';
 
 class ActiveSet {
   const ActiveSet({
@@ -869,7 +869,9 @@ class WorkoutCubit extends HydratedCubit<WorkoutState> {
     );
   }
 
-  Future<void> endWorkout() async {
+  /// Saves the workout and resets to idle. [effectiveReps] is the setting
+  /// the gyms' machine factors are worked out again with.
+  Future<void> endWorkout({bool effectiveReps = false}) async {
     final s = state;
     if (!s.isInProgress) return;
 
@@ -922,39 +924,13 @@ class WorkoutCubit extends HydratedCubit<WorkoutState> {
         return;
       }
 
-      // Keep per-exercise estimates fresh without changing the persisted
-      // session shape. Existing manually entered multipliers remain fallback.
-      // Best-effort only: the session is already persisted, so an estimation
-      // failure must neither lose it nor block the end-workout flow.
+      // Machines and cables learn how this gym compares with home. A
+      // workout at home moves the trend every other gym is measured
+      // against, so every gym is worked out again. Best-effort only: the
+      // session is already persisted, so an estimation failure must neither
+      // lose it nor block the end-workout flow.
       try {
-        if (completed.gymId != null) {
-          final primary = await repo.gyms.getPrimary();
-          if (primary != null && primary.id != completed.gymId) {
-            final gyms = await repo.gyms.getAll();
-            final sessions = await repo.sessions.getAll();
-            final estimates = estimateGymExerciseMultipliers(
-              sessions,
-              primary.id,
-              completed.gymId!,
-            );
-            final gym = gyms.firstWhere(
-              (candidate) => candidate.id == completed.gymId,
-            );
-            if (estimates.isNotEmpty) {
-              gym.perExerciseMultipliers = [
-                for (final entry in estimates.entries)
-                  GymExerciseMultiplier(
-                    exerciseId: entry.key,
-                    multiplier: entry.value,
-                  ),
-              ];
-              gym.multiplier =
-                  estimateGymMultiplier(sessions, primary.id, gym.id) ??
-                  gym.multiplier;
-              await repo.gyms.put(gym);
-            }
-          }
-        }
+        await refreshGymFactors(repo, effectiveReps: effectiveReps);
       } catch (error, stackTrace) {
         AppLog.error('workout-multiplier', error, stackTrace);
       }

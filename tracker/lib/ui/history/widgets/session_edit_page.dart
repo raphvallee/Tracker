@@ -3,7 +3,9 @@ import 'dart:math' as math;
 
 import 'package:forui/forui.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:tracker/data/repositories/tracker_repository.dart';
 import 'package:tracker/data/services/app_log.dart';
+import 'package:tracker/data/services/gym_factors.dart';
 import 'package:tracker/domain/models/exercise.dart';
 import 'package:tracker/domain/models/gym.dart';
 import 'package:tracker/domain/models/number_entry.dart';
@@ -869,6 +871,7 @@ class _SessionEditPageState extends State<SessionEditPage> {
     if (!await _commitOpen() || !mounted) return;
     final updated = _draft.applyTo(widget.session);
     final repo = RepositoryScope.maybeOf(context);
+    final effectiveReps = countsEffectiveReps(context);
     setState(() => _busy = true);
     try {
       await repo?.sessions.put(updated);
@@ -882,6 +885,9 @@ class _SessionEditPageState extends State<SessionEditPage> {
         duration: const Duration(seconds: 4),
       );
       return;
+    }
+    if (repo != null) {
+      unawaited(_refreshGymFactors(repo, effectiveReps: effectiveReps));
     }
     if (!mounted) return;
     Navigator.of(context).pop(SessionSaved(updated));
@@ -901,6 +907,7 @@ class _SessionEditPageState extends State<SessionEditPage> {
     );
     if (!confirmed || !mounted) return;
     final repo = RepositoryScope.maybeOf(context);
+    final effectiveReps = countsEffectiveReps(context);
     setState(() => _busy = true);
     try {
       if (repo != null && !await repo.sessions.delete(session.id)) {
@@ -916,6 +923,9 @@ class _SessionEditPageState extends State<SessionEditPage> {
         duration: const Duration(seconds: 4),
       );
       return;
+    }
+    if (repo != null) {
+      unawaited(_refreshGymFactors(repo, effectiveReps: effectiveReps));
     }
     if (!mounted) return;
     Navigator.of(context).pop(const SessionDeleted());
@@ -1921,3 +1931,17 @@ class _TimeSheetState extends State<_TimeSheet> {
 }
 
 double _lerp(double a, double b, double t) => a + (b - a) * t;
+
+/// Machines learn from the change. Best-effort and in the background: the
+/// workout is already saved, so neither a failure nor the wait may hold the
+/// page.
+Future<void> _refreshGymFactors(
+  TrackerRepository repo, {
+  required bool effectiveReps,
+}) async {
+  try {
+    await refreshGymFactors(repo, effectiveReps: effectiveReps);
+  } catch (error, stackTrace) {
+    AppLog.error('history-gym-factors', error, stackTrace);
+  }
+}

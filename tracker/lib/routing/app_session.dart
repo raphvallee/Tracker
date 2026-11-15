@@ -5,6 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:hydrated_bloc/hydrated_bloc.dart';
 import 'package:tracker/data/repositories/tracker_repository.dart';
 import 'package:tracker/data/services/app_log.dart';
+import 'package:tracker/data/services/gym_factors.dart';
 import 'package:tracker/data/services/sample_data.dart';
 import 'package:tracker/data/services/test_mode.dart';
 import 'package:tracker/domain/models/graph_config.dart';
@@ -58,6 +59,7 @@ class _AppSessionState extends State<AppSession> {
     if (widget.sandbox case (final repo, final sample)?) {
       _sandbox = repo;
       HydratedBloc.storage = sandboxStorage(widget.storage, sample);
+      _matchEffectiveReps(repo, HydratedBloc.storage);
     }
   }
 
@@ -86,6 +88,7 @@ class _AppSessionState extends State<AppSession> {
       final (repo, sample) = await widget.openSandbox();
       if (!mounted) return;
       HydratedBloc.storage = sandboxStorage(widget.storage, sample);
+      _matchEffectiveReps(repo, HydratedBloc.storage);
       setState(() {
         _sandbox = repo;
         _generation++;
@@ -97,6 +100,24 @@ class _AppSessionState extends State<AppSession> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  /// Sample data works its machine factors out without effective reps:
+  /// when the settings test mode carries over count them, they are worked
+  /// out again that way, in the background.
+  void _matchEffectiveReps(TrackerRepository repo, Storage storage) {
+    final saved = storage.read('SettingsCubit');
+    if (saved is! Map) return;
+    if (!SettingsState.fromJson(Map<String, dynamic>.from(saved))
+        .effectiveReps) {
+      return;
+    }
+    unawaited(
+      refreshGymFactors(repo, effectiveReps: true).catchError(
+        (Object error, StackTrace stackTrace) =>
+            AppLog.error('test-mode', error, stackTrace),
+      ),
+    );
   }
 
   Future<void> _close(TrackerRepository repo) async {

@@ -6,6 +6,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:tracker/domain/models/gym.dart';
 import 'package:tracker/domain/models/split_draft.dart';
 import 'package:tracker/domain/models/workout_split.dart';
+import 'package:tracker/domain/services/gym_equivalence.dart';
 import 'package:tracker/domain/services/set_prefill.dart';
 import 'package:tracker/domain/services/split_rotation.dart';
 import 'package:tracker/routing/tab_navigation.dart';
@@ -25,6 +26,7 @@ import 'package:tracker/ui/settings/view_models/settings_cubit.dart';
 import 'package:tracker/ui/splits/widgets/new_split_sheet.dart';
 import 'package:tracker/ui/workout/view_models/workout_cubit.dart';
 
+import 'exercise_at_gym.dart';
 import 'gym_picker.dart';
 import 'plan_bar.dart';
 import 'start_workout.dart';
@@ -48,6 +50,9 @@ class _StartViewState extends State<StartView> {
   List<SplitDayVisit> _visits = const [];
   List<Gym> _gyms = const [];
   Map<int, String> _names = const {};
+
+  /// The machines and cables: their weights differ from gym to gym.
+  Set<int> _machines = const {};
   bool _didLoad = false;
 
   /// The split shown in place of the current one, picked from the split
@@ -84,11 +89,15 @@ class _StartViewState extends State<StartView> {
       ..add(repo.gyms.watchAll().listen((gyms) => setState(() => _gyms = gyms)))
       ..add(
         repo.exercises.watchAll().listen(
-          (exercises) => setState(
-            () => _names = {
+          (exercises) => setState(() {
+            _names = {
               for (final exercise in exercises) exercise.id: exercise.title,
-            },
-          ),
+            };
+            _machines = {
+              for (final exercise in exercises)
+                if (convertsAcrossGyms(exercise.equipment)) exercise.id,
+            };
+          }),
         ),
       )
       ..add(
@@ -369,17 +378,52 @@ class _StartViewState extends State<StartView> {
             ],
           ),
           const SizedBox(height: 6),
-          for (final (i, exercise) in plan.indexed)
-            _exerciseRow(context, i, exercise, isLast: i == plan.length - 1),
+          // Last time's weights read as at the gym the workout starts at.
+          BlocSelector<WorkoutCubit, WorkoutState, int?>(
+            selector: (state) => state.nextGymId,
+            builder: (context, nextGymId) {
+              final gym = startGymOf(_gyms, nextGymId);
+              final conversions = [
+                for (final exercise in plan) _conversionOf(exercise, gym),
+              ];
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  if (gym != null && conversions.any((c) => c != null))
+                    _ConvertedNote(gym: gym.name),
+                  for (final (i, exercise) in plan.indexed)
+                    _exerciseRow(
+                      context,
+                      i,
+                      exercise,
+                      conversion: conversions[i],
+                      isLast: i == plan.length - 1,
+                    ),
+                ],
+              );
+            },
+          ),
         ],
       ],
     );
   }
 
+  /// How [exercise]'s last time carries to [gym]; null when it was done
+  /// there, or is not a machine.
+  GymConversion? _conversionOf(PlanExercise exercise, Gym? gym) =>
+      gymConversionOf(
+        converts: _machines.contains(exercise.exerciseId),
+        gyms: _gyms,
+        exerciseId: exercise.exerciseId,
+        fromGymId: _last[exercise.exerciseId]?.gymId,
+        toGymId: gym?.id,
+      );
+
   Widget _exerciseRow(
     BuildContext context,
     int index,
     PlanExercise exercise, {
+    required GymConversion? conversion,
     required bool isLast,
   }) {
     final theme = context.theme;
@@ -387,6 +431,9 @@ class _StartViewState extends State<StartView> {
       color: theme.colors.mutedForeground,
     );
     final top = _last[exercise.exerciseId]?.topSet;
+    final here = top == null || conversion == null
+        ? null
+        : convertedLoad(conversion, top.weight, weightUnitOf(context));
     return Container(
       constraints: const BoxConstraints(minHeight: 46),
       padding: const EdgeInsets.symmetric(vertical: 6),
@@ -418,7 +465,20 @@ class _StartViewState extends State<StartView> {
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-                if (top != null)
+                if (top != null && here != null) ...[
+                  Text(
+                    'Last ≈ ${formatWeight(context, here)} × '
+                    '${formatReps(top.reps)}',
+                    style: muted,
+                  ),
+                  Text(
+                    '${formatWeight(context, top.weight)} at '
+                    '${conversion!.from.name}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: muted,
+                  ),
+                ] else if (top != null)
                   Text(
                     'Last ${formatWeight(context, top.weight)} × '
                     '${formatReps(top.reps)}',
@@ -511,6 +571,48 @@ class _StartViewState extends State<StartView> {
       _shownSplitId = picked;
       _pickedDay = null;
     });
+  }
+}
+
+/// Says the machines' last times are converted for the gym the workout
+/// starts at.
+class _ConvertedNote extends StatelessWidget {
+  const _ConvertedNote({required this.gym});
+
+  final String gym;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = context.theme;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 4),
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+      decoration: BoxDecoration(
+        color: theme.colors.muted,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Padding(
+            padding: const EdgeInsets.only(top: 1),
+            child: Icon(
+              FLucideIcons.arrowRightLeft,
+              size: 14,
+              color: theme.colors.mutedForeground,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'At $gym, machine and cable weights are converted from the '
+              'gym you last did them at.',
+              style: theme.typography.body.xs,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

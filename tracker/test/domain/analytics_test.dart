@@ -24,6 +24,19 @@ void main() {
     });
   });
 
+  group('effective reps', () {
+    test('a rated set counts the reps it had left', () {
+      expect(effectiveRepsOf(8, 7), 11);
+      expect(effectiveRepsOf(8, 10), 8);
+      expect(effectiveRepsOf(8, 9.5), 8.5);
+    });
+
+    test('at most four in reserve, and a set without a rating as logged', () {
+      expect(effectiveRepsOf(8, 3), 12);
+      expect(effectiveRepsOf(8, null), 8);
+    });
+  });
+
   group('normalizedWeight (§2.3)', () {
     const multipliers = {1: 1.0, 2: 0.9};
 
@@ -250,66 +263,6 @@ void main() {
         ),
         isFalse,
       );
-    });
-  });
-
-  group('estimateGymMultiplier (§2.3)', () {
-    test('median of mean-ratio across shared exercises', () {
-      final sessions = [
-        _session(DateTime(2026, 1, 1), 1, [
-          _set(1, 100, 5, SetType.working),
-          _set(1, 100, 5, SetType.working),
-          _set(2, 50, 8, SetType.working),
-        ]),
-        _session(DateTime(2026, 1, 2), 2, [
-          _set(1, 110, 5, SetType.working),
-          _set(1, 110, 5, SetType.working),
-          _set(2, 60, 8, SetType.working),
-        ]),
-      ];
-      final estimate = estimateGymMultiplier(sessions, 1, 2);
-      expect(estimate, isNotNull);
-      expect(estimate!, closeTo(0.9090909, 0.001));
-    });
-
-    test('returns null with no shared exercises', () {
-      final sessions = [
-        _session(DateTime(2026, 1, 1), 1, [_set(1, 100, 5, SetType.working)]),
-        _session(DateTime(2026, 1, 2), 2, [_set(3, 40, 8, SetType.working)]),
-      ];
-      expect(estimateGymMultiplier(sessions, 1, 2), isNull);
-    });
-
-    test('recent observations dominate time-weighted estimate', () {
-      final sessions = [
-        _session(DateTime(2025, 1, 1), 1, [_set(1, 100, 5, SetType.working)]),
-        _session(DateTime(2025, 1, 1), 2, [_set(1, 200, 5, SetType.working)]),
-        _session(DateTime(2026, 1, 1), 1, [_set(1, 100, 5, SetType.working)]),
-        _session(DateTime(2026, 1, 1), 2, [_set(1, 100, 5, SetType.working)]),
-      ];
-      final result = estimateGymExerciseMultipliers(
-        sessions,
-        1,
-        2,
-        halfLife: const Duration(days: 30),
-        now: DateTime(2026, 1, 2),
-      );
-      expect(result[1], closeTo(1.0, 0.02));
-    });
-
-    test('estimates movement fallback for cold exercise', () {
-      final sessions = [
-        _session(DateTime(2026, 1, 1), 1, [_set(1, 100, 5, SetType.working)]),
-        _session(DateTime(2026, 1, 1), 2, [_set(1, 125, 5, SetType.working)]),
-      ];
-      final result = estimateGymExerciseMultipliers(
-        sessions,
-        1,
-        2,
-        exercises: const {1: 'push', 2: 'push'},
-      );
-      expect(result[1], closeTo(0.8, 0.001));
-      expect(result[2], closeTo(0.8, 0.001));
     });
   });
 }

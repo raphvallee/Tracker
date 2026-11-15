@@ -5,6 +5,7 @@ import 'package:tracker/domain/models/gym.dart';
 import 'package:tracker/domain/models/workout_session.dart';
 import 'package:tracker/domain/services/analytics.dart';
 import 'package:tracker/domain/services/graph_series.dart';
+import 'package:tracker/domain/services/gym_equivalence.dart';
 
 /// What the graphs are drawn from: every session, exercise and gym, read
 /// once. Each graph's series is worked out once per range and day.
@@ -28,17 +29,12 @@ class AnalyticsData {
   final List<Exercise> exercises;
   final List<Gym> gyms;
 
-  late final Map<int, double> multipliers = {
-    for (final gym in gyms) gym.id: gym.multiplier,
-  };
-
-  late final PerGymExerciseMultipliers exerciseMultipliers = {
-    for (final gym in gyms)
-      gym.id: {
-        for (final value in gym.perExerciseMultipliers)
-          value.exerciseId: value.multiplier,
-      },
-  };
+  /// Machine and cable weights at other gyms, brought home by their
+  /// factors; plates and dumbbells weigh the same anywhere.
+  late final PerGymExerciseMultipliers exerciseMultipliers = machineFactors(
+    gyms,
+    exercises,
+  );
 
   late final Map<int, String> gymNames = {
     for (final gym in gyms) gym.id: gym.name,
@@ -80,7 +76,6 @@ class AnalyticsData {
       metric: metric,
       range: range,
       now: at,
-      multipliers: multipliers,
       exerciseMultipliers: exerciseMultipliers,
     );
   }

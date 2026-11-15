@@ -35,8 +35,9 @@ schema changes):
 | `description` | `String?` | |
 | `isPrimary` | `bool` | primary gym = baseline, multiplier 1.0 |
 | `order` | `int` | |
-| `multiplier` | `double` | weight-equivalence vs. primary gym |
-| `perExerciseMultipliers` | `List<GymExerciseMultiplier>` | embedded rows |
+| `multiplier` | `double` | the gym's overall machine factor vs. the primary gym (median of its estimates); machines and cables not measured here go by it |
+| `perExerciseMultipliers` | `List<GymExerciseMultiplier>` | embedded rows, one per machine or cable exercise (estimated or set by hand) |
+| `machineSetups` | `List<GymMachineSetup>` | embedded rows: how each machine is set up at this gym |
 
 ### `WorkoutSession` (`tracker/lib/domain/models/workout_session.dart`)
 
@@ -69,7 +70,8 @@ schema changes):
 | `WorkoutSplitDay` | `title String`, `description String`, `exercises List<ExerciseItem>`, `order int` |
 | `ExerciseItem` | `exerciseId int`, `order int`, `sets List<PlannedSet>`, plus legacy `targetSets int?`, `targetReps int?`, `restSeconds int?` (no longer written by the editor) |
 | `PlannedSet` | `order int`, `minReps int` (fixed reps), `maxReps int?` (null = fixed, non-null = range `minReps..maxReps`), `isWarmup bool` (planned warm-up; older sets read false) |
-| `GymExerciseMultiplier` | `exerciseId int`, `multiplier double` |
+| `GymExerciseMultiplier` | `exerciseId int`, `multiplier double` (the factor in use), `manual bool` (set by hand: estimates never overwrite `multiplier`; older rows read false), `estimate double?` (latest estimate; older rows read null and count `multiplier` as the estimate), `samples int` (workouts the estimate came from), `spread double` (how far they typically sit from it) |
+| `GymMachineSetup` | `exerciseId int`, `note String` ("Seat 4, back pad 2") |
 
 ## Enums
 

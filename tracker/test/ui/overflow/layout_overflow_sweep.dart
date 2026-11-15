@@ -24,6 +24,7 @@ import 'package:tracker/domain/models/workout_session.dart';
 import 'package:tracker/domain/models/workout_set.dart';
 import 'package:tracker/domain/models/workout_split.dart';
 import 'package:tracker/domain/services/workout_dates.dart';
+import 'package:tracker/domain/services/gym_equivalence.dart';
 import 'package:tracker/main.dart';
 import 'package:tracker/ui/analytics/view_models/analytics_data.dart';
 import 'package:tracker/ui/analytics/widgets/graph_editor.dart';
@@ -49,7 +50,9 @@ import 'package:tracker/ui/splits/widgets/splits_page.dart';
 import 'package:tracker/ui/workout/view_models/workout_cubit.dart';
 import 'package:tracker/ui/workout/widgets/exercise_page.dart';
 import 'package:tracker/ui/workout/widgets/exercise_picker_page.dart';
+import 'package:tracker/ui/workout/widgets/gym_factor_sheet.dart';
 import 'package:tracker/ui/workout/widgets/gym_picker.dart';
+import 'package:tracker/ui/workout/widgets/machine_setup.dart';
 import 'package:tracker/ui/workout/widgets/workout_page.dart';
 
 import '../../../testing/fakes/in_memory_storage.dart';
@@ -321,6 +324,38 @@ Future<void> sweepSize(WidgetTester tester, String label, Size size) async {
       sweepFixtures.allGyms,
       currentId: sweepFixtures.allGyms.first.id,
       oneWorkoutOnly: true,
+    ),
+    root: true,
+  );
+  await openAndClose(
+    'Gym factor sheet',
+    () => showGymFactorSheet(
+      pageContext,
+      exerciseId: sweepFixtures.benchId,
+      exerciseName: 'Leg Press',
+      conversion: GymConversion(
+        from: sweepFixtures.allGyms.first,
+        to: sweepFixtures.allGyms.last,
+        fromFactor: GymFactor.home,
+        toFactor: gymFactorOf(
+          sweepFixtures.allGyms.last,
+          sweepFixtures.benchId,
+        ),
+      ),
+      fromKilograms: 180,
+      homeName: sweepFixtures.allGyms.first.name,
+    ),
+    root: true,
+  );
+  await openAndClose(
+    'Machine setup sheet',
+    () => showMachineSetupSheet(
+      pageContext,
+      gymId: sweepFixtures.allGyms.last.id,
+      gymName: sweepFixtures.allGyms.last.name,
+      exerciseId: sweepFixtures.benchId,
+      exerciseName: 'Leg Press',
+      note: 'Seat 4, back pad 2',
     ),
     root: true,
   );

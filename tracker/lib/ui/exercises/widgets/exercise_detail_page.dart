@@ -2,15 +2,18 @@ import 'package:forui/forui.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:tracker/domain/models/exercise.dart';
 import 'package:tracker/domain/models/graph_config.dart';
+import 'package:tracker/domain/models/gym.dart';
 import 'package:tracker/domain/models/workout_session.dart';
 import 'package:tracker/domain/services/analytics.dart';
 import 'package:tracker/domain/services/graph_series.dart';
+import 'package:tracker/domain/services/gym_equivalence.dart';
 import 'package:tracker/ui/analytics/widgets/graph_panel.dart';
 import 'package:tracker/ui/core/ui/custom_app_bar.dart';
 import 'package:tracker/ui/core/ui/custom_route.dart';
 import 'package:tracker/ui/core/ui/max_width.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
 import 'package:tracker/ui/core/ui/weight_format.dart';
+import 'package:tracker/ui/exercises/widgets/across_gyms.dart';
 import 'package:tracker/ui/exercises/widgets/new_exercise_page.dart';
 
 class ExerciseDetailPage extends StatefulWidget {
@@ -23,7 +26,6 @@ class ExerciseDetailPage extends StatefulWidget {
 }
 
 class _ExerciseDetailPageState extends State<ExerciseDetailPage> {
-  Map<int, double> _multipliers = const {};
   bool _didLoad = false;
   final AnalyticsService _analytics = AnalyticsService();
   late Exercise _exercise = widget.exercise;
@@ -36,6 +38,8 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage> {
     revision: null,
   );
   GraphSeries? _best1rm;
+  List<WorkoutSession> _sessions = const [];
+  List<Gym> _gyms = const [];
 
   @override
   void didChangeDependencies() {
@@ -52,17 +56,12 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage> {
     final gyms = await repo?.gyms.getAll() ?? const [];
     if (!mounted) return;
     setState(() {
-      _multipliers = {for (final g in gyms) g.id: g.multiplier};
-      final exerciseMultipliers = <int, Map<int, double>>{
-        for (final gym in gyms)
-          gym.id: {
-            for (final value in gym.perExerciseMultipliers)
-              value.exerciseId: value.multiplier,
-          },
-      };
+      _sessions = sessions;
+      _gyms = gyms;
+      final exerciseMultipliers = machineFactors(gyms, [_exercise]);
       _snapshot = _analytics.snapshot(
         sessions: sessions,
-        multipliers: _multipliers,
+        multipliers: const {},
         exerciseMultipliers: exerciseMultipliers,
         exerciseId: widget.exercise.id,
         revision: sessions.length,
@@ -73,7 +72,6 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage> {
         metric: GraphMetric.best1rm,
         range: GraphTimeframe.all,
         now: DateTime.now(),
-        multipliers: _multipliers,
         exerciseMultipliers: exerciseMultipliers,
       );
     });
@@ -188,6 +186,15 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage> {
                   ),
                   const SizedBox(height: 8),
                   if (best1rm != null) GraphPanel(series: best1rm),
+                  if (AcrossGyms.showsFor(exercise, _gyms)) ...[
+                    const SizedBox(height: 24),
+                    AcrossGyms(
+                      exercise: exercise,
+                      sessions: _sessions,
+                      gyms: _gyms,
+                      onChanged: _load,
+                    ),
+                  ],
                 ],
               ),
             ),
