@@ -18,6 +18,7 @@ import 'package:tracker/ui/workout/view_models/workout_cubit.dart';
 import 'package:tracker/ui/core/ui/motion.dart';
 
 import 'elapsed_clock.dart';
+import 'exercise_at_gym.dart';
 import 'exercise_page.dart';
 import 'exercise_picker_page.dart';
 import 'finish_workout.dart';
@@ -105,11 +106,11 @@ class WorkoutOverview extends StatelessWidget {
       // The set the page opens on rides on the side: "Set 3".
       return _WithPrevious(
         exerciseId: upNext.exercise.exerciseId,
-        builder: (context, previous) => AccentButton(
+        builder: (context, atGym) => AccentButton(
           large: true,
           label: 'Continue ${upNext.exercise.name}',
           labelKey: ('continue', upNext.exercise.exerciseId),
-          trailing: _nextSetName(upNext, prefill ? previous : null),
+          trailing: _nextSetName(upNext, prefill ? atGym?.previous : null),
           onPress: () => pushTo<void>(
             context,
             ExercisePage(exerciseId: upNext.exercise.exerciseId),
@@ -507,13 +508,15 @@ class _EntryTile extends StatelessWidget {
       // the bar before its turn.
       subtitle = _WithPrevious(
         exerciseId: entry.exercise.exerciseId,
-        builder: (context, previous) {
-          final top = entry.sets.isEmpty ? previous?.topSet : null;
+        builder: (context, atGym) {
+          final top = entry.sets.isEmpty ? atGym?.previous?.topSet : null;
           final detail = _upcomingDetail(entry);
+          // Converted from another gym's machine: about that much here.
+          final about = atGym?.conversion == null ? '' : '≈ ';
           return Text(
             top == null
                 ? detail
-                : '$detail, last ${formatWeight(context, top.weight)} × '
+                : '$detail, last $about${formatWeight(context, top.weight)} × '
                       '${formatReps(top.reps)}',
             style: muted,
             maxLines: 1,
@@ -693,46 +696,19 @@ String? _nextSetName(WorkoutEntry entry, PreviousPerformance? previous) {
   return 'Set ${entry.workingLogged + 1}';
 }
 
-/// Builds with the sets [exerciseId] got in the last session that logged
-/// it: null until they load, and when no session did.
-class _WithPrevious extends StatefulWidget {
+/// Builds with what [exerciseId] did last time as it reads at the
+/// workout's gym ([WithExerciseAtGym]): null until it loads.
+class _WithPrevious extends StatelessWidget {
   const _WithPrevious({required this.exerciseId, required this.builder});
 
   final int exerciseId;
-  final Widget Function(BuildContext context, PreviousPerformance? previous)
-  builder;
+  final Widget Function(BuildContext context, ExerciseAtGym? atGym) builder;
 
   @override
-  State<_WithPrevious> createState() => _WithPreviousState();
-}
-
-class _WithPreviousState extends State<_WithPrevious> {
-  Future<PreviousPerformance?>? _previous;
-  int? _loadedFor;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _load();
-  }
-
-  @override
-  void didUpdateWidget(covariant _WithPrevious oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    _load();
-  }
-
-  void _load() {
-    if (_loadedFor == widget.exerciseId) return;
-    _loadedFor = widget.exerciseId;
-    _previous = RepositoryScope.maybeOf(context)?.sessions
-        .getPreviousPerformance(widget.exerciseId);
-  }
-
-  @override
-  Widget build(BuildContext context) => FutureBuilder<PreviousPerformance?>(
-    future: _previous,
-    builder: (context, snapshot) => widget.builder(context, snapshot.data),
+  Widget build(BuildContext context) => WithExerciseAtGym(
+    exerciseId: exerciseId,
+    gymId: context.select((WorkoutCubit cubit) => cubit.state.gymId),
+    builder: builder,
   );
 }
 
@@ -752,15 +728,21 @@ class _NextSet extends StatelessWidget {
       builder: (context, loaded) {
         final index = entry.sets.length;
         final last = entry.sets.isEmpty ? null : entry.sets.last;
-        final previous = prefill ? loaded : null;
+        final previous = prefill ? loaded?.previous : null;
         final lead = leadingWarmupRows(entry.exercise.sets, previous);
-        final ghost = ghostForRow(
+        final ghost = correctedGhost(
+          ghostForRow(
+            index: index,
+            previous: previous,
+            planned: entry.exercise.sets,
+            lead: lead,
+            previousWeight: last?.weight,
+            previousReps: last?.reps,
+          ),
           index: index,
-          previous: previous,
-          planned: entry.exercise.sets,
-          lead: lead,
-          previousWeight: last?.weight,
-          previousReps: last?.reps,
+          logged: entry.sets,
+          atGym: prefill ? loaded : null,
+          unit: weightUnitOf(context),
         );
         final weight = ghost.weight;
         final reps = ghost.reps;

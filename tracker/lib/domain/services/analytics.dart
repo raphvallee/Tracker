@@ -28,6 +28,17 @@ Map<int, double> flattenExerciseMultipliers(
 double epley1rm({required double weight, required double reps}) =>
     reps <= 1 ? weight : weight * (1 + reps / 30);
 
+/// Reps in reserve count up to this many: a set rated easier than RPE 6 is
+/// too far from failure for its rating to say much.
+const double maxRepsInReserve = 4;
+
+/// [reps] plus the reps a set rated [rpe] had left in reserve (10 minus it,
+/// at most [maxRepsInReserve]): 8 reps at RPE 7 count as 11. A set without
+/// a rating counts its reps.
+double effectiveRepsOf(double reps, double? rpe) => rpe == null
+    ? reps
+    : reps + math.min(maxRepsInReserve, math.max(0.0, 10 - rpe));
+
 class ProgressionPoint {
   const ProgressionPoint({required this.date, required this.value});
 
@@ -387,102 +398,4 @@ ExerciseSummary exerciseSummary(
     if (volume > peak) peak = volume;
   }
   return ExerciseSummary(best1rm: best, peakVolume: peak, sessionCount: count);
-}
-
-double? estimateGymMultiplier(
-  List<WorkoutSession> sessions,
-  int? primaryGymId,
-  int gymId, {
-  Duration? halfLife,
-  DateTime? now,
-}) {
-  final estimates = estimateGymExerciseMultipliers(
-    sessions,
-    primaryGymId,
-    gymId,
-    halfLife: halfLife ?? const Duration(days: 180),
-    now: now,
-  );
-  if (estimates.isEmpty) return null;
-  return _median(estimates.values.toList());
-}
-
-Map<int, double> estimateGymExerciseMultipliers(
-  List<WorkoutSession> sessions,
-  int? primaryGymId,
-  int gymId, {
-  Duration halfLife = const Duration(days: 180),
-  DateTime? now,
-  Map<int, Object>? exercises,
-}) {
-  final latest = now ?? _latestSessionDate(sessions) ?? DateTime.now();
-  final primary = <int, List<_WeightedValue>>{};
-  final secondary = <int, List<_WeightedValue>>{};
-  for (final session in sessions) {
-    final bucket = session.gymId == primaryGymId
-        ? primary
-        : (session.gymId == gymId ? secondary : null);
-    if (bucket == null) continue;
-    final ageDays = latest.difference(session.startTime).inHours / 24;
-    final weight = halfLife.inHours <= 0
-        ? 1.0
-        : _expDecay(ageDays < 0 ? 0 : ageDays, halfLife.inHours / 24);
-    for (final set in _workingSets(session)) {
-      bucket
-          .putIfAbsent(set.exerciseId, () => [])
-          .add(_WeightedValue(set.weight, weight));
-    }
-  }
-  final result = <int, double>{};
-  final ratiosByGroup = <Object, List<double>>{};
-  for (final entry in primary.entries) {
-    final other = secondary[entry.key];
-    if (other == null || other.isEmpty) continue;
-    final a = _weightedMean(entry.value);
-    final b = _weightedMean(other);
-    if (a > 0 && b > 0) {
-      final ratio = a / b;
-      result[entry.key] = ratio;
-      final group = exercises?[entry.key];
-      if (group != null) ratiosByGroup.putIfAbsent(group, () => []).add(ratio);
-    }
-  }
-  if (exercises != null) {
-    for (final entry in exercises.entries) {
-      if (result.containsKey(entry.key)) continue;
-      final fallback = ratiosByGroup[entry.value];
-      if (fallback != null && fallback.isNotEmpty) {
-        result[entry.key] = _median(fallback);
-      }
-    }
-  }
-  return result;
-}
-
-class _WeightedValue {
-  const _WeightedValue(this.value, this.weight);
-  final double value;
-  final double weight;
-}
-
-double _weightedMean(List<_WeightedValue> values) {
-  var total = 0.0;
-  var weights = 0.0;
-  for (final value in values) {
-    total += value.value * value.weight;
-    weights += value.weight;
-  }
-  return weights == 0 ? 0 : total / weights;
-}
-
-double _expDecay(double ageDays, double halfLifeDays) =>
-    ageDays == 0 ? 1 : math.pow(0.5, ageDays / halfLifeDays).toDouble();
-
-DateTime? _latestSessionDate(List<WorkoutSession> sessions) => sessions.isEmpty
-    ? null
-    : sessions.map((s) => s.startTime).reduce((a, b) => a.isAfter(b) ? a : b);
-
-double _median(List<double> values) {
-  final sorted = [...values]..sort();
-  return sorted[sorted.length ~/ 2];
 }

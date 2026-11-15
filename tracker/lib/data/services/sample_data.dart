@@ -1,11 +1,13 @@
 import 'dart:math' as math;
 
 import 'package:tracker/data/repositories/tracker_repository.dart';
+import 'package:tracker/data/services/gym_factors.dart';
 import 'package:tracker/data/services/seed.dart';
 import 'package:tracker/domain/models/gym.dart';
 import 'package:tracker/domain/models/workout_session.dart';
 import 'package:tracker/domain/models/workout_set.dart';
 import 'package:tracker/domain/models/workout_split.dart';
+import 'package:tracker/domain/services/gym_equivalence.dart';
 
 /// What [seedSampleData] made, for what is set up around it (test mode's
 /// graphs, its current split).
@@ -115,15 +117,17 @@ Future<SampleData> seedSampleData(
 }) async {
   final today = now ?? DateTime.now();
   await seedExercisesIfNeeded(repo);
-  final ids = {
-    for (final exercise in await repo.exercises.getAll())
-      exercise.title: exercise.id,
+  final library = await repo.exercises.getAll();
+  final ids = {for (final exercise in library) exercise.title: exercise.id};
+  final machines = {
+    for (final exercise in library)
+      if (convertsAcrossGyms(exercise.equipment)) exercise.title,
   };
 
   final home = Gym(name: 'Iron Temple', isPrimary: true, order: 0);
   final away = Gym(
     name: 'Hotel gym',
-    description: 'Lighter plates: weights read 10% heavy',
+    description: 'Machines and cables read 10% heavy',
     order: 1,
     multiplier: 0.9,
   );
@@ -206,8 +210,9 @@ Future<SampleData> seedSampleData(
       final l = _lifts[name]!;
       final oneRm = lift(name, daysAgo);
       final reps = (min + random.nextInt((max ?? min) - min + 1)).toDouble();
-      // At the away gym the plates read heavier for the same effort.
-      final scale = atAway ? 1 / 0.9 : 1.0;
+      // At the away gym machines and cables read heavier for the same
+      // effort; plates weigh the same anywhere.
+      final scale = atAway && machines.contains(name) ? 1 / 0.9 : 1.0;
       final working = round(
         oneRm / (1 + reps / 30) * (0.95 + random.nextDouble() * 0.04) * scale,
         l.step,
@@ -290,6 +295,7 @@ Future<SampleData> seedSampleData(
     }
   }
   await repo.sessions.putAll(sessions);
+  await refreshGymFactors(repo, now: today);
 
   return SampleData(
     exerciseIds: ids,

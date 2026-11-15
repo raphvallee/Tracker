@@ -9,6 +9,7 @@ import 'package:tracker/ui/core/ui/icon_button.dart';
 import 'package:tracker/ui/core/ui/item_card.dart';
 import 'package:tracker/ui/core/ui/sheet_surface.dart';
 import 'package:tracker/ui/core/ui/weight_format.dart';
+import 'package:tracker/ui/settings/view_models/settings_cubit.dart';
 import 'package:tracker/ui/workout/view_models/workout_cubit.dart';
 
 import 'workout_entries.dart';
@@ -68,7 +69,7 @@ Future<void> finishWorkout(
   if (!context.mounted) return;
   switch (choice) {
     case _Save():
-      await cubit.endWorkout();
+      await cubit.endWorkout(effectiveReps: countsEffectiveReps(context));
     case _Discard():
       if (await confirmDiscardWorkout(context) && context.mounted) {
         await cubit.discardWorkout();

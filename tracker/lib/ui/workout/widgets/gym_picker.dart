@@ -227,6 +227,9 @@ class _EditGymSheetState extends State<EditGymSheet> {
       multiplier: widget.initial.isPrimary
           ? 1.0
           : double.tryParse(_multiplier.text.trim()) ?? 1.0,
+      // What this sheet does not edit stays as it was.
+      perExerciseMultipliers: widget.initial.perExerciseMultipliers,
+      machineSetups: widget.initial.machineSetups,
     )..id = widget.initial.id;
 
     final existing = await widget.getExistingGyms?.call() ?? const <Gym>[];
@@ -283,12 +286,13 @@ class _EditGymSheetState extends State<EditGymSheet> {
               label: Text(
                 widget.initial.isPrimary
                     ? 'Multiplier (primary = ×1.0)'
-                    : 'Weight multiplier',
+                    : 'Machine factor',
               ),
               description: Text(
                 widget.initial.isPrimary
                     ? 'The primary gym is the fixed baseline.'
-                    : 'Scales logged weights to the primary gym.',
+                    : 'Converts machine and cable weights to the primary '
+                          'gym, for machines not measured here yet.',
               ),
               error: _multiplierError == null ? null : Text(_multiplierError!),
             ),

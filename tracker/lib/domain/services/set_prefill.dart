@@ -1,11 +1,21 @@
+import 'dart:math' as math;
+
 import 'package:tracker/domain/models/workout_set.dart';
 import 'package:tracker/domain/models/workout_split.dart';
+import 'package:tracker/domain/services/analytics.dart';
 
 /// The sets one exercise got in the last session that logged it.
 class PreviousPerformance {
-  const PreviousPerformance({required this.date, required this.sets});
+  const PreviousPerformance({
+    required this.date,
+    required this.sets,
+    this.gymId,
+  });
 
   final DateTime date;
+
+  /// The gym it was done at; null for sessions logged without one.
+  final int? gymId;
 
   /// In logged order.
   final List<WorkoutSet> sets;
@@ -34,6 +44,68 @@ class PreviousPerformance {
     }
     return top;
   }
+
+  /// The same sets with each weight passed through [weight]: how they read
+  /// at another gym.
+  PreviousPerformance withWeights(double Function(double kilograms) weight) =>
+      PreviousPerformance(
+        date: date,
+        gymId: gymId,
+        sets: [
+          for (final set in sets)
+            WorkoutSet(
+              exerciseId: set.exerciseId,
+              weight: weight(set.weight),
+              reps: set.reps,
+              type: set.type,
+              order: set.order,
+              rpe: set.rpe,
+            ),
+        ],
+      );
+}
+
+/// How far today's sets landed from the weights last time's suggested: the
+/// latest logged working set ([logged], by row) over last time's set at its
+/// row ([last]), when that was a working set too. 1 when none compares. The
+/// pending rows carry it, so a first set heavier than the guess for this gym
+/// brings the rest along. With [effectiveReps], a set rated very easy or
+/// very hard moves them too (see [_effortCorrection]).
+double loggedCorrection(
+  List<({double weight, double reps, double? rpe, bool warmup})> logged,
+  List<WorkoutSet> last, {
+  bool effectiveReps = false,
+}) {
+  for (var i = math.min(logged.length, last.length) - 1; i >= 0; i--) {
+    final now = logged[i];
+    final then = last[i];
+    if (now.warmup || then.isWarmup) continue;
+    if (now.weight <= 0 || then.weight <= 0) return 1;
+    final effort = effectiveReps
+        ? _effortCorrection(now.reps, now.rpe, then.rpe)
+        : 1.0;
+    return (now.weight / then.weight * effort).clamp(0.5, 2.0);
+  }
+  return 1;
+}
+
+/// Ratings at or past these say the weight was off, not a usual day.
+const double _easyRpe = 6;
+const double _hardRpe = 10;
+
+/// What a working set logged without a rating is taken to have felt like.
+const double _typicalRpe = 8;
+
+/// How much more the next sets can take after a set of [reps] rated [rpe],
+/// against last time's rating ([expected]; [_typicalRpe] without one), both
+/// read as effective reps ([effectiveRepsOf]): RPE 6 where 8 was expected
+/// makes 10 reps count as 14 against 12, so about 5% more. 1 unless the set
+/// was rated very easy or very hard: a rating in between is a usual day.
+double _effortCorrection(double reps, double? rpe, double? expected) {
+  if (rpe == null || (rpe > _easyRpe && rpe < _hardRpe)) return 1;
+  double capacity(double rating) =>
+      epley1rm(weight: 1, reps: effectiveRepsOf(reps, rating));
+  return capacity(rpe) / capacity(expected ?? _typicalRpe);
 }
 
 /// Placeholder values for a set row that is not logged yet.

@@ -16,8 +16,8 @@ class SettingsState {
     // effort scale, the current split and when splits were last picked. Payloads written before versioning have no 'v' key and
     // read as v1. v3 adds the range every graph shows; its graphs each name
     // an exercise (older ones without one are dropped). v4 adds how the
-    // Exercises tab is laid out. Unknown future versions fall back to
-    // defaults instead of crashing.
+    // Exercises tab is laid out. v5 adds effective reps. Unknown future
+    // versions fall back to defaults instead of crashing.
     switch (json['v'] as int? ?? 1) {
       case 1:
         return _fromV1(json);
@@ -27,6 +27,8 @@ class SettingsState {
         return _fromV3(json);
       case 4:
         return _fromV4(json);
+      case 5:
+        return _fromV5(json);
       default:
         return SettingsState();
     }
@@ -50,6 +52,7 @@ class SettingsState {
     List<GraphConfig> graphs = const [],
     this.graphRange = GraphTimeframe.last90Days,
     this.exercisesLayout = ExercisesLayout.rows,
+    this.effectiveReps = false,
   }) : splitsUsedAt = Map.unmodifiable(splitsUsedAt),
        graphs = List.unmodifiable(graphs);
 
@@ -144,6 +147,13 @@ class SettingsState {
             ExercisesLayout.rows,
       );
 
+  static SettingsState _fromV5(Map<String, dynamic> json) => _fromV4(json)
+      .copyWith(
+        effectiveReps: json['effectiveReps'] is bool
+            ? json['effectiveReps'] as bool
+            : false,
+      );
+
   static Map<int, DateTime> _splitsUsedAt(Object? json) {
     if (json is! Map) return const {};
     return {
@@ -190,6 +200,11 @@ class SettingsState {
   /// How the Exercises tab lays out the library.
   final ExercisesLayout exercisesLayout;
 
+  /// Rated sets also count the reps they had left in reserve: machine
+  /// factors across gyms and the sets after a very easy or very hard one
+  /// read effort, not only weight and reps.
+  final bool effectiveReps;
+
   SettingsState copyWith({
     WeightUnit? unit,
     bool? notificationsEnabled,
@@ -208,6 +223,7 @@ class SettingsState {
     List<GraphConfig>? graphs,
     GraphTimeframe? graphRange,
     ExercisesLayout? exercisesLayout,
+    bool? effectiveReps,
   }) {
     return SettingsState(
       unit: unit ?? this.unit,
@@ -230,6 +246,7 @@ class SettingsState {
       graphs: graphs ?? this.graphs,
       graphRange: graphRange ?? this.graphRange,
       exercisesLayout: exercisesLayout ?? this.exercisesLayout,
+      effectiveReps: effectiveReps ?? this.effectiveReps,
     );
   }
 
@@ -252,7 +269,8 @@ class SettingsState {
       heavyWeightConfirmed == other.heavyWeightConfirmed &&
       _listEquals(graphs, other.graphs) &&
       graphRange == other.graphRange &&
-      exercisesLayout == other.exercisesLayout;
+      exercisesLayout == other.exercisesLayout &&
+      effectiveReps == other.effectiveReps;
 
   @override
   int get hashCode => Object.hash(
@@ -275,6 +293,7 @@ class SettingsState {
     Object.hashAll(graphs),
     graphRange,
     exercisesLayout,
+    effectiveReps,
   );
 
   static const _unset = Object();
@@ -296,7 +315,7 @@ class SettingsState {
   }
 
   Map<String, dynamic> toJson() => {
-    'v': 4,
+    'v': 5,
     'unit': unit.name,
     'notificationsEnabled': notificationsEnabled,
     'analyticsEnabled': analyticsEnabled,
@@ -317,6 +336,7 @@ class SettingsState {
     'graphs': graphs.map((graph) => graph.toJson()).toList(),
     'graphRange': graphRange.name,
     'exercisesLayout': exercisesLayout.name,
+    'effectiveReps': effectiveReps,
   };
 }
 
@@ -417,6 +437,9 @@ class SettingsCubit extends HydratedCubit<SettingsState> {
   void setExercisesLayout(ExercisesLayout layout) =>
       emit(state.copyWith(exercisesLayout: layout));
 
+  void setEffectiveReps(bool value) =>
+      emit(state.copyWith(effectiveReps: value));
+
   void removeGraph(int index) {
     if (index < 0 || index >= state.graphs.length) return;
     final graphs = [...state.graphs]..removeAt(index);
@@ -438,3 +461,8 @@ class SettingsCubit extends HydratedCubit<SettingsState> {
     }
   }
 }
+
+/// Whether rated sets count their reps in reserve
+/// ([SettingsState.effectiveReps]); off without settings.
+bool countsEffectiveReps(BuildContext context) =>
+    SettingsCubit.maybeOf(context)?.state.effectiveReps ?? false;

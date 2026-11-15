@@ -82,6 +82,20 @@ void main() {
     expect(cubit.state.showHeavyWeightWarning, isFalse);
     await tapText(tester, 'Confirm heavy weights');
     expect(cubit.state.showHeavyWeightWarning, isTrue, reason: 'back on');
+
+    // Off by default; its example follows the effort scale.
+    expect(cubit.state.effectiveReps, isFalse);
+    await tester.ensureVisible(find.text('Effective reps'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text(
+        'Rated sets count the reps left in them: 8 reps with 3 in reserve '
+        'count as 11',
+      ),
+      findsOneWidget,
+    );
+    await tapText(tester, 'Effective reps');
+    expect(cubit.state.effectiveReps, isTrue);
   });
 
   testWidgets('splits page edits the rep target new exercises start at', (

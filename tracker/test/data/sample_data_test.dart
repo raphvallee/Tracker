@@ -9,6 +9,7 @@ import 'package:tracker/domain/models/gym.dart';
 import 'package:tracker/domain/models/workout_session.dart';
 import 'package:tracker/domain/models/workout_split.dart';
 import 'package:tracker/domain/services/graph_series.dart';
+import 'package:tracker/domain/services/gym_equivalence.dart';
 import 'package:tracker/domain/services/split_rotation.dart';
 
 import '../../testing/test_helpers.dart';
@@ -36,6 +37,16 @@ void main() {
     expect(exercises, isNotEmpty);
     expect(gyms.map((g) => g.name), ['Iron Temple', 'Hotel gym']);
     expect(gyms.where((g) => g.isPrimary), hasLength(1));
+    // The hotel gym's machines and cables read 10% heavy, and are measured
+    // so; its plates are not.
+    final hotel = gyms.firstWhere((g) => !g.isPrimary);
+    final legPress = gymFactorOf(hotel, sample.exerciseIds['Leg Press']!);
+    expect(legPress.source, FactorSource.estimated);
+    expect(legPress.value, closeTo(0.9, 0.05));
+    expect(
+      gymFactorOf(hotel, sample.exerciseIds['Bench Press']!).source,
+      FactorSource.gym,
+    );
     expect(splits.map((s) => s.title), ['Push Pull Legs', 'Upper Lower']);
     expect(sample.currentSplitId, splits.first.id);
 
