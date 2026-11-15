@@ -122,7 +122,7 @@ class WorkoutOverview extends StatelessWidget {
         large: true,
         label: 'Finish workout',
         labelKey: 'finish',
-        onPress: () => finishWorkout(context),
+        onPress: () => _finish(context),
       );
     }
     return AccentButton(
@@ -157,6 +157,13 @@ class WorkoutOverview extends StatelessWidget {
     pushTo<void>(context, ExercisePage(exerciseId: exercise.id));
   }
 }
+
+/// Finish from the overview: an open exercise picked in the sheet opens
+/// over it.
+Future<void> _finish(BuildContext context) => finishWorkout(
+  context,
+  openExercise: (id) => pushTo<void>(context, ExercisePage(exerciseId: id)),
+);
 
 class _Header extends StatelessWidget {
   const _Header({required this.overview});
@@ -200,7 +207,7 @@ class _Header extends StatelessWidget {
                       variant: .outline,
                       size: .sm,
                       mainAxisSize: .min,
-                      onPress: () => finishWorkout(context),
+                      onPress: () => _finish(context),
                       child: const Text('Finish'),
                     ),
                     _menu(context),
