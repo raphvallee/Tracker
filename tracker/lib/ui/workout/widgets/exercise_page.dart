@@ -2091,7 +2091,14 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
         large: true,
         label: 'Finish workout',
         labelKey: 'finish',
-        onPress: () => finishWorkout(context),
+        // An open exercise picked in the sheet takes this page's place.
+        onPress: () => finishWorkout(
+          context,
+          openExercise: (id) {
+            if (id == widget.entry.exercise.exerciseId) return;
+            replaceWith<void>(context, ExercisePage(exerciseId: id));
+          },
+        ),
       );
     } else {
       // A free workout grows one exercise at a time from its list.

@@ -12,6 +12,7 @@ import 'package:tracker/domain/models/workout_split.dart';
 import 'package:tracker/ui/core/ui/number_keypad.dart';
 import 'package:tracker/ui/workout/view_models/workout_cubit.dart';
 import 'package:tracker/ui/workout/widgets/elapsed_clock.dart';
+import 'package:tracker/ui/workout/widgets/exercise_page.dart';
 import 'package:tracker/ui/workout/widgets/workout_overview.dart';
 
 import '../../../testing/fakes/in_memory_storage.dart';
@@ -121,7 +122,7 @@ void main() {
       await tester.tap(find.text('Finish workout'));
       await tester.pumpAndSettle();
       expect(find.text('Finish Push Day?'), findsOneWidget);
-      expect(find.textContaining('not done'), findsNothing);
+      expect(find.text('Still open'), findsNothing);
       await tester.tap(find.text('Save workout'));
       await tester.pumpAndSettle();
       expect(cubit.state.isInProgress, isFalse);
@@ -179,8 +180,15 @@ void main() {
       await tester.tap(find.text('Finish'));
       await tester.pumpAndSettle();
       expect(find.text('Finish Push Day?'), findsOneWidget);
-      expect(find.text('4 planned sets are not done.'), findsOneWidget);
-      expect(find.text('Bench Press, Overhead Press'), findsOneWidget);
+      // One working set of 60 kg x 8: the summary, then what is left.
+      expect(find.text('set logged'), findsOneWidget);
+      expect(find.text('480'), findsOneWidget);
+      expect(find.text('kg lifted'), findsOneWidget);
+      expect(find.text('Still open'), findsOneWidget);
+      expect(find.text('1 of 2 sets left'), findsOneWidget);
+      expect(find.text('Not started'), findsOneWidget);
+      // Discard is no button of its own, only the title row's icon.
+      expect(find.text('Discard workout'), findsNothing);
       await tester.tap(find.text('Keep going'));
       await tester.pumpAndSettle();
       expect(cubit.state.isInProgress, isTrue);
@@ -191,6 +199,30 @@ void main() {
       await tester.pumpAndSettle();
       expect(cubit.state.isInProgress, isFalse);
       expect(cubit.state.savedSnapshot!.planTitle, 'Push Day');
+    });
+
+    testWidgets('an open exercise in the finish sheet opens its page', (
+      tester,
+    ) async {
+      final cubit = await pumpPush(tester);
+      cubit.logSet(
+        exerciseId: 1,
+        exerciseName: 'Bench Press',
+        weight: 60,
+        reps: 8,
+      );
+      await openWorkoutTab(tester);
+
+      await tester.tap(find.text('Finish'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Not started'));
+      await tester.pumpAndSettle();
+      expect(find.text('Still open'), findsNothing);
+      expect(
+        find.byWidgetPredicate((w) => w is ExercisePage && w.exerciseId == 2),
+        findsOneWidget,
+      );
+      expect(cubit.state.isInProgress, isTrue);
     });
 
     testWidgets('Finish also offers to discard the workout', (tester) async {
@@ -205,7 +237,7 @@ void main() {
 
       await tester.tap(find.text('Finish'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Discard workout'));
+      await tester.tap(fButtonByTooltip('Discard workout'));
       await tester.pumpAndSettle();
       expect(
         find.text('This deletes the 1 set logged in this workout.'),
