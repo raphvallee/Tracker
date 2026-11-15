@@ -57,6 +57,10 @@ class _SplitDayEditorPageState extends State<SplitDayEditorPage> {
   bool _didLoad = false;
   bool _closing = false;
 
+  /// The day has been on screen: rows that show up from now on (a removed
+  /// exercise's) grow in instead of being there.
+  bool _shown = false;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -215,6 +219,9 @@ class _SplitDayEditorPageState extends State<SplitDayEditorPage> {
       return CustomScrollView(
         slivers: <Widget>[CustomAppBar(context, title: 'Day')],
       );
+    }
+    if (!_shown) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _shown = true);
     }
     return BlocConsumer<SplitDraftsCubit, SplitDraftsState>(
       listener: (context, _) => _syncFields(),
@@ -445,13 +452,18 @@ class _SplitDayEditorPageState extends State<SplitDayEditorPage> {
         ),
         if (baseDay != null)
           for (final origin in removed)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: RemovedRow(
-                boxed: true,
-                label: _nameOf(baseDay.exercises[origin].exerciseId),
-                onRestore: () =>
-                    _editDay((day) => day.restoreExercise(baseDay, origin)),
+            // Grows in as its exercise goes, instead of popping in below.
+            AnimatedReveal(
+              key: ValueKey('removed-exercise-$origin'),
+              appear: _shown,
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: RemovedRow(
+                  boxed: true,
+                  label: _nameOf(baseDay.exercises[origin].exerciseId),
+                  onRestore: () =>
+                      _editDay((day) => day.restoreExercise(baseDay, origin)),
+                ),
               ),
             ),
       ],

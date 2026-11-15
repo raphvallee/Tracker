@@ -87,6 +87,9 @@ class _HomePageState extends State<HomePage> {
           hidden: !isActive,
           child: Navigator(
             key: _navigatorKeys[index],
+            // A tab built offstage (History's prebuild) must not take the
+            // focus from a field being typed in on the tab in view.
+            requestFocus: isActive,
             observers: [_popObservers[index]],
             onGenerateRoute: (settings) =>
                 MaterialPageRoute(builder: (context) => child),

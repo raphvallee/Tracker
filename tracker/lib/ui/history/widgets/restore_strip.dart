@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:tracker/ui/core/themes/accents.dart';
 import 'package:tracker/ui/core/ui/relative_dates.dart';
 import 'package:tracker/ui/core/ui/weight_format.dart';
+import 'package:tracker/ui/core/ui/motion.dart';
 
 /// A discarded workout that can still come back: what it was, when it was
 /// discarded and what it had logged. Restore is in the live accent: it makes
@@ -69,7 +70,8 @@ class RestoreStrip extends StatelessWidget {
             semanticsLabel: 'Restore $title',
             onPress: onRestore,
             builder: (context, states, child) => AnimatedOpacity(
-              duration: const Duration(milliseconds: 100),
+              duration: Motion.of(context, Motion.press),
+              curve: Motion.enter,
               opacity: states.contains(FTappableVariant.pressed) ? 0.85 : 1,
               child: child,
             ),

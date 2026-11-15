@@ -26,6 +26,8 @@ import 'package:tracker/ui/core/ui/icon_button.dart';
 import 'package:tracker/ui/core/ui/max_width.dart';
 import 'package:tracker/ui/core/ui/number_keypad.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
+import 'package:tracker/ui/core/ui/row_motion.dart';
+import 'package:tracker/ui/core/ui/motion.dart';
 import 'package:tracker/ui/core/ui/slide_up_panel.dart';
 import 'package:tracker/ui/core/ui/swipe_to_delete.dart';
 import 'package:tracker/ui/core/ui/weight_confirmation.dart';
@@ -254,6 +256,9 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
   /// The field to lift above the keypad once the page has made room.
   GlobalKey? _pendingReveal;
 
+  /// The dock: an opening row keeps clear of it.
+  final _dockKey = GlobalKey(debugLabel: 'exercise dock');
+
   int get _exerciseId => widget.entry.exercise.exerciseId;
 
   /// The exercise's sets as the cubit holds them right now. Handlers read
@@ -477,6 +482,36 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
     );
   }
 
+  /// Where the page stops being seen, in global coordinates: the keypad's
+  /// top while it is up (or on its way up), the phone keyboard's bar, else
+  /// the dock's top.
+  double _visibleBottom() {
+    final size = MediaQuery.sizeOf(context);
+    if (_focused != null) {
+      if (widget.entryMode.usesKeypad) {
+        return size.height -
+            NumberKeypad.heightOf(widget.entryMode) -
+            MediaQuery.paddingOf(context).bottom;
+      }
+      final keyboard = MediaQuery.viewInsetsOf(context).bottom;
+      if (keyboard > 0) return size.height - keyboard - _keyboardBarHeight;
+    }
+    final dock = _dockKey.currentContext?.findRenderObject();
+    if (dock is RenderBox && dock.attached && dock.hasSize) {
+      return dock.localToGlobal(Offset.zero).dy;
+    }
+    return size.height;
+  }
+
+  /// About the height of the bar on top of the phone keyboard.
+  static const _keyboardBarHeight = 56.0;
+
+  /// Keeps a row that is opening clear of the dock or the keypad.
+  void _followOpening(BuildContext rowContext, double share) {
+    if (!mounted) return;
+    followOpening(rowContext, share, visibleBottom: _visibleBottom());
+  }
+
   void _syncOverlay() {
     if (_focused == null) {
       _hideOverlay();
@@ -552,6 +587,14 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
         ? null
         : effortLabel(widget.effort, rating);
     final onLog = logged ? _unfocus : () => _logRow(focused.row);
+    // A new set crossfades the Log label; typing updates it in place.
+    final logKey = (logged ? 'done' : 'log', focused.row);
+    // The keypad covers the dock: the rest clock comes along beside Log.
+    final lastSetAt = context.read<WorkoutCubit>().state.lastSetAt;
+    final restClock = lastSetAt == null ? null : _RestClock(since: lastSetAt);
+    final restTime = lastSetAt == null
+        ? null
+        : _RestClock(since: lastSetAt, compact: true);
     final isWeight = focused.kind == _Kind.weight;
     if (widget.entryMode.usesKeypad) {
       final unit = weightUnitOf(context).symbol;
@@ -562,6 +605,8 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
         allowSign: isWeight,
         logLabel: logLabel,
         logTrailing: logTrailing,
+        logKey: logKey,
+        logLeading: restClock,
         onLog: onLog,
         onKey: (key, digit) => _onKey(focused, key, digit),
         steps: _keypadSteps(focused, index, ghosts[index]),
@@ -572,6 +617,8 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
       onNext: () => _onKey(focused, KeypadKey.next, ''),
       logLabel: logLabel,
       logTrailing: logTrailing,
+      logKey: logKey,
+      leading: restTime,
       onLog: onLog,
     );
   }
@@ -661,9 +708,22 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
   }
 
   Future<void> _logRow(_Row row) async {
+    // Logged from the keypad (or the keyboard): it stays up and moves on to
+    // the next set's weight, so that set is typed without a tap to bring the
+    // keypad back. After the last set it goes down.
+    final typing = row.hasFocus;
     await _commitRow(row, explicit: true);
     if (!mounted) return;
-    if (_rows.indexOf(row) < _liveSets.length) _unfocus();
+    final sets = _liveSets;
+    if (_rows.indexOf(row) >= sets.length) return;
+    final next = sets.length < _rows.length ? _rows[sets.length] : null;
+    if (typing && next != null) {
+      _selected = next;
+      next.weightFocus.requestFocus();
+      setState(() {});
+    } else {
+      _unfocus();
+    }
   }
 
   Future<void> _commitRow(_Row row, {bool explicit = false}) async {
@@ -1013,7 +1073,18 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
               ),
               SliverToBoxAdapter(
                 child: MaxWidth(
-                  child: Padding(
+                  child: AnimatedPadding(
+                    // The room for the keypad opens at once, so the focused
+                    // row can be scrolled above it, and closes as the keypad
+                    // slides away, so rows scrolled to the end settle down
+                    // instead of jumping.
+                    duration:
+                        keypadOpen ||
+                            keyboard > 0 ||
+                            MediaQuery.disableAnimationsOf(context)
+                        ? Duration.zero
+                        : Motion.panelOut,
+                    curve: Motion.exit,
                     padding: EdgeInsets.only(bottom: bottomRoom),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1027,7 +1098,9 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
                             // fields (focus included) must move along with it.
                             key: ObjectKey(_rows[i]),
                             child: Padding(
-                              padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                              ),
                               child: _rowFrame(
                                 context,
                                 i,
@@ -1062,7 +1135,10 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
             left: 0,
             right: 0,
             bottom: 0,
-            child: _dock(context, sets, ghosts, badges, current),
+            child: KeyedSubtree(
+              key: _dockKey,
+              child: _dock(context, sets, ghosts, badges, current),
+            ),
           ),
         ],
       ),
@@ -1224,9 +1300,7 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
   }) {
     final row = _rows[index];
     final colors = context.theme.colors;
-    final content = isCurrent
-        ? _openRow(context, index, sets, ghosts, badges)
-        : _compactRow(context, index, sets, ghosts, badges);
+    final warmup = _isWarmup(index, sets, ghosts);
     return Focus(
       // The row commits when focus leaves any of its fields; the wrapper
       // must not capture focus or join traversal.
@@ -1241,116 +1315,299 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
         // The page color under the row's own rounded tint: the delete
         // background never shows at rest, the corners stay round.
         surface: colors.background,
-        // Switching the set being done opens one row and folds the other:
-        // both glide to their new height. The fields keep their keys, so
-        // the two layouts never overlap.
-        child: AnimatedSize(
-          duration: MediaQuery.disableAnimationsOf(context)
-              ? Duration.zero
-              : const Duration(milliseconds: 220),
-          curve: Curves.easeOutCubic,
-          alignment: Alignment.topCenter,
-          child: content,
+        // The gap to the next row folds away with a deleted row.
+        padding: const EdgeInsets.only(bottom: 6),
+        // Switching the set being done folds one row and opens the other in
+        // one motion: the frame, the numbers and the labels each move from
+        // one look to the other. The fields keep their keys, so they never
+        // jump or lose their focus.
+        child: _RowMotion(
+          open: isCurrent,
+          logged: index < sets.length,
+          comparison: isCurrent
+              ? _comparison(index, ghosts[index], warmup: warmup)
+              : null,
+          onOpening: _followOpening,
+          builder: (context, motion) => _setRow(
+            context,
+            index,
+            sets: sets,
+            ghosts: ghosts,
+            badges: badges,
+            open: isCurrent,
+            motion: motion,
+          ),
         ),
       ),
     );
   }
 
-  Widget _compactRow(
+  /// The row at [index], [motion] of the way between its folded look (a
+  /// line: badge, weight × reps, rating, tick) and its open one (the set
+  /// being done: outlined in blue, its set and target on the outline,
+  /// bigger numbers, the rating strip under them). Both share the line, so
+  /// the numbers glide into place while the badge, rating and tick fold
+  /// away to the sides and the rest grows in under them.
+  Widget _setRow(
     BuildContext context,
-    int index,
-    List<ActiveSet> sets,
-    List<SetGhost> ghosts,
-    List<String> badges,
-  ) {
+    int index, {
+    required List<ActiveSet> sets,
+    required List<SetGhost> ghosts,
+    required List<String> badges,
+    required bool open,
+    required _RowMotionValues motion,
+  }) {
     final row = _rows[index];
     final logged = index < sets.length;
     final accents = TrackerAccents.of(context);
     final theme = context.theme;
+    final colors = theme.colors;
     final ghost = ghosts[index];
+    final badge = badges[index];
+    final warmup = _isWarmup(index, sets, ghosts);
     final rpe = _rpeAt(index, sets);
-    Widget box(_Kind kind) {
-      final field = _valueField(context, row, kind, ghost, big: false);
-      // A waiting row's placeholder is usually last time's value already.
-      final last = _lastValue(index, kind, ghost: logged ? null : ghost);
-      return Container(
-        height: 40,
-        alignment: Alignment.center,
-        child: last == null
-            ? field
-            : Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: <Widget>[
-                  field,
-                  Text(
-                    last,
-                    textAlign: TextAlign.center,
-                    style: _lastStyle(context),
-                  ),
-                ],
-              ),
-      );
-    }
+    final t = motion.open;
+    // The open row's own parts are there while it is open or on its way.
+    final shown = open || t > 0;
+    final comparison = motion.comparison;
+    final compare = comparison == null ? 0.0 : motion.compare;
 
-    final hasError = row.weightError != null || row.repsError != null;
+    Widget cell(_Kind kind) => _withError(
+      context,
+      _valueCell(
+        context,
+        index,
+        kind,
+        ghost: ghost,
+        logged: logged,
+        open: open,
+        t: t,
+      ),
+      kind == _Kind.weight ? row.weightError : row.repsError,
+    );
+
+    final line = Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        _fold(
+          1 - t,
+          AlignmentDirectional.centerEnd,
+          _leaving(
+            open,
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                _badge(context, row, badge, warmup),
+                const SizedBox(width: 8),
+              ],
+            ),
+          ),
+        ),
+        Expanded(child: cell(_Kind.weight)),
+        _times(context, height: _lerp(40, 52, t)),
+        Expanded(child: cell(_Kind.reps)),
+        _fold(
+          1 - t,
+          AlignmentDirectional.centerStart,
+          _leaving(
+            open,
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                const SizedBox(width: 6),
+                // A waiting set has nothing to rate or tick yet.
+                if (logged || rpe != null)
+                  _effortCell(
+                    context,
+                    row,
+                    rpe: rpe,
+                    badge: badge,
+                    logged: logged,
+                  )
+                else
+                  const SizedBox(width: _effortWidth),
+                const SizedBox(width: 8),
+                SizedBox(
+                  width: 40,
+                  height: 40,
+                  // The tick grows in as the set is logged.
+                  child: logged
+                      ? Opacity(
+                          opacity: motion.logged,
+                          child: Transform.scale(
+                            scale: 0.6 + 0.4 * motion.logged,
+                            child: _loggedMark(context, badge),
+                          ),
+                        )
+                      : null,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+
     // A set reads its state from its row: a waiting one is outlined in grey,
     // the one being done in blue (the open row), a logged one filled in.
-    // The numbers sit in the same columns in all three.
+    final hasError = row.weightError != null || row.repsError != null;
+    final rest = hasError ? colors.error : colors.border;
+    final foldedBorder = rest.withValues(alpha: rest.a * (1 - motion.logged));
     final frame = Container(
       constraints: const BoxConstraints(minHeight: 54),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
-      decoration: BoxDecoration(
-        color: logged ? accents.liveSoft : theme.colors.background,
-        borderRadius: BorderRadius.circular(12),
-        border: logged
-            ? null
-            : Border.all(
-                color: hasError ? theme.colors.error : theme.colors.border,
-              ),
+      // The outline starts below the labels' midline, and ends above the
+      // comparison's.
+      margin: EdgeInsets.only(top: 8 * t, bottom: 8 * t * compare),
+      padding: EdgeInsets.fromLTRB(
+        8,
+        _lerp(7, 16, t),
+        8,
+        _lerp(7, 8 + 4 * compare, t),
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      decoration: BoxDecoration(
+        color: Color.lerp(colors.background, accents.liveSoft, motion.logged),
+        borderRadius: BorderRadius.circular(_lerp(12, 14, t)),
+        border: Border.all(
+          color: Color.lerp(foldedBorder, accents.live, t)!,
+          width: _lerp(1, 2, t),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          _badge(context, row, badges[index], _isWarmup(index, sets, ghosts)),
-          const SizedBox(width: 8),
-          Expanded(
-            child: _withError(context, box(_Kind.weight), row.weightError),
-          ),
-          _times(context),
-          Expanded(child: _withError(context, box(_Kind.reps), row.repsError)),
-          const SizedBox(width: 6),
-          // A waiting set has nothing to rate or tick yet.
-          if (logged || rpe != null)
-            _effortCell(
-              context,
-              row,
-              rpe: rpe,
-              badge: badges[index],
-              logged: logged,
-            )
-          else
-            const SizedBox(width: _effortWidth),
-          const SizedBox(width: 8),
-          SizedBox(
-            width: 40,
-            height: 40,
-            child: logged ? _loggedMark(context, badges[index]) : null,
-          ),
+          line,
+          if (shown)
+            _leaving(
+              !open,
+              ClipRect(
+                child: Align(
+                  alignment: Alignment.topCenter,
+                  heightFactor: t,
+                  // Fades with the room it takes, so that room never
+                  // opens empty.
+                  child: Opacity(
+                    opacity: ((t - 0.3) / 0.7).clamp(0.0, 1.0),
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: _effortStrip(context, row, rpe: rpe, badge: badge),
+                    ),
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
-    // The whole row is the target: a tap anywhere makes it the set being
-    // done. The badge, the rating and the fields keep their own taps.
+
+    final planned = _plannedAt(index);
+    final target = planned == null ? null : SetTarget.fromPlanned(planned);
+    final note = logged
+        ? 'Logged'
+        : target != null
+        ? 'Aim for ${target.label} ${target.unit}'
+        : null;
+    final label = theme.typography.body.xs.copyWith(
+      fontWeight: FontWeight.w700,
+      color: accents.live,
+    );
+    // The labels ride on the outline as it moves, and rise the last 4px
+    // into place as they fade in.
+    final rise = 4 * (1 - motion.labels);
+    final top = 8 * t - 8 + rise;
+    Widget legend(Widget child, {double opacity = 1}) => Opacity(
+      opacity: motion.labels * opacity,
+      child: _legend(context, child),
+    );
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: () {
-        // Another row being typed in saves as its focus leaves.
-        if (_focused != null) FocusManager.instance.primaryFocus?.unfocus();
-        _select(row);
-      },
-      child: frame,
+      // A folded row is a target as a whole: a tap anywhere makes it the set
+      // being done. The badge, the rating and the fields keep their own taps.
+      onTap: open ? null : () => _onRowTap(row),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: <Widget>[
+          frame,
+          if (shown)
+            Positioned(
+              top: top,
+              left: 12,
+              child: _leaving(
+                !open,
+                Semantics(
+                  button: true,
+                  label: warmup
+                      ? 'Warm-up set, tap for a working set'
+                      : 'Set $badge, tap for a warm-up',
+                  excludeSemantics: true,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => _toggleWarmup(row),
+                    child: legend(
+                      Text(warmup ? 'Warm-up' : 'Set $badge', style: label),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          if (shown && note != null)
+            Positioned(
+              top: top,
+              right: 12,
+              child: _leaving(
+                !open,
+                legend(
+                  Text(
+                    note,
+                    maxLines: 1,
+                    style: theme.typography.body.xs.copyWith(
+                      color: colors.mutedForeground,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          if (shown && comparison != null && (motion.comparing || compare > 0))
+            Positioned(
+              left: 12,
+              right: 12,
+              bottom: 8 * t * compare - 8 - rise,
+              child: _leaving(
+                !open,
+                Center(
+                  child: IntrinsicWidth(
+                    child: legend(
+                      opacity: compare,
+                      Text(
+                        comparison.text,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.typography.body.xs.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: comparison.isAhead
+                              ? accents.live
+                              : colors.mutedForeground,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
     );
+  }
+
+  /// A tap on a folded row makes it the set being done. While a field is
+  /// typed in, the keypad (or keyboard) stays up and moves on to the row's
+  /// weight; the row left saves as its focus goes.
+  void _onRowTap(_Row row) {
+    if (_focused != null) {
+      _selected = row;
+      row.weightFocus.requestFocus();
+      return;
+    }
+    _select(row);
   }
 
   /// [field] with its error right under it, in its own column.
@@ -1477,173 +1734,9 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
     child: child,
   );
 
-  Widget _openRow(
-    BuildContext context,
-    int index,
-    List<ActiveSet> sets,
-    List<SetGhost> ghosts,
-    List<String> badges,
-  ) {
-    final row = _rows[index];
-    final logged = index < sets.length;
-    final accents = TrackerAccents.of(context);
-    final theme = context.theme;
-    final ghost = ghosts[index];
-    final unit = weightUnitOf(context).symbol;
-    final badge = badges[index];
-    final warmup = _isWarmup(index, sets, ghosts);
-    final planned = _plannedAt(index);
-    final target = planned == null ? null : SetTarget.fromPlanned(planned);
-    final note = logged
-        ? 'Logged'
-        : target != null
-        ? 'Aim for ${target.label} ${target.unit}'
-        : null;
-    String caption(_Kind kind, String fallback) {
-      final last = _lastValue(index, kind);
-      return last == null ? fallback : 'last $last';
-    }
-
-    final comparison = _comparison(index, ghost, warmup: warmup);
-
-    final values = Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Expanded(
-          child: _withError(
-            context,
-            _stepperGroup(
-              context,
-              row,
-              _Kind.weight,
-              ghost,
-              caption(_Kind.weight, unit),
-            ),
-            row.weightError,
-          ),
-        ),
-        SizedBox(height: 52, child: _times(context)),
-        Expanded(
-          child: _withError(
-            context,
-            _stepperGroup(
-              context,
-              row,
-              _Kind.reps,
-              ghost,
-              caption(_Kind.reps, 'reps'),
-            ),
-            row.repsError,
-          ),
-        ),
-      ],
-    );
-    final label = theme.typography.body.xs.copyWith(
-      fontWeight: FontWeight.w700,
-      color: accents.live,
-    );
-    final opened = Stack(
-      children: <Widget>[
-        Container(
-          // The outline starts below the labels' midline, and ends above
-          // the comparison's.
-          margin: EdgeInsets.only(top: 8, bottom: comparison == null ? 0 : 8),
-          padding: EdgeInsets.fromLTRB(8, 16, 8, comparison == null ? 8 : 12),
-          decoration: BoxDecoration(
-            color: logged ? accents.liveSoft : theme.colors.background,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: accents.live, width: 2),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: <Widget>[
-              values,
-              const SizedBox(height: 8),
-              _effortStrip(
-                context,
-                row,
-                rpe: _rpeAt(index, sets),
-                badge: badge,
-              ),
-            ],
-          ),
-        ),
-        Positioned(
-          top: 0,
-          left: 12,
-          child: Semantics(
-            button: true,
-            label: warmup
-                ? 'Warm-up set, tap for a working set'
-                : 'Set $badge, tap for a warm-up',
-            excludeSemantics: true,
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () => _toggleWarmup(row),
-              child: _legend(
-                context,
-                Text(warmup ? 'Warm-up' : 'Set $badge', style: label),
-              ),
-            ),
-          ),
-        ),
-        if (note != null)
-          Positioned(
-            top: 0,
-            right: 12,
-            child: _legend(
-              context,
-              Text(
-                note,
-                maxLines: 1,
-                style: theme.typography.body.xs.copyWith(
-                  color: theme.colors.mutedForeground,
-                ),
-              ),
-            ),
-          ),
-        if (comparison != null)
-          Positioned(
-            left: 12,
-            right: 12,
-            bottom: 0,
-            child: Center(
-              child: IntrinsicWidth(
-                child: _legend(
-                  context,
-                  Text(
-                    comparison.text,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.typography.body.xs.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: comparison.isAhead
-                          ? accents.live
-                          : theme.colors.mutedForeground,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-      ],
-    );
-    // Fades up as it opens, while the row around it grows into place.
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0, end: 1),
-      duration: MediaQuery.disableAnimationsOf(context)
-          ? Duration.zero
-          : const Duration(milliseconds: 220),
-      curve: Curves.easeOutCubic,
-      builder: (context, t, child) =>
-          Opacity(opacity: 0.35 + 0.65 * t, child: child),
-      child: opened,
-    );
-  }
-
-  Widget _times(BuildContext context) => SizedBox(
+  Widget _times(BuildContext context, {double height = 40}) => SizedBox(
     width: 18,
-    height: 40,
+    height: height,
     child: Center(
       child: Text(
         '×',
@@ -1655,54 +1748,132 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
     ),
   );
 
-  Widget _stepperGroup(
+  /// [child] at [factor] of its width, clipped and faded with it: the parts
+  /// of a row that come and go as it opens or folds.
+  Widget _fold(double factor, AlignmentGeometry alignment, Widget child) {
+    if (factor <= 0) return const SizedBox.shrink();
+    if (factor >= 1) return child;
+    return ClipRect(
+      child: Align(
+        alignment: alignment,
+        widthFactor: factor,
+        child: Opacity(opacity: factor, child: child),
+      ),
+    );
+  }
+
+  /// [child] while it is on its way out ([gone]): no taps, no semantics.
+  Widget _leaving(bool gone, Widget child) => IgnorePointer(
+    ignoring: gone,
+    child: ExcludeSemantics(excluding: gone, child: child),
+  );
+
+  /// The [kind] value of the row at [index], [t] of the way from its folded
+  /// look (the number alone, last time's under it when the placeholder is
+  /// not it already) to its open one (outlined and bigger, last time's value
+  /// or the unit under it, and with the phone keyboard, steppers on either
+  /// side). It is one field throughout, so the number moves into place
+  /// instead of being swapped, and keeps its focus.
+  Widget _valueCell(
     BuildContext context,
-    _Row row,
-    _Kind kind,
-    SetGhost ghost,
-    String caption,
-  ) {
+    int index,
+    _Kind kind, {
+    required SetGhost ghost,
+    required bool logged,
+    required bool open,
+    required double t,
+  }) {
+    final row = _rows[index];
     final theme = context.theme;
+    final colors = theme.colors;
     // With the steppers in the keypad the box is the number alone, outlined
     // while the keypad types into it.
     final bare = widget.entryMode.usesKeypad;
     final error = kind == _Kind.weight ? row.weightError : row.repsError;
+    final outline = error != null
+        ? colors.error
+        : bare && row.focusOf(kind).hasFocus
+        ? TrackerAccents.of(context).live
+        : colors.border;
+
+    final style = _lastStyle(context);
+    Text line(String text) =>
+        Text(text, textAlign: TextAlign.center, maxLines: 1, style: style);
+    // A waiting row's placeholder is usually last time's value already.
+    final folded = _lastValue(index, kind, ghost: logged ? null : ghost);
+    final last = _lastValue(index, kind);
+    final opened = last == null
+        ? (kind == _Kind.weight ? weightUnitOf(context).symbol : 'reps')
+        : 'last $last';
+    final Widget caption;
+    if (folded == null) {
+      // Nothing under the folded number: the line's room opens with the row.
+      caption = t == 0
+          ? const SizedBox.shrink()
+          : ClipRect(
+              child: Align(
+                alignment: Alignment.topCenter,
+                heightFactor: t,
+                child: Opacity(opacity: t, child: line(opened)),
+              ),
+            );
+    } else if (t == 0) {
+      caption = line(folded);
+    } else if (t == 1) {
+      caption = line(opened);
+    } else {
+      caption = Stack(
+        alignment: Alignment.topCenter,
+        children: <Widget>[
+          Opacity(opacity: 1 - t, child: line(folded)),
+          Opacity(opacity: t, child: line(opened)),
+        ],
+      );
+    }
+
+    final small = theme.typography.body.sm.fontSize ?? 14;
+    final steppers = !bare && (open || t > 0);
+    Widget stepper(int direction) => _fold(
+      t,
+      // Each one comes out from behind the number.
+      direction < 0
+          ? AlignmentDirectional.centerEnd
+          : AlignmentDirectional.centerStart,
+      _leaving(!open, _stepButton(context, row, kind, direction)),
+    );
     final group = Container(
-      padding: const EdgeInsets.all(3),
+      constraints: const BoxConstraints(minHeight: 40),
+      alignment: Alignment.center,
+      padding: EdgeInsets.all(3 * t),
       decoration: BoxDecoration(
-        color: theme.colors.background,
+        color: colors.background.withValues(alpha: colors.background.a * t),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: error != null
-              ? theme.colors.error
-              : bare && row.focusOf(kind).hasFocus
-              ? TrackerAccents.of(context).live
-              : theme.colors.border,
-        ),
+        border: Border.all(color: outline.withValues(alpha: outline.a * t)),
       ),
       child: Row(
         children: <Widget>[
-          if (!bare) _stepButton(context, row, kind, -1),
+          if (steppers) stepper(-1),
           Expanded(
             child: Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
                 SizedBox(
-                  height: 32,
-                  child: _valueField(context, row, kind, ghost, big: true),
+                  // Its own line height folded, 32 open.
+                  height: t == 0 ? null : _lerp(small * 1.15, 32, t),
+                  child: _valueField(context, row, kind, ghost, t: t),
                 ),
-                Text(caption, maxLines: 1, style: _lastStyle(context)),
+                caption,
               ],
             ),
           ),
-          if (!bare) _stepButton(context, row, kind, 1),
+          if (steppers) stepper(1),
         ],
       ),
     );
-    if (!bare) return group;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: () => row.focusOf(kind).requestFocus(),
+      onTap: open && bare ? () => row.focusOf(kind).requestFocus() : null,
       child: group,
     );
   }
@@ -1747,7 +1918,7 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
     _Row row,
     _Kind kind,
     SetGhost ghost, {
-    required bool big,
+    required double t,
   }) {
     final theme = context.theme;
     final accents = TrackerAccents.of(context);
@@ -1758,10 +1929,14 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
               ? weightUnitOf(context).symbol
               : formatDecimal(displayWeightOf(context, ghost.weight!)))
         : (ghost.reps == null ? 'Reps' : formatDecimal(ghost.reps!));
+    // [t] of the way from the folded row's number to the open row's.
     final textStyle =
-        (big ? theme.typography.body.xl : theme.typography.body.sm).copyWith(
-          fontSize: big ? 22 : null,
-          fontWeight: big ? FontWeight.w700 : FontWeight.w600,
+        TextStyle.lerp(
+          theme.typography.body.sm,
+          theme.typography.body.xl.copyWith(fontSize: 22),
+          t,
+        )!.copyWith(
+          fontWeight: FontWeight.lerp(FontWeight.w600, FontWeight.w700, t),
           height: 1.15,
           color: theme.colors.foreground,
           fontFeatures: const [FontFeature.tabularFigures()],
@@ -1887,16 +2062,24 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
         // room.
         prefix: lastSetAt == null ? FLucideIcons.check : null,
         label: _logLabel(current, ghosts, badges),
+        // A new set crossfades the label; typing updates it in place.
+        labelKey: ('log', _rows[current]),
         // The rating rides along on the side: weight and reps lead.
         trailing: rating == null ? null : effortLabel(widget.effort, rating),
         onPress: () => _logRow(_rows[current]),
       );
     } else if (current != null) {
-      button = AccentButton(large: true, label: 'Done', onPress: _unfocus);
+      button = AccentButton(
+        large: true,
+        label: 'Done',
+        labelKey: ('done', _rows[current]),
+        onPress: _unfocus,
+      );
     } else if (widget.next case final next?) {
       button = AccentButton(
         large: true,
         label: 'Next: ${next.exercise.name}',
+        labelKey: ('next', next.exercise.exerciseId),
         suffix: FLucideIcons.chevronRight,
         onPress: () => replaceWith<void>(
           context,
@@ -1907,6 +2090,7 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
       button = AccentButton(
         large: true,
         label: 'Finish workout',
+        labelKey: 'finish',
         onPress: () => finishWorkout(context),
       );
     } else {
@@ -1914,6 +2098,7 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
       button = AccentButton(
         large: true,
         label: 'Back to workout',
+        labelKey: 'back',
         onPress: () => Navigator.of(context).maybePop(),
       );
     }
@@ -1925,16 +2110,31 @@ class _ExerciseBodyState extends State<_ExerciseBody> {
 }
 
 /// How long since the workout's last set, beside the next step: counts up,
-/// nothing to set.
+/// nothing to set. [compact] is the time alone, for the bar on the phone
+/// keyboard.
 class _RestClock extends StatelessWidget {
-  const _RestClock({required this.since});
+  const _RestClock({required this.since, this.compact = false});
 
   final DateTime since;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     final theme = context.theme;
     final accents = TrackerAccents.of(context);
+    if (compact) {
+      return Semantics(
+        label: 'Resting',
+        child: ElapsedClock(
+          start: since,
+          style: theme.typography.body.sm.copyWith(
+            color: accents.live,
+            fontWeight: FontWeight.w700,
+            fontFeatures: const [FontFeature.tabularFigures()],
+          ),
+        ),
+      );
+    }
     return ConstrainedBox(
       constraints: const BoxConstraints(minWidth: 52),
       child: Column(
@@ -1965,3 +2165,198 @@ class _RestClock extends StatelessWidget {
 
 bool _sameKg(double stored, double committed) =>
     (stored - committed).abs() < 1e-9;
+
+double _lerp(double a, double b, double t) => a + (b - a) * t;
+
+/// Where a set row's motion stands (see [_RowMotion]).
+class _RowMotionValues {
+  const _RowMotionValues({
+    required this.open,
+    required this.labels,
+    required this.logged,
+    required this.compare,
+    required this.comparing,
+    required this.comparison,
+  });
+
+  /// 0 folded, 1 open: the frame, the numbers and the room the row takes.
+  final double open;
+
+  /// How far the labels on the open row's outline have faded in.
+  final double labels;
+
+  /// 0 waiting, 1 logged: the tint and the tick.
+  final double logged;
+
+  /// How much of the comparison under the outline is there.
+  final double compare;
+
+  /// Whether the row has a comparison now, rather than one on its way out.
+  final bool comparing;
+
+  /// The comparison shown, kept while it leaves.
+  final SetComparison? comparison;
+}
+
+/// Moves a set row between its looks over 220 ms. Folding mirrors opening
+/// (the same curve, backwards), so when the set being done switches, what
+/// one row gives up the other takes at every frame and the rows below stay
+/// put. The open row's labels go in the first 30 % of its folding and come
+/// in over the last 60 % of its opening, so it reads as one set closing,
+/// then the next opening. Logging tints the row and grows its tick in over
+/// 220 ms. With reduced motion every change is immediate.
+class _RowMotion extends StatefulWidget {
+  const _RowMotion({
+    required this.open,
+    required this.logged,
+    required this.comparison,
+    required this.builder,
+    this.onOpening,
+  });
+
+  final bool open;
+  final bool logged;
+  final SetComparison? comparison;
+  final Widget Function(BuildContext context, _RowMotionValues motion) builder;
+
+  /// Called each frame the row opens, with the row's context and the share
+  /// of what was left of the way that frame covered: 1 once it is open, on
+  /// the frame after, against the final layout.
+  final void Function(BuildContext context, double share)? onOpening;
+
+  @override
+  State<_RowMotion> createState() => _RowMotionState();
+}
+
+class _RowMotionState extends State<_RowMotion> with TickerProviderStateMixin {
+  late final AnimationController _open = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 220),
+    value: widget.open ? 1 : 0,
+  );
+  // Each runs backwards on the way back: easing in, backwards, eases out,
+  // and easeInCubic is easeOutCubic flipped, so a folding row loses height
+  // exactly as fast as an opening one gains it.
+  late final CurvedAnimation _openness = CurvedAnimation(
+    parent: _open,
+    curve: Curves.easeOutCubic,
+    reverseCurve: Curves.easeInCubic,
+  );
+  late final CurvedAnimation _labels = CurvedAnimation(
+    parent: _open,
+    curve: const Interval(0.4, 1, curve: Curves.easeOut),
+    reverseCurve: const Interval(0.7, 1),
+  );
+  late final AnimationController _logged = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 220),
+    value: widget.logged ? 1 : 0,
+  );
+  late final CurvedAnimation _loggedness = CurvedAnimation(
+    parent: _logged,
+    curve: Curves.easeOutCubic,
+    reverseCurve: Curves.easeInCubic,
+  );
+  late final AnimationController _compare = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 220),
+    value: widget.comparison == null ? 0 : 1,
+  );
+  late final CurvedAnimation _compared = CurvedAnimation(
+    parent: _compare,
+    curve: Curves.easeOutCubic,
+    reverseCurve: Curves.easeInCubic,
+  );
+  late final Listenable _all = Listenable.merge([_open, _logged, _compare]);
+
+  SetComparison? _comparison;
+
+  /// How open the row was on the last frame [_RowMotion.onOpening] saw.
+  double _followed = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _comparison = widget.comparison;
+    _open
+      ..addListener(_onOpenFrame)
+      ..addStatusListener(_onOpenStatus);
+  }
+
+  void _onOpenFrame() {
+    if (_open.status != AnimationStatus.forward) return;
+    final now = _openness.value;
+    final left = 1 - _followed;
+    if (left > 0) {
+      widget.onOpening?.call(
+        context,
+        ((now - _followed) / left).clamp(0.0, 1.0),
+      );
+    }
+    _followed = now;
+  }
+
+  void _onOpenStatus(AnimationStatus status) {
+    if (status == AnimationStatus.forward) {
+      _followed = _openness.value;
+    } else if (status == AnimationStatus.completed &&
+        widget.onOpening != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && widget.open) widget.onOpening?.call(context, 1);
+      });
+    }
+  }
+
+  @override
+  void didUpdateWidget(_RowMotion oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final instant = MediaQuery.disableAnimationsOf(context);
+    if (widget.open != oldWidget.open) _drive(_open, widget.open, instant);
+    if (widget.logged != oldWidget.logged) {
+      _drive(_logged, widget.logged, instant);
+    }
+    final comparison = widget.comparison;
+    if (comparison != null) _comparison = comparison;
+    if ((comparison == null) != (oldWidget.comparison == null)) {
+      _drive(_compare, comparison != null, instant);
+    }
+  }
+
+  void _drive(AnimationController controller, bool on, bool instant) {
+    if (instant) {
+      controller.value = on ? 1 : 0;
+    } else if (on) {
+      controller.forward();
+    } else {
+      controller.reverse();
+    }
+  }
+
+  @override
+  void dispose() {
+    _openness.dispose();
+    _labels.dispose();
+    _loggedness.dispose();
+    _compared.dispose();
+    _open.dispose();
+    _logged.dispose();
+    _compare.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: _all,
+    builder: (context, _) => widget.builder(
+      context,
+      _RowMotionValues(
+        open: _openness.value,
+        labels: _labels.value,
+        logged: _loggedness.value,
+        compare: _compared.value,
+        comparing: widget.comparison != null,
+        comparison: _comparison,
+      ),
+    ),
+  );
+}

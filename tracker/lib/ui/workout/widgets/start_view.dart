@@ -11,10 +11,12 @@ import 'package:tracker/domain/services/split_rotation.dart';
 import 'package:tracker/routing/tab_navigation.dart';
 import 'package:tracker/ui/core/themes/accents.dart';
 import 'package:tracker/ui/core/ui/accent_button.dart';
+import 'package:tracker/ui/core/ui/animated_swap.dart';
 import 'package:tracker/ui/core/ui/custom_app_bar.dart';
 import 'package:tracker/ui/core/ui/dashed_outline.dart';
 import 'package:tracker/ui/core/ui/item_card.dart';
 import 'package:tracker/ui/core/ui/max_width.dart';
+import 'package:tracker/ui/core/ui/motion.dart';
 import 'package:tracker/ui/core/ui/relative_dates.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
 import 'package:tracker/ui/core/ui/sheet_surface.dart';
@@ -219,8 +221,21 @@ class _StartViewState extends State<StartView> {
                                 onSelect: (day) =>
                                     setState(() => _pickedDay = day),
                               ),
+                              // Another day's plan crossfades in, the room
+                              // moving once to its height.
                               _inset(
-                                _dayPlan(context, shown.split, dayIndex),
+                                AnimatedSwap(
+                                  child: KeyedSubtree(
+                                    key: ValueKey(
+                                      'day-plan-${shown.split.id}-$dayIndex',
+                                    ),
+                                    child: _dayPlan(
+                                      context,
+                                      shown.split,
+                                      dayIndex,
+                                    ),
+                                  ),
+                                ),
                                 top: 14,
                               ),
                             ],
@@ -264,12 +279,14 @@ class _StartViewState extends State<StartView> {
                   large: true,
                   prefix: FLucideIcons.play,
                   label: 'Start empty workout',
+                  labelKey: 'start-empty',
                   onPress: () => startEmptyWorkout(context),
                 )
               : AccentButton(
                   large: true,
                   prefix: FLucideIcons.play,
                   label: 'Start ${shown.split.splitDays[dayIndex].title}',
+                  labelKey: ('start', shown.split.id, dayIndex),
                   onPress: () => startSplitDay(
                     context,
                     split: shown.split,
@@ -706,7 +723,10 @@ class _DayChip extends StatelessWidget {
       semanticsLabel: '$title, ${when.toLowerCase()}',
       selected: isSelected,
       onPress: onPress,
-      child: Container(
+      // The outline moves to the picked day as the rail scrolls to it.
+      child: AnimatedContainer(
+        duration: Motion.of(context, Motion.state),
+        curve: Motion.enter,
         height: 50,
         // The outline grows inward: the text stays where it is.
         padding: EdgeInsets.symmetric(horizontal: isSelected ? 9 : 10),

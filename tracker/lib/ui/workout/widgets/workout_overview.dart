@@ -15,6 +15,7 @@ import 'package:tracker/ui/core/ui/repository_scope.dart';
 import 'package:tracker/ui/core/ui/weight_format.dart';
 import 'package:tracker/ui/settings/view_models/settings_cubit.dart';
 import 'package:tracker/ui/workout/view_models/workout_cubit.dart';
+import 'package:tracker/ui/core/ui/motion.dart';
 
 import 'elapsed_clock.dart';
 import 'exercise_page.dart';
@@ -107,6 +108,7 @@ class WorkoutOverview extends StatelessWidget {
         builder: (context, previous) => AccentButton(
           large: true,
           label: 'Continue ${upNext.exercise.name}',
+          labelKey: ('continue', upNext.exercise.exerciseId),
           trailing: _nextSetName(upNext, prefill ? previous : null),
           onPress: () => pushTo<void>(
             context,
@@ -119,6 +121,7 @@ class WorkoutOverview extends StatelessWidget {
       return AccentButton(
         large: true,
         label: 'Finish workout',
+        labelKey: 'finish',
         onPress: () => finishWorkout(context),
       );
     }
@@ -126,6 +129,7 @@ class WorkoutOverview extends StatelessWidget {
       large: true,
       prefix: FLucideIcons.plus,
       label: 'Add exercise',
+      labelKey: 'add',
       onPress: () => _addExercise(context),
     );
   }
@@ -399,6 +403,10 @@ class _ExerciseList extends StatelessWidget {
           Dismissible(
             key: ValueKey('overview-${entry.exercise.exerciseId}'),
             direction: DismissDirection.endToStart,
+            // Slides out like a panel, then its room closes like a fold
+            // (M11); with reduced motion both are immediate.
+            movementDuration: Motion.of(context, Motion.panelOut),
+            resizeDuration: Motion.of(context, Motion.state),
             background: const _RemoveBackground(),
             confirmDismiss: (_) => _confirmRemove(context, entry),
             onDismissed: (_) => cubit.removeExercise(entry.exercise.exerciseId),
@@ -471,6 +479,7 @@ class _EntryTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = context.theme;
     final accents = TrackerAccents.of(context);
+    final changes = Motion.of(context, Motion.state);
     final muted = theme.typography.body.xs.copyWith(
       color: theme.colors.mutedForeground,
     );
@@ -541,8 +550,9 @@ class _EntryTile extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              Text(
-                entry.exercise.name,
+              AnimatedDefaultTextStyle(
+                duration: changes,
+                curve: Motion.enter,
                 style:
                     (isCurrent
                             ? theme.typography.body.md
@@ -552,6 +562,7 @@ class _EntryTile extends StatelessWidget {
                               ? FontWeight.w700
                               : FontWeight.w600,
                         ),
+                child: Text(entry.exercise.name),
               ),
               const SizedBox(height: 3),
               subtitle,
@@ -562,29 +573,51 @@ class _EntryTile extends StatelessWidget {
         trailing,
       ],
     );
-    // Both shapes inset their content by 14, so the counts line up.
-    return Padding(
+    // Both shapes inset their content by 14, so the counts line up. When the
+    // current exercise moves (a reorder, a removal), one row turns into the
+    // other's shape and back on one clock instead of snapping.
+    return AnimatedPadding(
+      duration: changes,
+      curve: Motion.enter,
       padding: EdgeInsets.symmetric(vertical: isCurrent ? 8 : 0),
       child: FTappable(
         onPress: onOpen,
-        child: Container(
-          constraints: BoxConstraints(minHeight: isCurrent ? 68 : 60),
-          padding: EdgeInsets.symmetric(
-            horizontal: isCurrent ? 12 : 14,
-            vertical: 10,
-          ),
-          decoration: isCurrent
-              ? BoxDecoration(
-                  color: theme.colors.background,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: accents.live, width: 2),
-                )
-              : BoxDecoration(
-                  color: theme.colors.background,
-                  border: Border(
-                    bottom: BorderSide(color: theme.colors.border),
+        // The live outline fades in over the row's divider (a rounded
+        // outline cannot morph into a bottom-only line).
+        child: TweenAnimationBuilder<double>(
+          tween: Tween<double>(end: isCurrent ? 1 : 0),
+          duration: changes,
+          curve: Motion.enter,
+          builder: (context, t, child) {
+            final divider = theme.colors.border;
+            return Container(
+              constraints: BoxConstraints(minHeight: 60 + 8 * t),
+              padding: EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 10 + 2 * t,
+              ),
+              decoration: BoxDecoration(
+                color: theme.colors.background,
+                border: Border(
+                  bottom: BorderSide(
+                    color: divider.withValues(alpha: divider.a * (1 - t)),
                   ),
                 ),
+              ),
+              foregroundDecoration: t == 0
+                  ? null
+                  : BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: accents.live.withValues(
+                          alpha: accents.live.a * t,
+                        ),
+                        width: 2,
+                      ),
+                    ),
+              child: child,
+            );
+          },
           child: row,
         ),
       ),

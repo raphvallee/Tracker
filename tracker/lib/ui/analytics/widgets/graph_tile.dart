@@ -5,6 +5,7 @@ import 'package:tracker/ui/analytics/widgets/graph_readout.dart';
 import 'package:tracker/ui/core/ui/dashed_outline.dart';
 import 'package:tracker/ui/core/ui/graph_chart.dart';
 import 'package:tracker/ui/core/ui/weight_format.dart';
+import 'package:tracker/ui/core/ui/motion.dart';
 
 /// The Feed's graphs, half a screen wide each on a phone (more across on a
 /// wide window), then a dashed tile that adds one. Tiles in a row share
@@ -80,7 +81,8 @@ class _GraphTileState extends State<GraphTile> {
     return FTappable(
       onPress: widget.onPress,
       builder: (context, states, child) => AnimatedOpacity(
-        duration: const Duration(milliseconds: 100),
+        duration: Motion.of(context, Motion.press),
+        curve: Motion.enter,
         opacity: states.contains(FTappableVariant.pressed) ? 0.75 : 1,
         child: child,
       ),
@@ -153,7 +155,8 @@ class _AddGraphTile extends StatelessWidget {
     return FTappable(
       onPress: onPress,
       builder: (context, states, child) => AnimatedOpacity(
-        duration: const Duration(milliseconds: 100),
+        duration: Motion.of(context, Motion.press),
+        curve: Motion.enter,
         opacity: states.contains(FTappableVariant.pressed) ? 0.6 : 1,
         child: child,
       ),

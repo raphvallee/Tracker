@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:tracker/domain/models/effort_scale.dart';
 import 'package:tracker/ui/core/themes/accents.dart';
 import 'package:tracker/ui/core/ui/effort_format.dart';
+import 'package:tracker/ui/core/ui/motion.dart';
 
 /// An open set row's rating in one tap: the usual values in a strip, the
 /// rest behind its last chip ([onMore], the full sheet). Tapping the picked
@@ -62,7 +63,10 @@ class EffortStrip extends StatelessWidget {
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: onTap,
-          child: Container(
+          // The pick tints in as the Log button takes up its rating.
+          child: AnimatedContainer(
+            duration: Motion.of(context, Motion.label),
+            curve: Motion.enter,
             height: 34,
             alignment: Alignment.center,
             decoration: BoxDecoration(
@@ -72,13 +76,15 @@ class EffortStrip extends StatelessWidget {
                 color: selected ? selectedFill : theme.colors.border,
               ),
             ),
-            child: Text(
-              label,
+            child: AnimatedDefaultTextStyle(
+              duration: Motion.of(context, Motion.label),
+              curve: Motion.enter,
               style: theme.typography.body.xs.copyWith(
                 fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
                 color: selected ? selectedText : theme.colors.mutedForeground,
                 fontFeatures: const [FontFeature.tabularFigures()],
               ),
+              child: Text(label),
             ),
           ),
         ),

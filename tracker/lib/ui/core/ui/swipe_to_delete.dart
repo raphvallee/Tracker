@@ -6,6 +6,7 @@ import 'package:flutter/semantics.dart' show CustomSemanticsAction;
 import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:forui/forui.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:tracker/ui/core/ui/motion.dart';
 
 /// Deletes a row in two swipes, so a stray flick never loses anything: the
 /// first swipe left slides the row open on a red Delete action, the second
@@ -288,7 +289,8 @@ class _SwipeToDeleteState extends State<SwipeToDelete>
     _animateCurve = curve;
     _animateDone = done;
     _slider
-      ..duration = duration
+      // With reduced motion the row is there (or gone) at once.
+      ..duration = Motion.of(context, duration)
       ..stop()
       ..value = 0
       ..forward();

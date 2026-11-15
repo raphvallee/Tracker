@@ -7,6 +7,8 @@ import 'package:tracker/ui/history/view_models/history_search.dart';
 
 import 'filter_summary.dart';
 
+import 'package:tracker/ui/core/ui/motion.dart';
+
 /// Every History filter in one sheet, [focus] scrolled into view. The button
 /// under it counts the workouts the filter shows ([countOf]) as it changes
 /// and applies it; a swipe down leaves the filter as it was.
@@ -590,7 +592,8 @@ class _Choice extends StatelessWidget {
       semanticsLabel: semanticsLabel ?? label,
       onPress: onPress,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 120),
+        duration: Motion.of(context, Motion.press),
+        curve: Motion.enter,
         constraints: const BoxConstraints(minHeight: 36),
         alignment: center ? Alignment.center : null,
         padding: EdgeInsets.symmetric(horizontal: center ? 2 : 12, vertical: 8),
@@ -715,7 +718,8 @@ class _RangeHistogram extends StatelessWidget {
                     if (i > 0) const SizedBox(width: 3),
                     Expanded(
                       child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 120),
+                        duration: Motion.of(context, Motion.press),
+                        curve: Motion.enter,
                         height: count == 0 ? 2 : 2 + 38 * count / most,
                         decoration: BoxDecoration(
                           color: _inRange(i, low, high)

@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:forui/forui.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:tracker/ui/core/themes/accents.dart';
+import 'package:tracker/ui/core/ui/motion.dart';
 
 /// One exercise on the [PlanBar].
 class PlanSegment {
@@ -48,6 +49,7 @@ class PlanBar extends StatelessWidget {
       colors.mutedForeground.withValues(alpha: strength),
       colors.muted,
     );
+    final changes = Motion.of(context, Motion.state);
     return ExcludeSemantics(
       child: Row(
         children: <Widget>[
@@ -59,11 +61,26 @@ class PlanBar extends StatelessWidget {
                 borderRadius: BorderRadius.circular(height / 2),
                 child: SizedBox(
                   height: height,
-                  child: ColoredBox(
-                    color: track(segment.isCurrent ? 0.4 : 0.12),
-                    child: FractionallySizedBox(
-                      alignment: AlignmentDirectional.centerStart,
-                      widthFactor: segment.progress.clamp(0.0, 1.0),
+                  // A live bar fills as a set is logged, on the same clock
+                  // as the set's tick; a finished one is drawn as it is.
+                  child: TweenAnimationBuilder<double>(
+                    tween: Tween<double>(end: segment.isCurrent ? 0.4 : 0.12),
+                    duration: ink ? Duration.zero : changes,
+                    curve: Motion.enter,
+                    builder: (context, strength, child) =>
+                        ColoredBox(color: track(strength), child: child),
+                    child: TweenAnimationBuilder<double>(
+                      tween: Tween<double>(
+                        end: segment.progress.clamp(0.0, 1.0),
+                      ),
+                      duration: ink ? Duration.zero : changes,
+                      curve: Motion.enter,
+                      builder: (context, progress, child) =>
+                          FractionallySizedBox(
+                            alignment: AlignmentDirectional.centerStart,
+                            widthFactor: progress,
+                            child: child,
+                          ),
                       child: DecoratedBox(
                         decoration: BoxDecoration(
                           color: fill,

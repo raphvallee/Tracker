@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tracker/ui/core/ui/motion.dart';
 import 'package:tracker/ui/core/ui/sliding_column.dart';
 
 void main() {
@@ -33,8 +34,9 @@ void main() {
     for (final label in labels) top(tester, label),
   ];
 
-  // Halfway through the slide's time.
-  final half = Curves.easeInOutCubic.transform(0.5);
+  // Halfway through the slide's time: room opening (M11).
+  final half = Motion.enter.transform(0.5);
+  final halfway = Motion.roomIn ~/ 2;
 
   testWidgets('children slide to their new places when the order changes', (
     tester,
@@ -48,14 +50,16 @@ void main() {
     expect(tops(tester, ['C', 'A', 'B']), [150, 0, 100]);
 
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 210));
+    await tester.pump(halfway);
     expect(top(tester, 'C'), moreOrLessEquals(150 - 150 * half));
     expect(top(tester, 'A'), moreOrLessEquals(80 * half));
     expect(top(tester, 'B'), moreOrLessEquals(100 + 80 * half));
 
     // Mid-slide, C (moving up) passes over A: a tap where both are lands
     // on C.
-    await tester.tapAt(const Offset(10, 100));
+    // Between A's top and C's bottom (C is 80 tall).
+    final overlap = (top(tester, 'A') + top(tester, 'C') + 80) / 2;
+    await tester.tapAt(Offset(10, overlap));
     expect(tapped, ['C']);
 
     await tester.pumpAndSettle();
@@ -68,7 +72,7 @@ void main() {
     await show(tester, [box('A', 100), box('B', 100)]);
     await show(tester, [box('B', 100), box('A', 100)]);
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 210));
+    await tester.pump(halfway);
     final midway = [
       moreOrLessEquals(100 * half),
       moreOrLessEquals(100 - 100 * half),
