@@ -4,7 +4,7 @@ publish_to: 'none'
 version: 0.0.3+4
 
 environment:
-  sdk: '>=3.13.2 <4.0.0'
+  sdk: ^3.14.0
   flutter: 3.50.0
 
 dependencies:
@@ -18,8 +18,8 @@ dependencies:
   hydrated_bloc: ^11.0.0
   flutter_bloc: ^9.1.1
   window_size: ^0.2.0
-  forui: ^0.27.7
-  forui_lucide: ^0.27.0
+  forui: ^0.28.0
+  forui_lucide: ^0.28.0
   material_ui: ^1.11.0
   cupertino_ui: ^1.1.6
 
@@ -33,7 +33,7 @@ dev_dependencies:
   build_runner: any
   dependency_validator: any
   husky: ^0.1.7
-  forui_cli: ^0.27.0
+  forui_cli: ^0.28.0
 
 flutter:
   uses-material-design: true

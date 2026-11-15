@@ -32,7 +32,7 @@ jobs:
 
     steps:
     - name: Clone repository
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7
     - name: Set up Flutter
       uses: ./.github/actions/setup-flutter
     - name: Install Dependencies
@@ -45,7 +45,7 @@ jobs:
 
     steps:
     - name: Clone repository
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7
     - name: Set up Flutter
       uses: ./.github/actions/setup-flutter
     - name: Install Dependencies
@@ -56,7 +56,7 @@ jobs:
       # and the SDK; build_runner checks their digest and recompiles them
       # itself if anything changed. Only the builders are cached, never the
       # asset graph, so the generated files are always written afresh.
-      uses: actions/cache@v5
+      uses: actions/cache@v6
       with:
         path: tracker/.dart_tool/build/entrypoint
         key: build-runner-${{ hashFiles('tracker/pubspec.lock', 'tracker/pubspec.yaml') }}
@@ -84,7 +84,7 @@ jobs:
 
     steps:
     - name: Clone repository
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7
     - name: Set up Flutter
       uses: ./.github/actions/setup-flutter
     - name: Cache test kernel
@@ -92,7 +92,7 @@ jobs:
       # framework, the packages and the app, already compiled) instead of
       # from nothing: about 10 s less per shard. A stale kernel only means
       # more to recompile, never a wrong build.
-      uses: actions/cache@v5
+      uses: actions/cache@v6
       with:
         path: tracker/build/test_cache
         key: flutter-test-kernel-${{ hashFiles('tracker/pubspec.lock', 'tracker/pubspec.yaml') }}

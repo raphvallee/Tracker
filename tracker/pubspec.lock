@@ -257,26 +257,26 @@ packages:
     dependency: "direct main"
     description:
       name: forui
-      sha256: af6dcb2f57467c39bc808b6576d6dfdad19be7caf788bdd89d8b2fe3b6a521a2
+      sha256: de5e4b3a2f6601c76dfaf49a49e1c1dc854867ce1399df992ce5657e251799de
       url: "https://pub.dev"
     source: hosted
-    version: "0.27.7"
+    version: "0.28.0"
   forui_cli:
     dependency: "direct dev"
     description:
       name: forui_cli
-      sha256: c745a53fc9833bd66bad9ae20a36e4383b7a75e9addb6fe783a3002fa6072c18
+      sha256: "448a756064befddf6168bb84d4e0121dbb0e721cce8ffa3d73fa3356e3f929e5"
       url: "https://pub.dev"
     source: hosted
-    version: "0.27.0"
+    version: "0.28.0"
   forui_lucide:
     dependency: "direct main"
     description:
       name: forui_lucide
-      sha256: "63c660e4213309d9558cfc1c10ec52c13dab88cc2794dc41b8be769a7c86206c"
+      sha256: c7876b1007161b4a6f5d8d830bfdd3f1a0e6f4ccd810a472a936a6caa9102ffb
       url: "https://pub.dev"
     source: hosted
-    version: "0.27.0"
+    version: "0.28.0"
   fuchsia_remote_debug_protocol:
     dependency: transitive
     description: flutter
@@ -893,5 +893,5 @@ packages:
     source: hosted
     version: "2.2.4"
 sdks:
-  dart: ">=3.13.2 <4.0.0"
+  dart: ">=3.14.0 <4.0.0"
   flutter: "3.50.0"
