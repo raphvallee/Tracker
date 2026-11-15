@@ -267,8 +267,10 @@ void main() {
       expect(cubit.state.sets.single.weight, 80);
       expect(cubit.state.sets.single.reps, 8);
 
-      // The next row copies the weight above it.
-      await tester.tap(find.text('Log 80 kg × 8'));
+      // Logged while typing: the keyboard bar stays up and moves on to set
+      // 2, whose row copies the weight above it.
+      expect(find.text('Log 80 kg × 8'), findsNWidgets(2));
+      await tester.tap(find.text('Log 80 kg × 8').first);
       await tester.pumpAndSettle();
       expect(cubit.state.sets.map((s) => (s.weight, s.reps)), [
         (80, 8),
@@ -611,7 +613,9 @@ void main() {
       await tester.pumpAndSettle();
       expect(cubit.state.sets.single.weight, 102);
       expect(cubit.state.sets.single.reps, 6);
-      expect(find.text('Set 1 reps'), findsNothing, reason: 'keypad closed');
+      // The keypad stays up and moves on to the next set.
+      expect(find.text('Set 1 reps'), findsNothing);
+      expect(find.text('Set 2 weight, in kg'), findsOneWidget);
     });
 
     testWidgets('the keypad sign key logs an assisted weight', (tester) async {

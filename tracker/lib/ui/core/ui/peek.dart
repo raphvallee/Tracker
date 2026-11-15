@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:forui/forui.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:tracker/ui/core/ui/motion.dart';
 
 /// A card peeking out beside a row, in the row's [Overlay] (a tab's overlay
 /// ends above the bottom nav): below the row when it fits, else above.
@@ -73,15 +75,19 @@ class _PeekLayer extends StatefulWidget {
 
 class _PeekLayerState extends State<_PeekLayer>
     with SingleTickerProviderStateMixin {
+  // Comes in like a panel and goes faster (M11); with reduced motion it is
+  // there and gone at once.
   late final AnimationController _controller = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 200),
-    reverseDuration: const Duration(milliseconds: 140),
-  )..forward();
+    duration: Motion.panelIn,
+    reverseDuration: Motion.panelOut,
+  );
   late final CurvedAnimation _curve = CurvedAnimation(
     parent: _controller,
-    curve: Curves.easeOutCubic,
+    curve: Motion.enter,
+    reverseCurve: Motion.exit,
   );
+  bool _started = false;
 
   @override
   void initState() {
@@ -89,8 +95,26 @@ class _PeekLayerState extends State<_PeekLayer>
     widget.open.addListener(_onOpen);
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_started) return;
+    _started = true;
+    Motion.reduced(context) ? _controller.value = 1 : _controller.forward();
+  }
+
   void _onOpen() {
     if (widget.open.value) return;
+    // Closing: it takes no taps and reads to no one while it goes.
+    setState(() {});
+    if (Motion.reduced(context)) {
+      _controller.value = 0;
+      // Not inside the notifier's own call: onGone disposes it.
+      scheduleMicrotask(() {
+        if (mounted) widget.onGone();
+      });
+      return;
+    }
     _controller.reverse().whenComplete(() {
       if (mounted) widget.onGone();
     });
@@ -116,37 +140,43 @@ class _PeekLayerState extends State<_PeekLayer>
         anchor: widget.anchor,
         padding: MediaQuery.paddingOf(context),
       ),
-      child: FadeTransition(
-        opacity: _curve,
-        child: ScaleTransition(
-          scale: Tween<double>(begin: 0.96, end: 1).animate(_curve),
-          child: widget.builder(context),
+      child: ExcludeSemantics(
+        excluding: !widget.open.value,
+        child: FadeTransition(
+          opacity: _curve,
+          child: ScaleTransition(
+            scale: Tween<double>(begin: 0.96, end: 1).animate(_curve),
+            child: widget.builder(context),
+          ),
         ),
       ),
     );
     if (!widget.modal) return IgnorePointer(child: card);
-    return Stack(
-      children: <Widget>[
-        Positioned.fill(
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: _close,
-            onVerticalDragStart: (_) => _close(),
-            child: FadeTransition(
-              opacity: _curve,
-              child: CustomPaint(
-                painter: _DimAround(
-                  hole: widget.anchor,
-                  color: theme.colors.barrier,
+    return IgnorePointer(
+      ignoring: !widget.open.value,
+      child: Stack(
+        children: <Widget>[
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: _close,
+              onVerticalDragStart: (_) => _close(),
+              child: FadeTransition(
+                opacity: _curve,
+                child: CustomPaint(
+                  painter: _DimAround(
+                    hole: widget.anchor,
+                    color: theme.colors.barrier,
+                  ),
                 ),
               ),
             ),
           ),
-        ),
-        Positioned.fill(
-          child: GestureDetector(onTap: _close, child: card),
-        ),
-      ],
+          Positioned.fill(
+            child: GestureDetector(onTap: _close, child: card),
+          ),
+        ],
+      ),
     );
   }
 }

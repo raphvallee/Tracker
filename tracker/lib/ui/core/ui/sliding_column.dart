@@ -1,17 +1,20 @@
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
+import 'package:tracker/ui/core/ui/motion.dart';
 
 /// A column, its children stretched to its width, whose children slide to
 /// their new places when their order changes instead of jumping there.
 /// Children need keys that stay with them. Children moving up, and children
 /// that arrive with the change, pass over the others, so give children that
-/// can overlap mid-slide an opaque background.
+/// can overlap mid-slide an opaque background. Children that arrive with the
+/// change fade in as the others make room. With reduced motion every child
+/// is in its place at once.
 class SlidingColumn extends StatefulWidget {
   const SlidingColumn({
     super.key,
     required this.children,
-    this.duration = const Duration(milliseconds: 420),
-    this.curve = Curves.easeInOutCubic,
+    this.duration = Motion.roomIn,
+    this.curve = Motion.enter,
   });
 
   final List<Widget> children;
@@ -45,7 +48,11 @@ class _SlidingColumnState extends State<SlidingColumn>
     _progress.curve = widget.curve;
     if (!_sameOrder(oldWidget.children, widget.children)) {
       _changes++;
-      _controller.forward(from: 0);
+      if (Motion.reduced(context)) {
+        _controller.value = 1;
+      } else {
+        _controller.forward(from: 0);
+      }
     }
   }
 
@@ -270,12 +277,34 @@ class _RenderSlides extends RenderBox
     for (var child = firstChild; child != null; child = childAfter(child)) {
       final data = child.parentData! as _SlideParentData;
       data.shift = _shiftOf(data);
-      if (!_onTop(data)) context.paintChild(child, offset + data.painted);
+      if (!_onTop(data)) _paintChild(context, child, offset, data);
     }
     for (var child = firstChild; child != null; child = childAfter(child)) {
       final data = child.parentData! as _SlideParentData;
-      if (_onTop(data)) context.paintChild(child, offset + data.painted);
+      if (_onTop(data)) _paintChild(context, child, offset, data);
     }
+  }
+
+  /// A child that arrived with the change fades in while the others slide
+  /// to make room for it, instead of standing there from the first frame.
+  void _paintChild(
+    PaintingContext context,
+    RenderBox child,
+    Offset offset,
+    _SlideParentData data,
+  ) {
+    final at = offset + data.painted;
+    if (!(_sliding && data.arrived)) {
+      context.paintChild(child, at);
+      return;
+    }
+    final alpha = (255 * _progress.value).round().clamp(0, 255);
+    if (alpha == 0) return;
+    context.pushOpacity(
+      at,
+      alpha,
+      (context, offset) => context.paintChild(child, offset),
+    );
   }
 
   @override

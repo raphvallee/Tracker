@@ -30,9 +30,11 @@ import 'package:tracker/ui/core/ui/icon_button.dart';
 import 'package:tracker/ui/core/ui/item_card.dart';
 import 'package:tracker/ui/core/ui/keyboard_inset.dart';
 import 'package:tracker/ui/core/ui/max_width.dart';
+import 'package:tracker/ui/core/ui/motion.dart';
 import 'package:tracker/ui/core/ui/number_keypad.dart';
 import 'package:tracker/ui/core/ui/relative_dates.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
+import 'package:tracker/ui/core/ui/row_motion.dart';
 import 'package:tracker/ui/core/ui/set_badge.dart';
 import 'package:tracker/ui/core/ui/slide_up_panel.dart';
 import 'package:tracker/ui/core/ui/swipe_to_delete.dart';
@@ -116,7 +118,16 @@ class _SessionEditPageState extends State<SessionEditPage> {
   bool _overlayClosing = false;
   final _panelKey = GlobalKey<SlideUpPanelState>();
   Widget? _lastPanel;
-  final _openRowKey = GlobalKey(debugLabel: 'open set row');
+  // The fields move from row to row with the open one: their keys carry
+  // them, focus included, so the keypad can stay up across a switch.
+  final _weightFieldKey = GlobalKey(debugLabel: 'edit set weight field');
+  final _repsFieldKey = GlobalKey(debugLabel: 'edit set reps field');
+
+  /// The open row, as last built: the keypad scrolls it into view.
+  BuildContext? _openRowContext;
+
+  /// The save bar: an opening row keeps clear of it.
+  final _barKey = GlobalKey(debugLabel: 'save bar');
   bool _pendingReveal = false;
 
   @override
@@ -267,7 +278,9 @@ class _SessionEditPageState extends State<SessionEditPage> {
   // Sets ----------------------------------------------------------------
 
   /// Opens the row of [rowId]: its values move into the fields. Values typed
-  /// into the row being left are saved to it first.
+  /// into the row being left are saved to it first. While a field is typed
+  /// in, the keypad (or keyboard) stays up and moves on to the same field
+  /// of the new row.
   void _openRow(int rowId) {
     final previous = _openId;
     if (previous == rowId) return;
@@ -277,7 +290,8 @@ class _SessionEditPageState extends State<SessionEditPage> {
       );
       unawaited(_commitField(_Field.reps, rowId: previous, text: _reps.text));
     }
-    FocusManager.instance.primaryFocus?.unfocus();
+    final typing = _focused;
+    if (typing == null) FocusManager.instance.primaryFocus?.unfocus();
     final index = _rowIds.indexOf(rowId);
     if (index < 0) return;
     final set = _draft.sets[index];
@@ -288,6 +302,15 @@ class _SessionEditPageState extends State<SessionEditPage> {
       _weightError = null;
       _repsError = null;
     });
+    if (typing != null) {
+      // Typing replaces the new row's value, as after focusing it.
+      final controller = _controllerOf(typing);
+      controller.selection = TextSelection(
+        baseOffset: 0,
+        extentOffset: controller.text.length,
+      );
+      _overlay?.markNeedsBuild();
+    }
   }
 
   void _closeRow() {
@@ -764,12 +787,45 @@ class _SessionEditPageState extends State<SessionEditPage> {
 
   void _unfocus() => FocusManager.instance.primaryFocus?.unfocus();
 
+  /// Where the page stops being seen, in global coordinates: the keypad's
+  /// top while it is up, the phone keyboard's bar, else the save bar's top
+  /// or the page's own bottom.
+  double _visibleBottom() {
+    final size = MediaQuery.sizeOf(context);
+    if (_focused != null) {
+      if (_entry.usesKeypad) {
+        return size.height -
+            NumberKeypad.heightOf(_entry) -
+            MediaQuery.paddingOf(context).bottom;
+      }
+      final keyboard = MediaQuery.viewInsetsOf(context).bottom;
+      if (keyboard > 0) return size.height - keyboard - 56;
+    }
+    var bottom = size.height;
+    final page = context.findRenderObject();
+    if (page is RenderBox && page.attached && page.hasSize) {
+      bottom = page.localToGlobal(Offset(0, page.size.height)).dy;
+    }
+    final bar = _barKey.currentContext?.findRenderObject();
+    if (bar is RenderBox && bar.attached && bar.hasSize) {
+      bottom = math.min(bottom, bar.localToGlobal(Offset.zero).dy);
+    }
+    return bottom;
+  }
+
+  /// Keeps a row that is opening clear of the keypad or the save bar.
+  void _followOpening(BuildContext rowContext, double share) {
+    if (!mounted) return;
+    followOpening(rowContext, share, visibleBottom: _visibleBottom());
+  }
+
   /// The keypad is an overlay the scroll view cannot see: scroll the open
   /// row into the space above it. Runs after the frame that made the room.
   void _revealAboveKeypad() {
-    final rowContext = _openRowKey.currentContext;
-    final box = rowContext?.findRenderObject();
-    if (rowContext == null || box is! RenderBox || !box.attached) return;
+    final rowContext = _openRowContext;
+    if (_openId == null || rowContext == null || !rowContext.mounted) return;
+    final box = rowContext.findRenderObject();
+    if (box is! RenderBox || !box.attached) return;
     final scrollable = Scrollable.maybeOf(rowContext);
     if (scrollable == null) return;
     final media = MediaQuery.of(rowContext);
@@ -781,14 +837,16 @@ class _SessionEditPageState extends State<SessionEditPage> {
     final overlap = rowBottom - keypadTop;
     if (overlap <= 0) return;
     final position = scrollable.position;
-    position.animateTo(
-      (position.pixels + overlap).clamp(
-        position.minScrollExtent,
-        position.maxScrollExtent,
-      ),
-      duration: const Duration(milliseconds: 200),
-      curve: Curves.easeOutCubic,
+    final target = (position.pixels + overlap).clamp(
+      position.minScrollExtent,
+      position.maxScrollExtent,
     );
+    if (Motion.reduced(rowContext)) {
+      position.jumpTo(target);
+      return;
+    }
+    // On the keypad's own clock, so the row rises with it.
+    position.animateTo(target, duration: Motion.panelIn, curve: Motion.enter);
   }
 
   // Saving, discarding, deleting -------------------------------------------
@@ -916,7 +974,17 @@ class _SessionEditPageState extends State<SessionEditPage> {
                 ),
                 SliverToBoxAdapter(
                   child: MaxWidth(
-                    child: Padding(
+                    child: AnimatedPadding(
+                      // The room for the keypad opens at once, so the open
+                      // row can be scrolled above it, and closes as the
+                      // keypad slides away, so a page scrolled to its end
+                      // settles instead of jumping.
+                      duration:
+                          keypadOpen ||
+                              MediaQuery.viewInsetsOf(context).bottom > 0
+                          ? Duration.zero
+                          : Motion.of(context, Motion.panelOut),
+                      curve: Motion.exit,
                       padding: EdgeInsets.fromLTRB(16, 4, 16, bottomRoom),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -956,6 +1024,7 @@ class _SessionEditPageState extends State<SessionEditPage> {
                 child: changes == 0
                     ? null
                     : _SaveBar(
+                        key: _barKey,
                         count: changes,
                         busy: _busy,
                         onDiscard: _discard,
@@ -1133,25 +1202,36 @@ class _SessionEditPageState extends State<SessionEditPage> {
     final open = rowId == _openId;
     final tag = set.isNew ? 'New' : (edited ? 'Edited' : null);
     final was = edited ? _wasLine(context, saved, set) : null;
-    return SwipeToDelete(
+    return AnimatedReveal(
       key: ValueKey('edit-set-$rowId'),
-      canDelete: true,
-      onDelete: () => _removeSet(rowId),
-      surface: context.theme.colors.background,
-      padding: const EdgeInsets.only(bottom: 6),
-      // Opening one row and folding another: both glide to their height.
-      child: AnimatedSize(
-        duration: MediaQuery.disableAnimationsOf(context)
-            ? Duration.zero
-            : const Duration(milliseconds: 220),
-        curve: Curves.easeOutCubic,
-        alignment: Alignment.topCenter,
-        child: open
-            ? KeyedSubtree(
-                key: _openRowKey,
-                child: _openRowView(context, rowId, set, label, tag, was),
-              )
-            : _compactRow(context, rowId, set, label, tag, was),
+      // A set added here grows in; the others are there from the start.
+      appear: set.isNew,
+      child: SwipeToDelete(
+        canDelete: true,
+        onDelete: () => _removeSet(rowId),
+        surface: context.theme.colors.background,
+        padding: const EdgeInsets.only(bottom: 6),
+        // Opening one row and folding another is one motion: the frame,
+        // the badge, the tag and the "Was" line move from one look to the
+        // other, the values give way to the set's name, and the steppers
+        // and the rating grow in under them.
+        child: RowMotion(
+          open: open,
+          onOpening: _followOpening,
+          builder: (context, motion) {
+            if (open) _openRowContext = context;
+            return _setRowView(
+              context,
+              rowId,
+              set,
+              label,
+              tag,
+              was,
+              open: open,
+              motion: motion,
+            );
+          },
+        ),
       ),
     );
   }
@@ -1206,197 +1286,254 @@ class _SessionEditPageState extends State<SessionEditPage> {
     ),
   );
 
-  Widget _compactRow(
+  /// [child] at [factor] of its width, clipped and faded with it.
+  Widget _fold(double factor, Widget child) {
+    if (factor <= 0) return const SizedBox.shrink();
+    if (factor >= 1) return child;
+    return ClipRect(
+      child: Align(
+        alignment: AlignmentDirectional.centerStart,
+        widthFactor: factor,
+        child: Opacity(opacity: factor, child: child),
+      ),
+    );
+  }
+
+  /// [child] while it is on its way out ([gone]): no taps, no semantics.
+  Widget _leaving(bool gone, Widget child) => IgnorePointer(
+    ignoring: gone,
+    child: ExcludeSemantics(excluding: gone, child: child),
+  );
+
+  /// A set's row, [motion] of the way between its folded look (badge, the
+  /// values on one line, tag, rating) and its open one (outlined in ink,
+  /// the set's name in the values' place, steppers and the rating strip
+  /// under it). The badge, the tag and the "Was" line are shared and glide
+  /// to their places.
+  Widget _setRowView(
     BuildContext context,
     int rowId,
     SetDraft set,
     String label,
     String? tag,
-    Widget? was,
-  ) {
+    Widget? was, {
+    required bool open,
+    required RowMotionValues motion,
+  }) {
     final theme = context.theme;
+    final colors = theme.colors;
     final accents = TrackerAccents.of(context);
-    final muted = theme.colors.mutedForeground;
     const tabular = [FontFeature.tabularFigures()];
     final number = theme.typography.body.sm.copyWith(
       fontWeight: FontWeight.w700,
       fontFeatures: tabular,
     );
     final quiet = theme.typography.body.xs.copyWith(
-      color: muted,
+      color: colors.mutedForeground,
       fontFeatures: tabular,
     );
+    final unit = weightUnitOf(context).symbol;
     final rpe = set.rpe;
-    return Semantics(
-      button: true,
-      hint: 'Opens the set to edit it',
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () => _openRow(rowId),
-        child: Container(
-          constraints: const BoxConstraints(minHeight: 46),
-          padding: const EdgeInsets.fromLTRB(6, 6, 12, 6),
-          decoration: BoxDecoration(
-            color: theme.colors.background,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: tag == null ? theme.colors.border : accents.draftLine,
-            ),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: <Widget>[
-              Row(
-                children: <Widget>[
-                  _badge(label, set.warmup, rowId),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text.rich(
-                      TextSpan(
-                        children: <InlineSpan>[
-                          TextSpan(
-                            text: _displayWeight(set.weight),
-                            style: number,
-                          ),
-                          TextSpan(
-                            text: ' ${weightUnitOf(context).symbol} × ',
-                            style: quiet,
-                          ),
-                          TextSpan(text: formatReps(set.reps), style: number),
-                        ],
+    final t = motion.open;
+    // The open look's own parts are there while it is open or on its way.
+    final shown = open || t > 0;
+
+    final values = Text.rich(
+      TextSpan(
+        children: <InlineSpan>[
+          TextSpan(text: _displayWeight(set.weight), style: number),
+          TextSpan(text: ' $unit × ', style: quiet),
+          TextSpan(text: formatReps(set.reps), style: number),
+        ],
+      ),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+    );
+    final name = Text(
+      set.warmup ? 'Warm-up' : 'Set $label',
+      maxLines: 1,
+      style: theme.typography.body.xs.copyWith(fontWeight: FontWeight.w700),
+    );
+    final header = Row(
+      children: <Widget>[
+        _badge(label, set.warmup, rowId),
+        const SizedBox(width: 6),
+        Expanded(
+          // Open, the set's name closes it again.
+          child: Semantics(
+            button: open,
+            hint: open ? 'Closes the set' : null,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: open ? _closeRow : null,
+              child: SizedBox(
+                height: 32,
+                child: Stack(
+                  alignment: AlignmentDirectional.centerStart,
+                  children: <Widget>[
+                    if (motion.foldedParts > 0)
+                      _leaving(
+                        open,
+                        Opacity(opacity: motion.foldedParts, child: values),
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  if (tag != null) ...[const SizedBox(width: 8), DraftTag(tag)],
-                  if (rpe != null) ...[
-                    const SizedBox(width: 8),
-                    Text(
-                      effortLabel(effortScaleOf(context), rpe),
-                      style: quiet,
-                    ),
+                    if (shown)
+                      _leaving(
+                        !open,
+                        Opacity(opacity: motion.openParts, child: name),
+                      ),
                   ],
-                ],
-              ),
-              if (was != null)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(38, 0, 0, 2),
-                  child: was,
                 ),
-            ],
+              ),
+            ),
           ),
         ),
-      ),
+        if (tag != null) ...[const SizedBox(width: 8), DraftTag(tag)],
+        if (rpe != null)
+          _fold(
+            1 - t,
+            _leaving(
+              open,
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  const SizedBox(width: 8),
+                  Text(effortLabel(effortScaleOf(context), rpe), style: quiet),
+                ],
+              ),
+            ),
+          ),
+      ],
     );
-  }
 
-  Widget _openRowView(
-    BuildContext context,
-    int rowId,
-    SetDraft set,
-    String label,
-    String? tag,
-    Widget? was,
-  ) {
-    final theme = context.theme;
-    final unit = weightUnitOf(context).symbol;
-    return Container(
-      padding: const EdgeInsets.fromLTRB(6, 4, 10, 10),
-      decoration: BoxDecoration(
-        color: theme.colors.background,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: theme.colors.foreground, width: 2),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          Row(
-            children: <Widget>[
-              _badge(label, set.warmup, rowId),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Semantics(
-                  button: true,
-                  hint: 'Closes the set',
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: _closeRow,
-                    child: SizedBox(
-                      height: 32,
-                      child: Row(
-                        children: <Widget>[
-                          Expanded(
-                            child: Text(
-                              set.warmup ? 'Warm-up' : 'Set $label',
-                              style: theme.typography.body.xs.copyWith(
-                                fontWeight: FontWeight.w700,
+    final controls = !shown
+        ? null
+        : _leaving(
+            !open,
+            ClipRect(
+              child: Align(
+                alignment: Alignment.topCenter,
+                heightFactor: t,
+                // Fades with the room it takes, so that room never opens
+                // empty.
+                child: Opacity(
+                  opacity: ((t - 0.3) / 0.7).clamp(0.0, 1.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: <Widget>[
+                      const SizedBox(height: 6),
+                      Padding(
+                        padding: const EdgeInsetsDirectional.only(start: 4),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            Expanded(
+                              child: _withError(
+                                context,
+                                _stepperGroup(
+                                  context,
+                                  _Field.weight,
+                                  unit,
+                                  live: open,
+                                  set: set,
+                                ),
+                                open ? _weightError : null,
                               ),
                             ),
-                          ),
-                          if (tag != null) DraftTag(tag),
-                        ],
+                            SizedBox(
+                              width: 18,
+                              height: 52,
+                              child: Center(
+                                child: Text(
+                                  '×',
+                                  style: theme.typography.body.xs.copyWith(
+                                    color: colors.mutedForeground,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            Expanded(
+                              child: _withError(
+                                context,
+                                _stepperGroup(
+                                  context,
+                                  _Field.reps,
+                                  'reps',
+                                  live: open,
+                                  set: set,
+                                ),
+                                open ? _repsError : null,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
+                      const SizedBox(height: 10),
+                      Padding(
+                        padding: const EdgeInsetsDirectional.only(start: 4),
+                        child: EffortStrip(
+                          scale: effortScaleOf(context),
+                          rpe: set.rpe,
+                          who: label == 'W' ? 'warm-up' : 'set $label',
+                          live: false,
+                          onRate: (rpe) => _rate(rowId, rpe),
+                          onMore: () => _pickEffort(rowId, label),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Padding(
-            padding: const EdgeInsetsDirectional.only(start: 4),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Expanded(
-                  child: _withError(
-                    context,
-                    _stepperGroup(context, _Field.weight, unit),
-                    _weightError,
-                  ),
-                ),
-                SizedBox(
-                  width: 18,
-                  height: 52,
-                  child: Center(
-                    child: Text(
-                      '×',
-                      style: theme.typography.body.xs.copyWith(
-                        color: theme.colors.mutedForeground,
-                      ),
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: _withError(
-                    context,
-                    _stepperGroup(context, _Field.reps, 'reps'),
-                    _repsError,
-                  ),
-                ),
-              ],
             ),
-          ),
-          const SizedBox(height: 10),
-          Padding(
-            padding: const EdgeInsetsDirectional.only(start: 4),
-            child: EffortStrip(
-              scale: effortScaleOf(context),
-              rpe: set.rpe,
-              who: label == 'W' ? 'warm-up' : 'set $label',
-              live: false,
-              onRate: (rpe) => _rate(rowId, rpe),
-              onMore: () => _pickEffort(rowId, label),
-            ),
-          ),
+          );
+
+    final frame = Container(
+      constraints: const BoxConstraints(minHeight: 46),
+      padding: EdgeInsets.fromLTRB(
+        6,
+        _lerp(6, 4, t),
+        _lerp(12, 10, t),
+        _lerp(6, 10, t),
+      ),
+      decoration: BoxDecoration(
+        color: colors.background,
+        borderRadius: BorderRadius.circular(_lerp(12, 14, t)),
+        border: Border.all(
+          color: Color.lerp(
+            tag == null ? colors.border : accents.draftLine,
+            colors.foreground,
+            t,
+          )!,
+          width: _lerp(1, 2, t),
+        ),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          header,
+          ?controls,
           if (was != null)
+            // Under the values when folded, under the rating when open.
             Padding(
-              padding: const EdgeInsetsDirectional.fromSTEB(4, 8, 0, 0),
+              padding: EdgeInsetsDirectional.fromSTEB(
+                _lerp(38, 4, t),
+                _lerp(0, 8, t),
+                0,
+                _lerp(2, 0, t),
+              ),
               child: was,
             ),
         ],
+      ),
+    );
+    // Folded, the whole row opens it.
+    return Semantics(
+      button: !open,
+      hint: open ? null : 'Opens the set to edit it',
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: open ? null : () => _openRow(rowId),
+        child: frame,
       ),
     );
   }
@@ -1424,10 +1561,22 @@ class _SessionEditPageState extends State<SessionEditPage> {
     );
   }
 
-  Widget _stepperGroup(BuildContext context, _Field field, String caption) {
+  /// [field]'s box: the field itself in the open row ([live]), its value
+  /// as text in a row folding away, so the one field never shows twice.
+  Widget _stepperGroup(
+    BuildContext context,
+    _Field field,
+    String caption, {
+    required bool live,
+    required SetDraft set,
+  }) {
     final theme = context.theme;
-    final error = field == _Field.weight ? _weightError : _repsError;
-    final focused = _focusOf(field).hasFocus;
+    final error = !live
+        ? null
+        : field == _Field.weight
+        ? _weightError
+        : _repsError;
+    final focused = live && _focusOf(field).hasFocus;
     // With the steppers in the keypad the box is the number alone.
     final bare = _entry.usesKeypad;
     final group = Container(
@@ -1450,7 +1599,20 @@ class _SessionEditPageState extends State<SessionEditPage> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
-                SizedBox(height: 30, child: _valueField(context, field)),
+                SizedBox(
+                  height: 30,
+                  child: live
+                      ? _valueField(context, field)
+                      : Center(
+                          child: Text(
+                            field == _Field.weight
+                                ? _displayWeight(set.weight)
+                                : formatReps(set.reps),
+                            maxLines: 1,
+                            style: _valueStyle(context),
+                          ),
+                        ),
+                ),
                 Text(
                   caption,
                   maxLines: 1,
@@ -1466,13 +1628,22 @@ class _SessionEditPageState extends State<SessionEditPage> {
         ],
       ),
     );
-    if (!bare) return group;
+    if (!bare || !live) return group;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () => _focusOf(field).requestFocus(),
       child: group,
     );
   }
+
+  TextStyle _valueStyle(BuildContext context) =>
+      context.theme.typography.body.xl.copyWith(
+        fontSize: 20,
+        fontWeight: FontWeight.w700,
+        height: 1.15,
+        color: context.theme.colors.foreground,
+        fontFeatures: const [FontFeature.tabularFigures()],
+      );
 
   Widget _stepButton(BuildContext context, _Field field, int direction) {
     final theme = context.theme;
@@ -1508,17 +1679,12 @@ class _SessionEditPageState extends State<SessionEditPage> {
     final theme = context.theme;
     final isWeight = field == _Field.weight;
     final controller = _controllerOf(field);
-    final style = theme.typography.body.xl.copyWith(
-      fontSize: 20,
-      fontWeight: FontWeight.w700,
-      height: 1.15,
-      color: theme.colors.foreground,
-      fontFeatures: const [FontFeature.tabularFigures()],
-    );
+    final style = _valueStyle(context);
     final entry = _entry;
     final keypad = entry.usesKeypad;
     final keyboard = MediaQuery.viewInsetsOf(context).bottom;
     return TextField(
+      key: isWeight ? _weightFieldKey : _repsFieldKey,
       controller: controller,
       focusNode: _focusOf(field),
       keyboardType: keypad
@@ -1574,6 +1740,7 @@ class _AddButton extends StatelessWidget {
 /// The unsaved edits: how many, and Discard or Save, in the unsaved accent.
 class _SaveBar extends StatelessWidget {
   const _SaveBar({
+    super.key,
     required this.count,
     required this.busy,
     required this.onDiscard,
@@ -1752,3 +1919,5 @@ class _TimeSheetState extends State<_TimeSheet> {
     );
   }
 }
+
+double _lerp(double a, double b, double t) => a + (b - a) * t;

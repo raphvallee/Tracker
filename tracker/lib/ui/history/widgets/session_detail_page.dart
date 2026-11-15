@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:forui/forui.dart';
 import 'package:material_ui/material_ui.dart';
@@ -7,7 +9,6 @@ import 'package:tracker/domain/models/workout_set.dart';
 import 'package:tracker/domain/services/session_summary.dart';
 import 'package:tracker/routing/tab_navigation.dart';
 import 'package:tracker/ui/core/themes/accents.dart';
-import 'package:tracker/ui/core/ui/animated_reveal.dart';
 import 'package:tracker/ui/core/ui/custom_app_bar.dart';
 import 'package:tracker/ui/core/ui/custom_route.dart';
 import 'package:tracker/ui/core/ui/effort_format.dart';
@@ -16,6 +17,7 @@ import 'package:tracker/ui/core/ui/max_width.dart';
 import 'package:tracker/ui/core/ui/plan_bar.dart';
 import 'package:tracker/ui/core/ui/relative_dates.dart';
 import 'package:tracker/ui/core/ui/repository_scope.dart';
+import 'package:tracker/ui/core/ui/row_motion.dart';
 import 'package:tracker/ui/core/ui/set_badge.dart';
 import 'package:tracker/ui/core/ui/weight_format.dart';
 import 'package:tracker/ui/workout/view_models/workout_cubit.dart';
@@ -330,14 +332,49 @@ class _ExerciseBlock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = context.theme;
-    final muted = theme.colors.mutedForeground;
     final best = group.topSet;
     var working = 0;
     final rows = <Widget>[
       for (final set in group.sets)
         _SetLine(set: set, label: set.isWarmup ? 'W' : '${++working}'),
     ];
+    return RowMotion(
+      open: !folded,
+      builder: (context, motion) => _block(context, rows, best, motion),
+    );
+  }
+
+  /// [child] at [factor] of its height, fading with its room; [gone] while
+  /// it leaves: no taps, no semantics.
+  static Widget _share(
+    double factor, {
+    required bool gone,
+    required Widget child,
+  }) => IgnorePointer(
+    ignoring: gone,
+    child: ExcludeSemantics(
+      excluding: gone,
+      child: ClipRect(
+        child: Align(
+          alignment: AlignmentDirectional.topStart,
+          heightFactor: factor,
+          child: Opacity(
+            opacity: ((factor - 0.3) / 0.7).clamp(0.0, 1.0),
+            child: child,
+          ),
+        ),
+      ),
+    ),
+  );
+
+  Widget _block(
+    BuildContext context,
+    List<Widget> rows,
+    WorkoutSet? best,
+    RowMotionValues motion,
+  ) {
+    final theme = context.theme;
+    final muted = theme.colors.mutedForeground;
     return DecoratedBox(
       decoration: BoxDecoration(
         border: first
@@ -376,38 +413,44 @@ class _ExerciseBlock extends StatelessWidget {
                         style: theme.typography.body.xs.copyWith(color: muted),
                       ),
                       const SizedBox(width: 6),
-                      Icon(
-                        folded
-                            ? FLucideIcons.chevronDown
-                            : FLucideIcons.chevronUp,
-                        size: 15,
-                        color: muted,
+                      // Turns with the fold, on its clock.
+                      Transform.rotate(
+                        angle: math.pi * motion.open,
+                        child: Icon(
+                          FLucideIcons.chevronDown,
+                          size: 15,
+                          color: muted,
+                        ),
                       ),
                     ],
                   ),
                 ),
               ),
             ),
-            AnimatedReveal(
-              child: folded
-                  ? null
-                  : Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: rows,
-                    ),
-            ),
-            AnimatedReveal(
-              child: folded && best != null
-                  ? Padding(
-                      padding: const EdgeInsets.only(top: 2),
-                      child: Text(
-                        'Best set ${formatWeight(context, best.weight)} × '
-                        '${formatReps(best.reps)}',
-                        style: theme.typography.body.xs.copyWith(color: muted),
-                      ),
-                    )
-                  : null,
-            ),
+            // The sets and the best set trade places on one clock: what
+            // one gives up the other takes, each fading with its room.
+            if (motion.open > 0)
+              _share(
+                motion.open,
+                gone: folded,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: rows,
+                ),
+              ),
+            if (best != null && motion.open < 1)
+              _share(
+                1 - motion.open,
+                gone: !folded,
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Text(
+                    'Best set ${formatWeight(context, best.weight)} × '
+                    '${formatReps(best.reps)}',
+                    style: theme.typography.body.xs.copyWith(color: muted),
+                  ),
+                ),
+              ),
           ],
         ),
       ),

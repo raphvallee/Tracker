@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 import 'package:forui/forui.dart';
 import 'package:tracker/domain/models/graph_config.dart';
 import 'package:tracker/ui/analytics/widgets/graph_readout.dart';
+import 'package:tracker/ui/core/ui/motion.dart';
 
 /// 1M, 3M, 1Y, All in one muted track; the picked one sits raised on it,
 /// and slides over when another is picked.
@@ -29,8 +30,8 @@ class GraphRangeControl extends StatelessWidget {
       child: Stack(
         children: <Widget>[
           AnimatedAlign(
-            duration: const Duration(milliseconds: 220),
-            curve: Curves.easeOutCubic,
+            duration: Motion.of(context, Motion.state),
+            curve: Motion.enter,
             alignment: Alignment(-1 + 2 * index / (graphRanges.length - 1), 0),
             child: FractionallySizedBox(
               widthFactor: 1 / graphRanges.length,
@@ -74,7 +75,8 @@ class GraphRangeControl extends StatelessWidget {
                     },
                     child: Center(
                       child: AnimatedDefaultTextStyle(
-                        duration: const Duration(milliseconds: 150),
+                        duration: Motion.of(context, Motion.state),
+                        curve: Motion.enter,
                         style: theme.typography.body.sm.copyWith(
                           fontSize: 13,
                           fontWeight: FontWeight.w500,

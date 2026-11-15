@@ -8,8 +8,10 @@ import 'package:tracker/domain/models/number_entry.dart';
 import 'package:tracker/domain/models/weight_unit.dart';
 import 'package:tracker/ui/core/themes/accents.dart';
 import 'package:tracker/ui/core/ui/accent_button.dart';
+import 'package:tracker/ui/core/ui/animated_reveal.dart';
 import 'package:tracker/ui/core/ui/decimal_input_formatter.dart';
 import 'package:tracker/ui/core/ui/weight_format.dart';
+import 'package:tracker/ui/core/ui/motion.dart';
 
 /// A key of [NumberKeypad]: a digit or '.', or one of the actions.
 enum KeypadKey { digit, backspace, sign, next, hide }
@@ -159,6 +161,8 @@ class NumberKeypad extends StatelessWidget {
     required this.logLabel,
     required this.onLog,
     this.logTrailing,
+    this.logKey,
+    this.logLeading,
     this.allowSign = true,
     this.live = true,
     this.steps,
@@ -170,6 +174,12 @@ class NumberKeypad extends StatelessWidget {
 
   /// The rating the set logs with, beside [logLabel].
   final String? logTrailing;
+
+  /// What the Log button stands for (see [AccentButton.labelKey]).
+  final Object? logKey;
+
+  /// Beside the Log button (the rest clock), growing in as it arrives.
+  final Widget? logLeading;
   final VoidCallback? onLog;
   final bool allowSign;
 
@@ -221,7 +231,8 @@ class NumberKeypad extends StatelessWidget {
         excludeSemantics: true,
         onPress: enabled ? () => onKey(kind, label) : null,
         builder: (context, states, child) => AnimatedOpacity(
-          duration: const Duration(milliseconds: 80),
+          duration: Motion.of(context, Motion.press),
+          curve: Motion.enter,
           opacity: states.contains(FTappableVariant.pressed) ? 0.6 : 1,
           child: child,
         ),
@@ -407,12 +418,30 @@ class NumberKeypad extends StatelessWidget {
                 ...keys,
                 const SizedBox(height: 10),
                 if (live)
-                  AccentButton(
-                    large: true,
-                    prefix: FLucideIcons.check,
-                    label: logLabel,
-                    trailing: logTrailing,
-                    onPress: onLog,
+                  Row(
+                    children: <Widget>[
+                      AnimatedReveal(
+                        axis: Axis.horizontal,
+                        child: logLeading == null
+                            ? null
+                            : Padding(
+                                padding: const EdgeInsets.only(right: 12),
+                                child: logLeading,
+                              ),
+                      ),
+                      Expanded(
+                        child: AccentButton(
+                          large: true,
+                          prefix: logLeading == null
+                              ? FLucideIcons.check
+                              : null,
+                          label: logLabel,
+                          labelKey: logKey,
+                          trailing: logTrailing,
+                          onPress: onLog,
+                        ),
+                      ),
+                    ],
                   )
                 else
                   FButton(
@@ -967,6 +996,8 @@ class KeyboardToolbar extends StatelessWidget {
     required this.logLabel,
     required this.onLog,
     this.logTrailing,
+    this.logKey,
+    this.leading,
     this.live = true,
   });
 
@@ -976,6 +1007,13 @@ class KeyboardToolbar extends StatelessWidget {
 
   /// The rating the set logs with, beside [logLabel].
   final String? logTrailing;
+
+  /// What the Log button stands for (see [AccentButton.labelKey]).
+  final Object? logKey;
+
+  /// After the sign key (the rest clock), growing in as it arrives. Log
+  /// drops its tick for it, so its label keeps the room.
+  final Widget? leading;
   final VoidCallback? onLog;
 
   /// The Log button in the live accent; false draws it in ink.
@@ -1000,6 +1038,17 @@ class KeyboardToolbar extends StatelessWidget {
             semanticsTooltip: 'Negative weight',
             child: const Text('±'),
           ),
+          AnimatedReveal(
+            axis: Axis.horizontal,
+            child: leading == null
+                ? null
+                : Padding(
+                    padding: const EdgeInsets.only(left: 12, right: 8),
+                    child: leading,
+                  ),
+          ),
+          // Log takes most of the free room, so the gap before Next stays
+          // small and shrinks smoothly while the rest clock grows in.
           const Spacer(),
           FButton(
             variant: .outline,
@@ -1010,11 +1059,12 @@ class KeyboardToolbar extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           Flexible(
-            flex: 3,
+            flex: 6,
             child: live
                 ? AccentButton(
-                    prefix: FLucideIcons.check,
+                    prefix: leading == null ? FLucideIcons.check : null,
                     label: logLabel,
+                    labelKey: logKey,
                     trailing: logTrailing,
                     onPress: onLog,
                   )

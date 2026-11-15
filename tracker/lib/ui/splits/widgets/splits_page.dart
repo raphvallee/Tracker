@@ -32,6 +32,8 @@ import 'new_split_sheet.dart';
 import 'review_changes_sheet.dart';
 import 'split_day_editor_page.dart';
 
+import 'package:tracker/ui/core/ui/motion.dart';
+
 /// The Splits tab: plans only, edited in place. Every edit lands in a draft
 /// that survives the app closing; nothing here starts a workout.
 class SplitsPage extends StatefulWidget {
@@ -56,6 +58,10 @@ class _SplitsPageState extends State<SplitsPage>
 
   /// The room's box: its top is where the splits end.
   final GlobalKey _roomKey = GlobalKey(debugLabel: 'splits room');
+
+  /// The splits have been on screen: rows that show up from now on (a
+  /// removed day's) grow in instead of being there.
+  bool _shown = false;
   List<WorkoutSplit>? _splits;
 
   /// Null until first loaded: they order the list, which would otherwise
@@ -212,6 +218,11 @@ class _SplitsPageState extends State<SplitsPage>
                       (settings) =>
                           BlocBuilder<SplitDraftsCubit, SplitDraftsState>(
                             builder: (context, drafts) {
+                              if (!_shown) {
+                                WidgetsBinding.instance.addPostFrameCallback(
+                                  (_) => _shown = true,
+                                );
+                              }
                               final ordered = splitsByLastUsed(
                                 splits,
                                 visits,
@@ -237,6 +248,7 @@ class _SplitsPageState extends State<SplitsPage>
                                       ),
                                       onMenuShown: _revealMenu,
                                       onMenuHidden: _releaseRoom,
+                                      arriving: _shown,
                                     ),
                                 ],
                               );
@@ -315,7 +327,11 @@ class _SplitSection extends StatelessWidget {
     required this.menuEnd,
     required this.onMenuShown,
     required this.onMenuHidden,
+    required this.arriving,
   });
+
+  /// Rows that show up now grow in (see [_DayList.arriving]).
+  final bool arriving;
 
   final WorkoutSplit split;
 
@@ -365,10 +381,17 @@ class _SplitSection extends StatelessWidget {
             ),
             Row(
               children: <Widget>[
-                if (isCurrent) ...[
-                  FBadge(child: const Text('Current')),
-                  const SizedBox(width: 8),
-                ],
+                // Comes and goes from the side while Make current slides
+                // the splits, so it moves with them instead of popping.
+                AnimatedReveal(
+                  axis: Axis.horizontal,
+                  child: isCurrent
+                      ? Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: FBadge(child: const Text('Current')),
+                        )
+                      : null,
+                ),
                 Flexible(
                   child: Text(
                     '${plural('day', draft.days.length)}, '
@@ -404,6 +427,7 @@ class _SplitSection extends StatelessWidget {
               fallback: fallback,
               lastDone: lastDone,
               names: names,
+              arriving: arriving,
             ),
           ],
         ),
@@ -484,15 +508,20 @@ class _SplitSection extends StatelessWidget {
       case _SplitAction.makeCurrent:
         settings?.setCurrentSplit(split.id, previous: currentId);
         // Follow it to the top of the list.
+        // On the sections' clock (`SlidingColumn`), so both move as one.
         final position = Scrollable.maybeOf(context)?.position;
         if (position != null && position.pixels > position.minScrollExtent) {
-          unawaited(
-            position.animateTo(
-              position.minScrollExtent,
-              duration: const Duration(milliseconds: 420),
-              curve: Curves.easeInOutCubic,
-            ),
-          );
+          if (Motion.reduced(context)) {
+            position.jumpTo(position.minScrollExtent);
+          } else {
+            unawaited(
+              position.animateTo(
+                position.minScrollExtent,
+                duration: Motion.roomIn,
+                curve: Motion.enter,
+              ),
+            );
+          }
         }
       case _SplitAction.duplicate:
         if (repo == null) return;
@@ -535,7 +564,12 @@ class _DayList extends StatelessWidget {
     required this.fallback,
     required this.lastDone,
     required this.names,
+    required this.arriving,
   });
+
+  /// Removed days that show up now grow in; ones already removed when the
+  /// splits first show are simply there.
+  final bool arriving;
 
   final WorkoutSplit split;
   final SplitDraft draft;
@@ -594,12 +628,16 @@ class _DayList extends StatelessWidget {
             ],
           ),
           for (final origin in diff.removedDays)
-            RemovedRow(
-              label: base.days[origin].title,
-              onRestore: () => drafts.edit(
-                split,
-                (current) => current.restoreDay(base, origin),
-                fallback: fallback,
+            AnimatedReveal(
+              key: ValueKey('removed-day-$origin'),
+              appear: arriving,
+              child: RemovedRow(
+                label: base.days[origin].title,
+                onRestore: () => drafts.edit(
+                  split,
+                  (current) => current.restoreDay(base, origin),
+                  fallback: fallback,
+                ),
               ),
             ),
           FTappable(
@@ -700,7 +738,7 @@ class _SplitHeaderState extends State<_SplitHeader>
     if (_editing || !mounted) return;
     _controller.text = widget.title;
     setState(() => _editing = true);
-    _field.forward();
+    Motion.reduced(context) ? _field.value = 1 : _field.forward();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_editing) return;
       _focus.requestFocus();
@@ -716,7 +754,7 @@ class _SplitHeaderState extends State<_SplitHeader>
     if (!_editing) return;
     final name = _controller.text.trim();
     setState(() => _editing = false);
-    _field.reverse();
+    Motion.reduced(context) ? _field.value = 0 : _field.reverse();
     if (_focus.hasFocus) _focus.unfocus();
     if (save && name.isNotEmpty && name != widget.title) {
       widget.onRename(name);
@@ -805,14 +843,28 @@ class _SplitHeaderState extends State<_SplitHeader>
           ),
         ),
         AnimatedSwitcher(
-          duration: const Duration(milliseconds: 200),
-          transitionBuilder: (child, animation) => FadeTransition(
-            opacity: animation,
-            child: ScaleTransition(
-              scale: Tween<double>(begin: 0.8, end: 1).animate(animation),
-              child: child,
-            ),
-          ),
+          duration: Motion.of(context, Motion.label),
+          switchInCurve: Motion.enter,
+          switchOutCurve: Motion.exit,
+          // The button on its way out takes no taps and reads to no one.
+          transitionBuilder: (child, animation) {
+            final leaving =
+                child.key !=
+                (_editing ? const ValueKey('done') : const ValueKey('menu'));
+            return IgnorePointer(
+              ignoring: leaving,
+              child: ExcludeSemantics(
+                excluding: leaving,
+                child: FadeTransition(
+                  opacity: animation,
+                  child: ScaleTransition(
+                    scale: Tween<double>(begin: 0.8, end: 1).animate(animation),
+                    child: child,
+                  ),
+                ),
+              ),
+            );
+          },
           child: _editing
               ? AppIconButton(
                   key: const ValueKey('done'),
@@ -932,7 +984,8 @@ class _DayRowState extends State<_DayRow> {
           },
           onHoverChange: _onHover,
           child: AnimatedContainer(
-            duration: const Duration(milliseconds: 150),
+            duration: Motion.of(context, Motion.press),
+            curve: Motion.enter,
             constraints: const BoxConstraints(minHeight: 58),
             padding: const EdgeInsets.fromLTRB(4, 8, 12, 8),
             decoration: BoxDecoration(

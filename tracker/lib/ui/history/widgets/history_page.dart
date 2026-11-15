@@ -31,6 +31,8 @@ import 'search/filter_summary.dart';
 import 'search/history_filter_sheet.dart';
 import 'session_detail_page.dart';
 
+import 'package:tracker/ui/core/ui/motion.dart';
+
 /// Every finished workout, newest first, under its month. Rows are built
 /// and read lazily: the first frame reads the ids and start times only, and
 /// a page of sessions is read when its first row is built, so a long
@@ -322,7 +324,22 @@ class _HistoryPageState extends State<HistoryPage> {
   @override
   Widget build(BuildContext context) {
     final metrics = _metrics(context);
-    if (_searching) return _buildSearch(context, metrics);
+    // Opening or closing search fades the other page in, on a state
+    // change's clock, instead of cutting to it. (The two share one scroll
+    // controller, so they never show together.)
+    return TweenAnimationBuilder<double>(
+      key: ValueKey<bool>(_searching),
+      tween: Tween<double>(begin: 0, end: 1),
+      duration: Motion.of(context, Motion.state),
+      curve: Motion.enter,
+      builder: (context, shown, child) => Opacity(opacity: shown, child: child),
+      child: _searching
+          ? _buildSearch(context, metrics)
+          : _buildList(context, metrics),
+    );
+  }
+
+  Widget _buildList(BuildContext context, _Metrics metrics) {
     final hasWorkouts = _error == null && !_index.isEmpty;
     return CustomScrollView(
       controller: _scroll,
@@ -404,29 +421,34 @@ class _HistoryPageState extends State<HistoryPage> {
             onClose: _closeSearch,
             onFilters: _error == null ? () => _openFilters() : null,
           ),
-          if (searched && _error == null && _results.isNotEmpty)
-            SliverToBoxAdapter(
-              child: MaxWidth(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-                  child: _FilterSentence(
-                    pieces: filterSummary(
-                      _filter,
-                      _search,
-                      count: _results.length,
-                      matching: _query.isEmpty
-                          ? null
-                          : _readsAs ?? _queryText.text.trim(),
+          // Grows in with the first search instead of pushing the results
+          // down in one frame, and shrinks away when it is cleared.
+          SliverToBoxAdapter(
+            child: AnimatedReveal(
+              child: !(searched && _error == null && _results.isNotEmpty)
+                  ? null
+                  : MaxWidth(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+                        child: _FilterSentence(
+                          pieces: filterSummary(
+                            _filter,
+                            _search,
+                            count: _results.length,
+                            matching: _query.isEmpty
+                                ? null
+                                : _readsAs ?? _queryText.text.trim(),
+                          ),
+                          boxed: !_filter.isEmpty,
+                          onPart: (part) => _openFilters(focus: part),
+                          onClear: _filter.isEmpty
+                              ? null
+                              : () => _setFilter(HistoryFilter.none),
+                        ),
+                      ),
                     ),
-                    boxed: !_filter.isEmpty,
-                    onPart: (part) => _openFilters(focus: part),
-                    onClear: _filter.isEmpty
-                        ? null
-                        : () => _setFilter(HistoryFilter.none),
-                  ),
-                ),
-              ),
             ),
+          ),
           if (_error != null)
             const SliverFillRemaining(
               hasScrollBody: false,
@@ -654,8 +676,10 @@ class _SessionRow extends StatelessWidget {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onOpen,
+        // The jump's mark tints in and out like any state change.
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 400),
+          duration: Motion.of(context, Motion.state),
+          curve: Motion.enter,
           height: height,
           padding: const EdgeInsets.symmetric(
             horizontal: 2,
