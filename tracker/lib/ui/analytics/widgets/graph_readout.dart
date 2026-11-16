@@ -3,6 +3,7 @@ import 'package:forui/forui.dart';
 import 'package:tracker/domain/models/graph_config.dart';
 import 'package:tracker/domain/models/weight_unit.dart';
 import 'package:tracker/domain/services/graph_series.dart';
+import 'package:tracker/ui/core/ui/motion.dart';
 import 'package:tracker/ui/core/ui/relative_dates.dart';
 import 'package:tracker/ui/core/ui/weight_format.dart';
 
@@ -187,10 +188,17 @@ class GraphHeadlineView extends StatelessWidget {
     super.key,
     required this.headline,
     this.size = GraphHeadlineSize.page,
+    this.step,
   });
 
   final GraphHeadline headline;
   final GraphHeadlineSize size;
+
+  /// What the headline stands for, such as the range shown: when it
+  /// changes, a line whose words change with it crossfades, on the clock the
+  /// chart moves on. Reading a point changes the words in place
+  /// (`docs/MOTION.md`, M7). Null never animates.
+  final Object? step;
 
   @override
   Widget build(BuildContext context) {
@@ -214,83 +222,154 @@ class GraphHeadlineView extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: <Widget>[
-            Flexible(
-              child: Text.rich(
-                value == null
-                    ? TextSpan(
-                        text: 'No sessions',
-                        style: valueStyle.copyWith(
-                          fontSize: unitSize + 2,
-                          fontWeight: FontWeight.w500,
-                          color: muted,
-                          letterSpacing: 0,
-                        ),
-                      )
-                    : TextSpan(
-                        text: value,
-                        children: <InlineSpan>[
-                          TextSpan(
-                            text: ' $unit',
-                            style: TextStyle(
-                              fontSize: unitSize,
-                              fontWeight: FontWeight.w500,
-                              letterSpacing: 0,
-                              color: muted,
-                            ),
+        _StepSwap(
+          step: step,
+          words: (value, headline.isRecord),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: <Widget>[
+              Flexible(
+                child: Text.rich(
+                  value == null
+                      ? TextSpan(
+                          text: 'No sessions',
+                          style: valueStyle.copyWith(
+                            fontSize: unitSize + 2,
+                            fontWeight: FontWeight.w500,
+                            color: muted,
+                            letterSpacing: 0,
                           ),
-                        ],
-                      ),
-                style: valueStyle,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                // The line keeps the value's height even when it says
-                // "No sessions" in smaller type.
-                strutStyle: StrutStyle(
-                  fontSize: valueSize,
-                  height: 1.15,
-                  forceStrutHeight: true,
+                        )
+                      : TextSpan(
+                          text: value,
+                          children: <InlineSpan>[
+                            TextSpan(
+                              text: ' $unit',
+                              style: TextStyle(
+                                fontSize: unitSize,
+                                fontWeight: FontWeight.w500,
+                                letterSpacing: 0,
+                                color: muted,
+                              ),
+                            ),
+                          ],
+                        ),
+                  style: valueStyle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  // The line keeps the value's height even when it says
+                  // "No sessions" in smaller type.
+                  strutStyle: StrutStyle(
+                    fontSize: valueSize,
+                    height: 1.15,
+                    forceStrutHeight: true,
+                  ),
                 ),
               ),
-            ),
-            if (headline.isRecord) ...[
-              const SizedBox(width: 6),
-              const RecordTag(),
+              if (headline.isRecord) ...[
+                const SizedBox(width: 6),
+                const RecordTag(),
+              ],
             ],
-          ],
+          ),
         ),
         const SizedBox(height: 2),
-        Row(
-          children: <Widget>[
-            if (change != null) ...[
-              Icon(
-                change > 0
-                    ? FLucideIcons.trendingUp
-                    : change < 0
-                    ? FLucideIcons.trendingDown
-                    : FLucideIcons.moveRight,
-                size: size == GraphHeadlineSize.tile ? 13 : 15,
-                color: theme.colors.foreground,
-              ),
-              const SizedBox(width: 4),
-              Text(
-                '${formatDecimal((change.abs() * 10).round() / 10)} $unit ',
-                style: noteStyle.copyWith(color: theme.colors.foreground),
+        _StepSwap(
+          step: step,
+          words: (change, headline.note),
+          child: Row(
+            children: <Widget>[
+              if (change != null) ...[
+                Icon(
+                  change > 0
+                      ? FLucideIcons.trendingUp
+                      : change < 0
+                      ? FLucideIcons.trendingDown
+                      : FLucideIcons.moveRight,
+                  size: size == GraphHeadlineSize.tile ? 13 : 15,
+                  color: theme.colors.foreground,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  '${formatDecimal((change.abs() * 10).round() / 10)} $unit ',
+                  style: noteStyle.copyWith(color: theme.colors.foreground),
+                ),
+              ],
+              Expanded(
+                child: Text(
+                  headline.note,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: noteStyle.copyWith(color: muted),
+                ),
               ),
             ],
-            Expanded(
-              child: Text(
-                headline.note,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: noteStyle.copyWith(color: muted),
-              ),
-            ),
-          ],
+          ),
         ),
       ],
+    );
+  }
+}
+
+/// [child] crossfading to its next words when [step] changes with them:
+/// the old words fade out early, the new ones in late (M5). New words under
+/// the same step, or the same words for a new one, change in place.
+class _StepSwap extends StatefulWidget {
+  const _StepSwap({
+    required this.step,
+    required this.words,
+    required this.child,
+  });
+
+  final Object? step;
+  final Object? words;
+  final Widget child;
+
+  @override
+  State<_StepSwap> createState() => _StepSwapState();
+}
+
+class _StepSwapState extends State<_StepSwap> {
+  /// Counts the crossfades: the shown words' key.
+  int _generation = 0;
+
+  @override
+  void didUpdateWidget(_StepSwap oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.step != oldWidget.step && widget.words != oldWidget.words) {
+      _generation++;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.step == null) return widget.child;
+    final current = ValueKey<int>(_generation);
+    return AnimatedSwitcher(
+      duration: Motion.of(context, Motion.roomIn),
+      switchInCurve: const Interval(0.4, 1, curve: Curves.easeOut),
+      switchOutCurve: const Interval(0.7, 1),
+      // The lines keep one height, so the arriving one sizes the room and
+      // the leaving one lies over it.
+      layoutBuilder: (shown, leaving) => Stack(
+        alignment: Alignment.topLeft,
+        children: <Widget>[
+          for (final child in leaving)
+            Positioned(top: 0, left: 0, right: 0, child: child),
+          ?shown,
+        ],
+      ),
+      transitionBuilder: (shown, animation) {
+        final leaving = shown.key != current;
+        return IgnorePointer(
+          ignoring: leaving,
+          child: ExcludeSemantics(
+            excluding: leaving,
+            child: FadeTransition(opacity: animation, child: shown),
+          ),
+        );
+      },
+      child: KeyedSubtree(key: current, child: widget.child),
     );
   }
 }

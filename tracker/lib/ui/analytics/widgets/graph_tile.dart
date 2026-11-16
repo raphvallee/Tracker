@@ -122,6 +122,7 @@ class _GraphTileState extends State<GraphTile> {
                 short: true,
               ),
               size: GraphHeadlineSize.tile,
+              step: series.range,
             ),
             const Spacer(),
             const SizedBox(height: 8),

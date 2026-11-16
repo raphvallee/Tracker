@@ -149,6 +149,7 @@ class _GraphPageState extends State<GraphPage> {
                   const SizedBox(height: 2),
                   GraphHeadlineView(
                     headline: graphHeadline(context, series, selected: _read),
+                    step: series.range,
                   ),
                   const SizedBox(height: 16),
                   if (nothing)
